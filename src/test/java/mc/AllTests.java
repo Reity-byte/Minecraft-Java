@@ -113,6 +113,10 @@ public class AllTests {
         LabBlockTest.main(args);
         failures += LabBlockTest.failures;
 
+        System.out.println(NEWLINE + "========== OptionsTest ==========");
+        OptionsTest.main(args);
+        failures += OptionsTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

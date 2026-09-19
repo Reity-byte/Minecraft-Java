@@ -79,6 +79,7 @@ public class Shaders {
             uniform float uFogEnd;
             uniform float uDaylight;   // 0 = půlnoc, 1 = poledne
             uniform float uAmbient;    // aby ani úplná tma nebyla černá díra
+            uniform float uBrightness; // jas z nastavení, 0 = beze změny (viz Options.brighten)
 
             out vec4 fragColor;
 
@@ -87,6 +88,12 @@ public class Shaders {
                 vec4 texel = texture(uAtlas, vUv);
 
                 float light = max(max(vSky * uDaylight, vBlock), uAmbient);
+
+                // Jas zvedá hlavně tmu a osvětlené stěny skoro nechá - stínování
+                // stěn je zapečené ve světle vrcholu. Nenastavený uniform je 0
+                // (náhled v labu), a pak se nemění nic.
+                float dark = 1.0 - light;
+                light += 0.25 * uBrightness * dark * dark * dark * dark;
                 vec3 color = texel.rgb * light;
 
                 // Lineární mlha, stejný vzorec jako mělo staré GL_LINEAR:

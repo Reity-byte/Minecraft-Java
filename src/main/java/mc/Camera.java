@@ -40,11 +40,16 @@ public class Camera {
 
     public View view = View.FIRST_PERSON;
 
-    private final float mouseSensitivity = 0.12f;
+    /** Stupně otočení na pixel pohybu myši při citlivosti 100 %. */
+    public static final float DEFAULT_SENSITIVITY = 0.12f;
+
+    /** Nastavuje se z Options (citlivost a obrácená osa Y). */
+    public float mouseSensitivity = DEFAULT_SENSITIVITY;
+    public boolean invertMouseY = false;
 
     public void processMouse(double dx, double dy) {
         yaw += (float) (dx * mouseSensitivity);
-        pitch += (float) (dy * mouseSensitivity);
+        pitch += (float) ((invertMouseY ? -dy : dy) * mouseSensitivity);
 
         if (pitch > 89f) pitch = 89f;
         if (pitch < -89f) pitch = -89f;

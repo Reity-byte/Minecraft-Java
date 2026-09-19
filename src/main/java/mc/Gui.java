@@ -27,12 +27,28 @@ public final class Gui {
     /** Nad 4x už je UI zbytečně obrovské i na 4K. */
     private static final int MAX_SCALE = 4;
 
+    /**
+     * Měřítko zvolené v nastavení (GUI Scale), 0 = automaticky. Statické
+     * schválně: ptá se ho HUD, menu, inventář i nastavení samo, a všechno
+     * musí mít v jednom framu totéž měřítko.
+     */
+    private static volatile int preferred = 0;
+
     private Gui() {}
 
     public static int scale(int screenWidth, int screenHeight)
     {
-        int fit = Math.min(screenWidth / MIN_WIDTH, screenHeight / MIN_HEIGHT);
-        return Math.max(1, Math.min(MAX_SCALE, fit));
+        int fit = Math.max(1, Math.min(MAX_SCALE, Math.min(screenWidth / MIN_WIDTH, screenHeight / MIN_HEIGHT)));
+
+        // Zvolené měřítko nikdy nepřeroste to, co se vejde - jinak by se
+        // UI na malém okně nevešlo a tlačítka by byla mimo obrazovku.
+        return preferred > 0 ? Math.min(preferred, fit) : fit;
+    }
+
+    /** 0 = automaticky, jinak požadované měřítko (oříznuté na to, co se vejde). */
+    public static void setPreferredScale(int scale)
+    {
+        preferred = Math.max(0, Math.min(MAX_SCALE, scale));
     }
 
     /**

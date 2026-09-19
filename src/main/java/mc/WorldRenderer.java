@@ -119,6 +119,14 @@ public class WorldRenderer {
     private int meshesBuiltThisFrame = 0;
     private int pendingCount = 0;
 
+    /** Jas z nastavení (Options.brightness), 0 = beze změny. */
+    private float brightness = 0f;
+
+    public void setBrightness(float value)
+    {
+        brightness = value;
+    }
+
     public WorldRenderer(Texture atlas, Texture skin)
     {
         this.atlas = atlas;
@@ -160,6 +168,7 @@ public class WorldRenderer {
         // Slunce slábne jedním uniformem; uložené světlo zůstává, jak je.
         shader.setFloat("uDaylight", day.daylight());
         shader.setFloat("uAmbient", DayCycle.AMBIENT);
+        shader.setFloat("uBrightness", brightness);
 
         float[] sky = day.skyColor();
 
