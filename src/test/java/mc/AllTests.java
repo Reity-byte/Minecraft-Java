@@ -121,6 +121,10 @@ public class AllTests {
         SeedTest.main(args);
         failures += SeedTest.failures;
 
+        System.out.println(NEWLINE + "========== ThumbnailTest ==========");
+        ThumbnailTest.main(args);
+        failures += ThumbnailTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);
