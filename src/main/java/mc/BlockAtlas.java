@@ -1,0 +1,124 @@
+package mc;
+
+/**
+ * Mapování blok + stěna → dlaždice v atlasu a její UV souřadnice.
+ *
+ * ---------------------------------------------------------------------------
+ * ⚠️ TAHLE TŘÍDA NESMÍ SAHAT NA GL. Je to čistá tabulka a aritmetika, protože
+ * ji používá ChunkMesh.build(), který musí zůstat testovatelný headless.
+ * Samotná textura atlasu žije ve WorldRendereru, ne tady - data a jejich
+ * nahrání na grafiku jsou schválně oddělené.
+ * ---------------------------------------------------------------------------
+ *
+ * Atlas je mřížka 4x4 dlaždic po 16x16 pixelech, tedy 64x64. Dlaždice se
+ * číslují po řádcích od nuly; řádek 0 je DOLNÍ, protože OpenGL má počátek
+ * textury vlevo dole a generovaná data jsou v tomhle pořadí (viz Texture).
+ */
+public final class BlockAtlas {
+
+    /**
+     * Mřížka 8x8, i když je zaplněná zhruba z poloviny. Rozšíření později by
+     * znamenalo přepočítat všechna UV - a to je přesně ta změna, u které se
+     * snadno zapomene na jednu dlaždici.
+     */
+    public static final int TILES_PER_ROW = 8;
+    public static final int TILE_PIXELS   = 16;
+    public static final int ATLAS_PIXELS  = TILES_PER_ROW * TILE_PIXELS;
+
+    /** Která stěna bloku se kreslí. Boky mají všechny stejnou texturu. */
+    public static final int FACE_TOP    = 0;
+    public static final int FACE_BOTTOM = 1;
+    public static final int FACE_SIDE   = 2;
+
+    // Indexy dlaždic v atlasu. Přidat blok = nová dlaždice tady,
+    // její vykreslení v Textures.blockAtlas() a case v tile().
+    public static final int TILE_GRASS_TOP  = 0;
+    public static final int TILE_GRASS_SIDE = 1;
+    public static final int TILE_DIRT       = 2;
+    public static final int TILE_STONE      = 3;
+    public static final int TILE_SAND       = 4;
+    public static final int TILE_PLANKS     = 5;
+    public static final int TILE_COAL_ORE   = 6;
+    public static final int TILE_IRON_ORE   = 7;
+    public static final int TILE_WATER      = 8;
+    public static final int TILE_TABLE_TOP  = 9;
+    public static final int TILE_TABLE_SIDE = 10;
+    public static final int TILE_BRICKS     = 11;
+    public static final int TILE_LOG_TOP    = 12;
+    public static final int TILE_LOG_SIDE   = 13;
+    public static final int TILE_LEAVES     = 14;
+    public static final int TILE_TORCH      = 16;
+
+    /**
+     * Deset stádií prasklin, za sebou v atlasu. Kreslí se jako druhá vrstva
+     * přes rozbíjený blok, ne jako jeho textura.
+     */
+    public static final int TILE_CRACK_FIRST = 17;
+    public static final int CRACK_STAGES = 10;
+
+    /** Křiklavá dlaždice pro "zapomněls case" - stejná role jako magenta v colorFor(). */
+    public static final int TILE_UNKNOWN    = 15;
+
+    public static final int TILE_COUNT = TILE_CRACK_FIRST + CRACK_STAGES;
+
+    /**
+     * Půl texelu dovnitř dlaždice.
+     *
+     * ⚠️ Bez tohohle vzniká na hranách bloků prosakování sousední dlaždice.
+     * UV pravého okraje dlaždice je totiž totožné s UV levého okraje té další,
+     * a interpolace přes stěnu na té hodnotě klidně skončí - vzorkování pak
+     * sáhne o texel vedle a na hraně bloku se objeví proužek cizí textury.
+     * Zúžením o půl texelu se rozsah zastaví přesně ve STŘEDU krajních texelů,
+     * takže při GL_NEAREST je pořád dostupných všech 16, ale mimo dlaždici
+     * se sáhnout nedá.
+     */
+    private static final float INSET = 0.5f / ATLAS_PIXELS;
+
+    private BlockAtlas() {}
+
+    /** face je jedna z konstant FACE_*. */
+    public static int tile(byte blockId, int face)
+    {
+        return switch(blockId)
+        {
+            case World.GRASS -> switch(face)
+            {
+                case FACE_TOP    -> TILE_GRASS_TOP;
+                // Spodek travnatého bloku je hlína - koukáš na něj zespoda.
+                case FACE_BOTTOM -> TILE_DIRT;
+                default          -> TILE_GRASS_SIDE;
+            };
+            case World.DIRT   -> TILE_DIRT;
+            case World.STONE  -> TILE_STONE;
+            case World.SAND   -> TILE_SAND;
+            case World.PLANKS   -> TILE_PLANKS;
+            case World.COAL_ORE -> TILE_COAL_ORE;
+            case World.IRON_ORE -> TILE_IRON_ORE;
+            case World.WATER    -> TILE_WATER;
+            case World.STONE_BRICKS -> TILE_BRICKS;
+            case World.LEAVES -> TILE_LEAVES;
+            case World.TORCH -> TILE_TORCH;
+            // Plot je ze dřeva, takže si prostě bere dlaždici prken.
+            case World.FENCE -> TILE_PLANKS;
+            // Kmen má letokruhy na řezu a kůru z boku - třetí blok s rozdílem
+            // mezi vrškem a boky, po trávě a crafting table.
+            case World.LOG -> face == FACE_SIDE ? TILE_LOG_SIDE : TILE_LOG_TOP;
+            // Crafting table je druhý blok po trávě, který se shora liší od boků.
+            case World.CRAFTING_TABLE -> face == FACE_TOP ? TILE_TABLE_TOP : TILE_TABLE_SIDE;
+            default           -> TILE_UNKNOWN;
+        };
+    }
+
+    public static int column(int tile) { return tile % TILES_PER_ROW; }
+    public static int row(int tile)    { return tile / TILES_PER_ROW; }
+
+    public static float u0(int tile) { return edge(column(tile))     + INSET; }
+    public static float u1(int tile) { return edge(column(tile) + 1) - INSET; }
+    public static float v0(int tile) { return edge(row(tile))        + INSET; }
+    public static float v1(int tile) { return edge(row(tile) + 1)    - INSET; }
+
+    private static float edge(int tileIndex)
+    {
+        return tileIndex * (float) TILE_PIXELS / ATLAS_PIXELS;
+    }
+}

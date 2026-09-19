@@ -1,0 +1,98 @@
+package mc;
+
+/**
+ * Spustí všechny headless testy najednou.
+ *
+ * V IntelliJ stačí zelená šipka u main(). Nepotřebuje JUnit ani žádnou další
+ * závislost - testy jsou obyčejné třídy, které si počítají chyby do static pole.
+ *
+ * Testovat jde všechno kromě renderu: World, Player, Raycaster i ChunkMesh.build()
+ * nesahají na OpenGL. Chyby v shaderech a v kreslení odhalí až spuštění hry.
+ */
+public class AllTests {
+
+    private static final String NEWLINE = System.lineSeparator();
+
+    public static void main(String[] args) throws Exception
+    {
+        int failures = 0;
+
+        System.out.println("========== RayTest ==========");
+        RayTest.main(args);
+        failures += RayTest.failures;
+
+        System.out.println("\n========== ChunkTest ==========");
+        ChunkTest.main(args);
+        failures += ChunkTest.failures;
+
+        System.out.println("\n========== MeshTest ==========");
+        MeshTest.main(args);
+        failures += MeshTest.failures;
+
+        System.out.println("\n========== PhysicsTest ==========");
+        PhysicsTest.main(args);
+        failures += PhysicsTest.failures;
+
+        System.out.println("\n========== MenuTest ==========");
+        MenuTest.main(args);
+        failures += MenuTest.failures;
+
+        System.out.println("\n========== AtlasTest ==========");
+        AtlasTest.main(args);
+        failures += AtlasTest.failures;
+
+        System.out.println(NEWLINE + "========== CaveTest ==========");
+        CaveTest.main(args);
+        failures += CaveTest.failures;
+
+        System.out.println(NEWLINE + "========== TreeTest ==========");
+        TreeTest.main(args);
+        failures += TreeTest.failures;
+
+        System.out.println(NEWLINE + "========== AsyncTest ==========");
+        AsyncTest.main(args);
+        failures += AsyncTest.failures;
+
+        System.out.println(NEWLINE + "========== SaveTest ==========");
+        SaveTest.main(args);
+        failures += SaveTest.failures;
+
+        System.out.println(NEWLINE + "========== WaterTest ==========");
+        WaterTest.main(args);
+        failures += WaterTest.failures;
+
+        System.out.println(NEWLINE + "========== InventoryTest ==========");
+        InventoryTest.main(args);
+        failures += InventoryTest.failures;
+
+        System.out.println(NEWLINE + "========== ModelTest ==========");
+        ModelTest.main(args);
+        failures += ModelTest.failures;
+
+        System.out.println(NEWLINE + "========== MiningTest ==========");
+        MiningTest.main(args);
+        failures += MiningTest.failures;
+
+        System.out.println(NEWLINE + "========== DroppedItemTest ==========");
+        DroppedItemTest.main(args);
+        failures += DroppedItemTest.failures;
+
+        System.out.println(NEWLINE + "========== SwingTest ==========");
+        SwingTest.main(args);
+        failures += SwingTest.failures;
+
+        System.out.println(NEWLINE + "========== LightTest ==========");
+        LightTest.main(args);
+        failures += LightTest.failures;
+
+        System.out.println(NEWLINE + "========== SkyTest ==========");
+        SkyTest.main(args);
+        failures += SkyTest.failures;
+
+        System.out.println(failures == 0
+                ? "\n>>> ALL PASSED"
+                : "\n>>> FAILURES: " + failures);
+
+        System.exit(failures == 0 ? 0 : 1);
+    }
+}

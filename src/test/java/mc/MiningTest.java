@@ -1,0 +1,182 @@
+package mc;
+
+/**
+ * Overuje postup rozbijeni bloku.
+ *
+ * ⚠️ Tezisko je na tom, ze se postup vaze na KONKRETNI BLOK, ne na stisknute
+ * tlacitko. Kdyby se pocital jen z drzeni mysi, dalo by se kopani "nabit"
+ * na mekke hline a jednim skubnutim mysi rozbit kamen.
+ */
+public class MiningTest {
+
+    static int failures = 0;
+    static final float DT = 1f / 60f;
+
+    static void check(String name, boolean ok, String detail) {
+        System.out.println((ok ? "  OK   " : "  FAIL ") + name + (detail.isEmpty() ? "" : "  -> " + detail));
+        if (!ok) failures++;
+    }
+
+    /** Paprsek na konkretni blok, jako by na nej hrac koukal. */
+    static Raycaster.RaycastHit at(int x, int y, int z) {
+        return new Raycaster.RaycastHit(x, y, z, 0, 1, 0);
+    }
+
+    /** Kolik framu trva rozbit blok na dane pozici. -1 kdyz se to nepovede. */
+    static int framesToBreak(World w, Mining m, int x, int y, int z, int limit) {
+        for (int i = 1; i <= limit; i++)
+            if (m.update(w, DT, true, at(x, y, z))) return i;
+        return -1;
+    }
+
+    public static void main(String[] args) {
+        // ---------- tvrdosti ----------
+        check("hlina je mekci nez kamen",
+                World.hardness(World.DIRT) < World.hardness(World.STONE),
+                World.hardness(World.DIRT) + " vs " + World.hardness(World.STONE));
+        check("kamen je mekci nez zelezna ruda",
+                World.hardness(World.STONE) < World.hardness(World.IRON_ORE), "");
+        check("pochoden se rozbije skoro hned", World.hardness(World.TORCH) < 0.1f, "");
+        check("zadna tvrdost neni nulova ani zaporna",
+                World.hardness(World.STONE) > 0 && World.hardness(World.LEAVES) > 0, "");
+
+        // ---------- arena ----------
+        World w = new World();
+        w.loadRadius = 1;
+        w.unloadRadius = 3;
+        w.updateBlocking(8f, 8f);
+
+        final int FLOOR = 100;
+        w.placeBlock(8, FLOOR, 8, World.DIRT);
+        w.placeBlock(9, FLOOR, 8, World.STONE);
+        w.placeBlock(10, FLOOR, 8, World.IRON_ORE);
+
+        Mining m = new Mining();
+
+        // ---------- doba kopani odpovida tvrdosti ----------
+        int dirtFrames = framesToBreak(w, m, 8, FLOOR, 8, 2000);
+        m.cancel();
+        int stoneFrames = framesToBreak(w, m, 9, FLOOR, 8, 2000);
+        m.cancel();
+        int oreFrames = framesToBreak(w, m, 10, FLOOR, 8, 2000);
+        m.cancel();
+
+        System.out.printf("%nRozbiti: hlina %d framu (%.2f s), kamen %d (%.2f s), zelezo %d (%.2f s)%n",
+                dirtFrames, dirtFrames * DT, stoneFrames, stoneFrames * DT,
+                oreFrames, oreFrames * DT);
+
+        check("hlina se rozbije", dirtFrames > 0, "" + dirtFrames);
+        check("kamen trva dele nez hlina", stoneFrames > dirtFrames, "");
+        check("zelezo trva dele nez kamen", oreFrames > stoneFrames, "");
+        check("hlina zabere zhruba pul vteriny",
+                Math.abs(dirtFrames * DT - World.hardness(World.DIRT)) < 0.05f,
+                String.format("%.2f s", dirtFrames * DT));
+
+        // ---------- ⚠️ prepnuti cile zacina od nuly ----------
+        m.cancel();
+        for (int i = 0; i < 25; i++) m.update(w, DT, true, at(8, FLOOR, 8));   // nakousnout hlinu
+        float charged = m.progress();
+        check("na hline se postup nacital", charged > 0.5f, String.format("%.2f", charged));
+
+        m.update(w, DT, true, at(9, FLOOR, 8));   // skok na kamen
+        check("prepnuti na jiny blok postup vynuluje", m.progress() < 0.05f,
+                String.format("%.2f", m.progress()));
+        check("kamen se tim nerozbil", w.isSolid(9, FLOOR, 8), "");
+
+        // ---------- pusteni tlacitka zrusi postup ----------
+        m.cancel();
+        for (int i = 0; i < 25; i++) m.update(w, DT, true, at(9, FLOOR, 8));
+        check("kamen se nakousl", m.progress() > 0.1f, String.format("%.2f", m.progress()));
+
+        m.update(w, DT, false, at(9, FLOOR, 8));   // pustit
+        check("pusteni tlacitka zrusi kopani", !m.isActive() && m.progress() == 0f, "");
+
+        // ---------- kurzor mimo blok ----------
+        m.cancel();
+        for (int i = 0; i < 10; i++) m.update(w, DT, true, at(9, FLOOR, 8));
+        m.update(w, DT, true, null);
+        check("kurzor mimo blok kopani zrusi", !m.isActive(), "");
+
+        // ---------- stadia prasklin ----------
+        m.cancel();
+        int previousStage = -1;
+        boolean monotone = true;
+        int distinct = 0;
+
+        for (int i = 0; i < 2000; i++) {
+            boolean broke = m.update(w, DT, true, at(10, FLOOR, 8));
+            int stage = m.stage();
+
+            if (broke) break;
+            if (stage < previousStage) monotone = false;
+            if (stage != previousStage) { distinct++; previousStage = stage; }
+        }
+
+        check("stadia prasklin jdou po sobe a nevraci se", monotone, "");
+        check("projde se vsemi stadii", distinct >= Mining.STAGES,
+                distinct + " z " + Mining.STAGES);
+        check("stadium nikdy nepresahne posledni dlazdici",
+                previousStage < Mining.STAGES, "" + previousStage);
+
+        // ---------- necinne kopani nehlasi stadium ----------
+        m.cancel();
+        check("bez kopani se praskliny nekresli", m.stage() == -1, "" + m.stage());
+
+        // ---------- blok, ktery se zamerit neda ----------
+        m.cancel();
+        w.placeBlock(11, FLOOR, 8, World.WATER);
+        boolean brokeWater = false;
+        for (int i = 0; i < 200; i++)
+            if (m.update(w, DT, true, at(11, FLOOR, 8))) brokeWater = true;
+        check("voda se rozbit neda", !brokeWater && !m.isActive(), "");
+
+        // ---------- kam jde vytezeny blok ----------
+        DroppedItems drops = new DroppedItems();
+
+        // Misto v inventari: rovnou do nej, na zem nic.
+        Inventory roomy = new Inventory();
+        w.placeBlock(12, FLOOR, 8, World.DIRT);
+        m.cancel();
+        framesToBreak(w, m, 12, FLOOR, 8, 2000);
+        boolean harvested = m.harvest(w, roomy, drops);
+        check("vytezeny blok jde do inventare", harvested && roomy.countOf(World.DIRT) == 1, "");
+        check("s mistem v inventari nic nevypadne", drops.size() == 0, "" + drops.size());
+        check("blok je pryc", !w.isSolid(12, FLOOR, 8), "");
+
+        // Plny inventar: vypadne na zem na miste rozbiteho bloku.
+        Inventory full = InventoryTest.filled(World.STONE);
+        w.placeBlock(13, FLOOR, 8, World.DIRT);
+        m.cancel();
+        framesToBreak(w, m, 13, FLOOR, 8, 2000);
+        m.harvest(w, full, drops);
+
+        DroppedItem dropped = drops.size() == 1 ? drops.items().get(0) : null;
+        check("pri plnem inventari vytezeny blok vypadne na zem",
+                dropped != null && dropped.stack().block() == World.DIRT && dropped.stack().count() == 1,
+                dropped == null ? drops.size() + " polozek" : dropped.stack().toString());
+        check("polozka se objevi na miste rozbiteho bloku",
+                dropped != null && Math.abs(dropped.x - 13.5f) < 1e-4f && Math.abs(dropped.z - 8.5f) < 1e-4f
+                        && dropped.y >= FLOOR && dropped.y < FLOOR + 1,
+                dropped == null ? "" : dropped.x + " " + dropped.y + " " + dropped.z);
+        check("plny inventar se nezmenil",
+                full.countOf(World.STONE) == Inventory.SIZE * ItemStack.MAX_COUNT
+                        && full.countOf(World.DIRT) == 0, "");
+
+        // Skoro plny: slije se s rozdelanou hromadkou, na zem nic.
+        full.set(3, ItemStack.of(World.DIRT, 63));
+        w.placeBlock(14, FLOOR, 8, World.DIRT);
+        m.cancel();
+        framesToBreak(w, m, 14, FLOOR, 8, 2000);
+        m.harvest(w, full, drops);
+        check("posledni volne misto v rozdelane hromadce se vyuzije",
+                full.get(3).count() == 64 && drops.size() == 1, full.get(3) + ", na zemi " + drops.size());
+
+        // Bez dokopaneho bloku se nic nevytezi.
+        check("harvest na vzduchu nic neudela",
+                !m.harvest(w, roomy, drops) && roomy.countOf(World.DIRT) == 1 && drops.size() == 1, "");
+
+        w.shutdown();
+
+        System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+}
