@@ -21,7 +21,15 @@ import static org.lwjgl.system.MemoryUtil.NULL;
  */
 public class Main {
 
-    private static final float FOV = 70f;
+    /**
+     * Nastavení z options.json. Načte se při startu, mění ho obrazovka Options
+     * a klávesy F11 / V; applyOptions() je pak rozveze tam, kam patří.
+     */
+    private final Options options = Options.load(Options.FILE);
+
+    /** Okno / celá obrazovka a strop FPS - obojí řídí nastavení. */
+    private final WindowMode windowMode = new WindowMode();
+    private final FrameLimiter limiter = new FrameLimiter();
 
     /** Odkud se začíná hledat suchá zem pro spawn. */
     private static final int SPAWN_SEARCH_X = 8;
@@ -149,7 +157,6 @@ public class Main {
     private int frameCount = 0;
     private double fpsTimer = 0;
     private int currentFps = 0;
-    private boolean vsync = true;
 
     public static void main(String[] args) {
         // Fonty se rasterizují přes AWT (BufferedImage + Graphics2D). Headless režim
@@ -295,6 +302,14 @@ public class Main {
                 return;
             }
 
+            // F11 přepíná celou obrazovku odkudkoliv, jako v Minecraftu.
+            if (key == GLFW_KEY_F11) {
+                options.setFullscreen(!options.fullscreen());
+                applyOptions();
+                saveOptions();
+                return;
+            }
+
             // F6 otevře texture lab ze hry i z hlavního menu. Volná klávesa:
             // Minecraft ji nepoužívá, F3 je ladicí výpis a F5 pohled.
             if (key == GLFW_KEY_F6 && (state == GameState.PLAYING || state == GameState.MAIN_MENU)) {
@@ -352,14 +367,15 @@ public class Main {
             if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) {
                 selectedSlot = key - GLFW_KEY_1;
             }
-            // Vypnutí vsync odstropuje FPS - teprve pak je vidět, co renderer stíhá.
             // T posune čas o desetinu cyklu - na noc se jinak čeká minuty.
+            // V přepíná vsync; strop FPS a zbytek nastavení je v Options.
             if (key == GLFW_KEY_T) {
                 day.skip(0.1f);
             }
             if (key == GLFW_KEY_V) {
-                vsync = !vsync;
-                glfwSwapInterval(vsync ? 1 : 0);
+                options.setVsync(!options.vsync());
+                applyOptions();
+                saveOptions();
             }
         });
 
@@ -463,7 +479,11 @@ public class Main {
         });
 
         glfwMakeContextCurrent(window);
-        glfwSwapInterval(1); // vsync
+        glfwSwapInterval(options.vsync() ? 1 : 0);
+
+        // Celá obrazovka až po vytvoření okna: přepíná se tentýž window
+        // a tentýž GL kontext, takže se nic nemusí nahrávat znovu.
+        windowMode.apply(window, options.fullscreen(), options.vsync());
         glfwShowWindow(window);
 
         GL.createCapabilities();
@@ -525,7 +545,41 @@ public class Main {
         background = new BackgroundRenderer(dirtTile);
         hud = new Hud(shapes, text, icons);
 
+        // Teprve teď existuje všechno, co nastavení řídí (svět, renderer, kamera).
+        applyOptions();
+
         setState(GameState.MAIN_MENU);
+    }
+
+    /**
+     * Rozveze nastavení tam, kam patří. Volá se po každé změně v Options -
+     * posuvník v nastavení se tak projeví HNED, ne až po restartu.
+     *
+     * Simulation distance se propisuje do okruhů načítání světa a render
+     * distance do dohledu; obojí se použije v nejbližším World.update()
+     * a v nejbližším kreslení, takže se svět sám dogeneruje nebo zahodí.
+     */
+    private void applyOptions() {
+        Gui.setPreferredScale(options.guiScale());
+
+        camera.mouseSensitivity = options.mouseDegreesPerPixel();
+        camera.invertMouseY = options.invertMouse();
+
+        world.loadRadius = options.loadRadius();
+        world.unloadRadius = options.unloadRadius();
+        world.renderDistance = options.renderDistanceBlocks();
+
+        if (worldRenderer != null) {
+            worldRenderer.setBrightness(options.brightness());
+        }
+
+        glfwSwapInterval(options.vsync() ? 1 : 0);
+        windowMode.apply(window, options.fullscreen(), options.vsync());
+    }
+
+    /** Uloží nastavení na disk. Chyba se jen ohlásí - hra kvůli ní nepadá. */
+    private void saveOptions() {
+        options.save(Options.FILE);
     }
 
     private void setState(GameState next) {
@@ -606,6 +660,9 @@ public class Main {
 
             glfwSwapBuffers(window);
             glfwPollEvents();
+
+            // Strop FPS má smysl jen bez vsyncu - ten už frame časuje sám.
+            limiter.sync(options.vsync() ? Options.UNLIMITED_FPS : options.maxFps());
         }
     }
 
@@ -680,6 +737,9 @@ public class Main {
         // ze starého. Změřeno: zavření ~30 ms, nové otevření 55-150 ms.
         sound.shutdown();
         sound = SoundEngine.open(SoundLibrary.SOUND_DIR);
+
+        // Nový World má výchozí okruhy - přepsat je z nastavení.
+        applyOptions();
 
         worldRenderer.reset();
         worldRenderer.setBuildBudget(WorldRenderer.BUILD_BUDGET_LOADING);
@@ -777,7 +837,7 @@ public class Main {
         }
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        worldRenderer.render(world, camera, width, height, FOV, false, day, drops.items(), null);
+        worldRenderer.render(world, camera, width, height, options.fov(), false, day, drops.items(), null);
 
         int missingColumns = world.pendingColumns();
         int pendingMeshes = worldRenderer.pendingBuilds();
@@ -911,7 +971,11 @@ public class Main {
                         world.blockLightAt(bx, by, bz) / 15f),
                 DayCycle.AMBIENT);
 
-        heldItem.draw(width, height, FOV, held.block(),
+        // Tentýž jas jako ve světovém shaderu - ruka nesmí zůstat tmavá,
+        // když se zbytek obrazu rozsvítí.
+        light = Options.brighten(light, options.brightness());
+
+        heldItem.draw(width, height, options.fov(), held.block(),
                 swing.fast(), swing.slow(), light);
     }
 
@@ -962,10 +1026,10 @@ public class Main {
         // Obloha před světem: je nekonečně daleko, takže ji terén má přebít.
         // Pod vodou se nekreslí - přes kalnou vodu není vidět ani slunce.
         if (!underwater) {
-            sky.draw(worldRenderer.viewProjection(camera, width, height, FOV), day);
+            sky.draw(worldRenderer.viewProjection(camera, width, height, options.fov()), day);
         }
 
-        worldRenderer.render(world, camera, width, height, FOV, underwater, day,
+        worldRenderer.render(world, camera, width, height, options.fov(), underwater, day,
                 drops.items(), playerBody());
 
         if (state == GameState.PLAYING && hit != null) {
@@ -1072,7 +1136,9 @@ public class Main {
     /** Ladicí výpis vlevo nahoře - nahradil dřívější zprávy v titulku okna. */
     private String[] debugLines() {
         return new String[]{
-                String.format("%d FPS   vsync %s", currentFps, vsync ? "on" : "off"),
+                String.format("%d FPS   vsync %s   max %s   render %d   sim %d",
+                        currentFps, options.vsync() ? "on" : "off", options.fpsLabel(),
+                        options.renderDistance(), options.simulationDistance()),
                 String.format("XYZ  %.2f  %.2f  %.2f", player.x, player.y, player.z),
                 String.format("chunk  %d %d   columns %d   edits %d",
                         (int) Math.floor(player.x) >> Chunk.BITS,
@@ -1106,7 +1172,7 @@ public class Main {
                                 : player.onGround ? "on ground" : "in air",
                         player.vy),
                 "F fly   C noclip   1-9 slot   Q drop   T time   V vsync   Esc pause",
-                "F3 debug   F5 view   F6 texture lab"
+                "F3 debug   F5 view   F6 texture lab   F11 fullscreen"
         };
     }
 

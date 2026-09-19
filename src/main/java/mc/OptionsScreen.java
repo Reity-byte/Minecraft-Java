@@ -28,8 +28,8 @@ public final class OptionsScreen {
     enum Item {
         FULLSCREEN(0, 0, false, "Fullscreen: toggles with F11 too"),
         VSYNC(1, 0, false, "VSync: wait for the monitor refresh (V in game)"),
-        RENDER(0, 1, true, "How far the world is drawn. Never more than simulation."),
-        SIMULATION(1, 1, true, "How far chunks are loaded and lit. Render follows it down."),
+        RENDER(0, 1, true, "How many chunks are drawn. Never more than simulation."),
+        SIMULATION(1, 1, true, "How many chunks are loaded and lit. Render follows it down."),
         FOV(0, 2, true, "Field of view in degrees"),
         MAX_FPS(1, 2, true, "Frame cap when VSync is off"),
         BRIGHTNESS(0, 3, true, "Lifts dark places like the brightness option in Minecraft"),
@@ -233,8 +233,10 @@ public final class OptionsScreen {
         {
             case FULLSCREEN   -> "Fullscreen: " + onOff(options.fullscreen());
             case VSYNC        -> "VSync: " + onOff(options.vsync());
-            case RENDER       -> "Render Distance: " + options.renderDistance() + " chunks";
-            case SIMULATION   -> "Simulation Distance: " + options.simulationDistance() + " chunks";
+            // Bez jednotky: "Simulation Distance: 16 chunks" se do sloupce
+            // při velkém GUI měřítku nevejde. Chunky říká nápověda dole.
+            case RENDER       -> "Render Distance: " + options.renderDistance();
+            case SIMULATION   -> "Simulation Distance: " + options.simulationDistance();
             case FOV          -> "FOV: " + options.fov() + (options.fov() == Options.DEFAULT_FOV ? " (Normal)" : "");
             case MAX_FPS      -> "Max Framerate: " + options.fpsLabel();
             case BRIGHTNESS   -> "Brightness: " + options.brightnessLabel();
