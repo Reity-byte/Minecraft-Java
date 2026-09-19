@@ -88,8 +88,10 @@ public class Mining {
      * Volat ve framu, kdy update() vrátil true: x(), y(), z() pak pořád
      * ukazují na dokopaný blok (cancel() nuluje postup, ne pozici).
      * Vrací true, když se blok opravdu rozbil.
+     *
+     * Rozbití zazní v prostoru, ze středu bloku, zvukem jeho materiálu.
      */
-    public boolean harvest(World world, Container inventory, DroppedItems drops)
+    public boolean harvest(World world, Container inventory, DroppedItems drops, SoundSink sounds)
     {
         byte mined = world.getBlock(x, y, z);
 
@@ -99,6 +101,8 @@ public class Mining {
         {
             return false;
         }
+
+        sounds.playAt(Sound.breakOf(mined), x + 0.5f, y + 0.5f, z + 0.5f);
 
         ItemStack rest = inventory.add(ItemStack.of(mined, 1));
         drops.dropFromBlock(x, y, z, rest);

@@ -138,8 +138,14 @@ public class MiningTest {
         w.placeBlock(12, FLOOR, 8, World.DIRT);
         m.cancel();
         framesToBreak(w, m, 12, FLOOR, 8, 2000);
-        boolean harvested = m.harvest(w, roomy, drops);
+        SoundTest.Recorder heard = new SoundTest.Recorder();
+        boolean harvested = m.harvest(w, roomy, drops, heard);
         check("vytezeny blok jde do inventare", harvested && roomy.countOf(World.DIRT) == 1, "");
+        check("rozbiti zazni zvukem materialu, v prostoru ze stredu bloku",
+                heard.played.size() == 1 && heard.last().sound() == Sound.BREAK_EARTH
+                        && heard.last().positional()
+                        && heard.last().x() == 12.5f && heard.last().y() == FLOOR + 0.5f && heard.last().z() == 8.5f,
+                heard.played.toString());
         check("s mistem v inventari nic nevypadne", drops.size() == 0, "" + drops.size());
         check("blok je pryc", !w.isSolid(12, FLOOR, 8), "");
 
@@ -148,7 +154,7 @@ public class MiningTest {
         w.placeBlock(13, FLOOR, 8, World.DIRT);
         m.cancel();
         framesToBreak(w, m, 13, FLOOR, 8, 2000);
-        m.harvest(w, full, drops);
+        m.harvest(w, full, drops, SoundSink.SILENT);
 
         DroppedItem dropped = drops.size() == 1 ? drops.items().get(0) : null;
         check("pri plnem inventari vytezeny blok vypadne na zem",
@@ -167,13 +173,23 @@ public class MiningTest {
         w.placeBlock(14, FLOOR, 8, World.DIRT);
         m.cancel();
         framesToBreak(w, m, 14, FLOOR, 8, 2000);
-        m.harvest(w, full, drops);
+        m.harvest(w, full, drops, SoundSink.SILENT);
         check("posledni volne misto v rozdelane hromadce se vyuzije",
                 full.get(3).count() == 64 && drops.size() == 1, full.get(3) + ", na zemi " + drops.size());
 
+        // Kamen zni jako kamen - rozdeleni podle materialu, ne jeden zvuk na vsechno.
+        w.placeBlock(15, FLOOR, 8, World.STONE);
+        m.cancel();
+        framesToBreak(w, m, 15, FLOOR, 8, 2000);
+        m.harvest(w, roomy, drops, heard);
+        check("rozbiti kamene zazni kamenem", heard.last().sound() == Sound.BREAK_STONE,
+                heard.last().toString());
+
         // Bez dokopaneho bloku se nic nevytezi.
-        check("harvest na vzduchu nic neudela",
-                !m.harvest(w, roomy, drops) && roomy.countOf(World.DIRT) == 1 && drops.size() == 1, "");
+        int before = heard.played.size();
+        check("harvest na vzduchu nic neudela ani nezazni",
+                !m.harvest(w, roomy, drops, heard) && roomy.countOf(World.DIRT) == 1 && drops.size() == 1
+                        && heard.played.size() == before, "");
 
         w.shutdown();
 

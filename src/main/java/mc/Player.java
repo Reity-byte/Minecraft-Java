@@ -104,6 +104,16 @@ public class Player {
     public boolean flying = false;
     public boolean noclip = false;
 
+    /**
+     * Zazněl v posledním update() krok? A po jakém bloku se šlo. Hráč zvuk
+     * sám nepřehrává - jen ho ohlásí, Main ho pošle do SoundEngine. Díky tomu
+     * Player dál nesahá na nic kromě World a jde testovat headless.
+     */
+    public boolean stepped = false;
+    public byte stepBlock = World.AIR;
+
+    private final Footsteps footsteps = new Footsteps();
+
     // Vstup nastavuje Main před voláním update().
     public float inputForward;   // -1 dozadu .. +1 dopředu
     public float inputStrafe;    // -1 doleva .. +1 doprava
@@ -196,7 +206,50 @@ public class Player {
             }
         }
 
+        float startX = x;
+        float startZ = z;
+
         moveWithCollision(world, vx * dt, vy * dt, vz * dt);
+
+        // Krok se počítá ze SKUTEČNÉHO vodorovného posunu, ne z rychlosti -
+        // chůze do zdi nešlape. A zazní jen na zemi (onGround je čerstvě
+        // spočítané v moveWithCollision), takže let ani skok nešlapou.
+        stepped = footsteps.update((float) Math.hypot(x - startX, z - startZ), onGround);
+
+        if(stepped)
+        {
+            stepBlock = blockUnderFeet(world);
+        }
+    }
+
+    /**
+     * Blok, po kterém hráč šlape. Nejdřív pod středem; když je tam vzduch
+     * (hráč stojí na hraně a drží ho jen kraj hitboxu), pod rohy hitboxu.
+     * Bez toho by chůze po hraně byla neslyšná.
+     */
+    public byte blockUnderFeet(World world)
+    {
+        int by = (int) Math.floor(y - 0.2f);
+        byte center = world.getBlock((int) Math.floor(x), by, (int) Math.floor(z));
+
+        if(World.blocksMovement(center))
+        {
+            return center;
+        }
+
+        for(int corner = 0; corner < 4; corner++)
+        {
+            float cx = x + ((corner & 1) == 0 ? -HALF_WIDTH : HALF_WIDTH);
+            float cz = z + ((corner & 2) == 0 ? -HALF_WIDTH : HALF_WIDTH);
+            byte block = world.getBlock((int) Math.floor(cx), by, (int) Math.floor(cz));
+
+            if(World.blocksMovement(block))
+            {
+                return block;
+            }
+        }
+
+        return center;
     }
 
     private void applyMovementInput(float yawDegrees)

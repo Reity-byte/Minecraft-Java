@@ -14,6 +14,7 @@ proč to tak je, a co je změřené. Aktualizovat při větších změnách.
 | JOML | 1.10.8 — matice a vektory |
 | OpenGL | **3.3 core profile** — žádná fixed-function pipeline |
 | Fonty | **AWT** (`BufferedImage` + `Graphics2D`), headless — žádná další závislost |
+| Zvuk | **OpenAL** — `lwjgl-openal` 3.3.3 + natives win/linux/macos (OpenAL Soft je v nich) |
 
 ⚠️ **LWJGL 3.3.3 hlásí při startu `Unsupported JNI version detected`** — je starší než JDK 26.
 Zatím běží, ale upgrade na 3.3.4+ je jednořádková změna v `pom.xml`.
@@ -31,7 +32,7 @@ V Git Bashi je nutné classpath převádět `cygpath -w` a spojovat středníkem
 
 ## Testy
 
-`src/test/java/mc/` — **662 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **711 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -46,7 +47,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `MeshTest` | Mesher proti **nezávislému naivnímu přepočtu stěn** + měření rychlosti |
 | `PhysicsTest` | Gravitace, výška skoku, kolize po osách, rohy, tunelování, let, noclip |
 | `SwingTest` | Máchnutí rukou: průběh křivky, délka, **držené tlačítko ho nerestartuje** |
-| `MiningTest` | Doba kopání podle tvrdosti, **přepnutí cíle vynuluje postup**, puštění tlačítka, stádia prasklin, kam jde vytěžený blok (inventář, rozdělaná hromádka, **při plném inventáři na zem**) |
+| `MiningTest` | Doba kopání podle tvrdosti, **přepnutí cíle vynuluje postup**, puštění tlačítka, stádia prasklin, kam jde vytěžený blok (inventář, rozdělaná hromádka, **při plném inventáři na zem**), zvuk rozbití podle materiálu ze středu bloku |
 | `MenuTest` | Hit-testing tlačítek: pořadí, kraje, mezery, překlopení y z GLFW, změna velikosti okna |
 | `CaveTest` | Jeskyně (podíl výkopu, **šířka chodeb**, propojenost, netknutý povrch, dno světa) a rudy (četnost, hloubky, shlukování, záporné souřadnice) |
 | `InventoryTest` | Hromádky, slévání při sběru, přetečení, recepty (i posunuté v mřížce), klikání myší, návrat obsahu při zavření, **shift-klik** (prázdný i plný cíl, přetečení, mřížka, výstup, crafting table), **tažení myší** (rovnoměrně i po jednom, zbytek v ruce, přeskočené sloty, zrušení druhým tlačítkem) |
@@ -61,12 +62,14 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `AtlasTest` | Mapování blok+stěna → dlaždice, UV uvnitř atlasu, půltexelové zúžení, obsah a determinismus textur |
 | `PlayerModelTest` | Animace: rozmach podle rychlosti, **opačná fáze nohou**, ruka proti noze, délka kroku, strop při letu, **nezávislost na FPS**, pohupování, máchnutí z `HandSwing`, držení. Model: rozměry jako hitbox, **pravá ruka vpravo, obličej vepředu**, končetiny v póze, držený blok u pěsti, odstín podle směru ve světě. Skin: každá stěna míří do vybarvené části |
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
+| `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
 
 **Testovat jde všechno kromě renderu** — `World`, `Player`, `Raycaster`, `ChunkMesh.build()`,
 `Menu.buttonAt()`, `BlockAtlas`, `Textures.blockAtlasPixels()`, `DroppedItems`,
 `DroppedItemMesh.build()`, `PlayerAnimation`, `PlayerModelMesh.build()`,
 `Textures.playerSkinPixels()` ani `Camera.follow()` nesahají na GL. Myš v `ContainerScreen`
-(klik, shift-klik, tažení) taky ne — na GL sahá jen jeho kreslení.
+(klik, shift-klik, tažení) taky ne — na GL sahá jen jeho kreslení. Ze zvuku potřebuje OpenAL
+jen `SoundEngine`; výběr zvuku, cooldown, kroky, syntéza i čtení WAV jdou bez něj.
 
 ⚠️ **Testy volají `world.updateBlocking()`, ne `update()`** — ta je od zavedení worker vlákna
 asynchronní a po návratu ještě žádný sloupec existovat nemusí. Blokující varianta si chybějící
@@ -122,7 +125,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `BlockIcon` — izometrická kostka bloku, sdílená hotbarem i sloty
 
 **Hra**
-- `Player` — hitbox, gravitace, kolize
+- `Player` — hitbox, gravitace, kolize; ohlašuje kroky (`stepped`, `stepBlock`)
 - `Mining` — postup rozbíjení bloku a kam jde vytěžený kus (`harvest`); **bez GL**
 - `DroppedItem` — jedna hromádka ležící ve světě: poloha, rychlost, AABB kolize; **bez GL**
 - `DroppedItems` — všechny položky na zemi: vyhození, sběr, zánik; **bez GL**
@@ -132,6 +135,16 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `Raycaster` — DDA (Amanatides–Woo)
 - `GameState` — MAIN_MENU / CREATING_WORLD / PLAYING / PAUSED
 - `Main` — okno, vstup, stavový automat
+
+**Zvuk (bez OpenAL, kromě `SoundEngine`)**
+- `Sound` — všechny zvuky jako druh × materiál; cooldown, obměna výšky a hlasitost druhu; jméno souboru
+- `SoundSynth` — procedurální placeholdery jako soubory WAV v paměti
+- `Wav` — čtení a zápis WAV (PCM 8/16 bit), stereo se smíchá do mona
+- `SoundLibrary` — `sounds/<jméno>.wav`, a když není, syntéza — **jediné místo výměny**
+- `SoundThrottle` — cooldown na druh zvuku
+- `Footsteps` — kdy zazní krok (podle ujité vzdálenosti)
+- `SoundSink` — rozhraní „zahraj zvuk", aby herní logika šla testovat s nahrávačem
+- `SoundEngine` — OpenAL: zařízení, kontext, buffery, fond zdrojů, posluchač; životní cyklus jako `World`
 
 ---
 
@@ -925,6 +938,103 @@ skinu (klobouk, bunda) se nekreslí; starší skiny 64×32 bez levé ruky a nohy
 zrcadlit; přepnutí pohledu nemá přechod; zaměřovač zůstává vidět i ve třetí osobě (Minecraft
 ho tam skrývá); postava nevrhá stín. Světlo je jedno číslo pro celou postavu, z buňky s hlavou.
 
+### Zvuk
+
+**OpenAL přes `lwjgl-openal`**, stejná verze a stejné natives (win/linux/macos) jako ostatní
+moduly LWJGL. V natives je přibalený OpenAL Soft, takže se nic neinstaluje.
+
+**⚠️ Zvukový engine žije stejně jako svět.** `SoundEngine.open()` při startu; při založení
+i načtení světa `shutdown()` a nový `open()` — hned vedle `World.shutdown()` ve `freshWorld()`;
+při ukončení hry `shutdown()`. Nový svět tak nezdědí nic, co ještě hraje ze starého: zdroje,
+buffery i kontext jsou nové. `shutdown()` jde volat opakovaně a uklidí i po nepovedeném otevření.
+
+**Změřeno** (stroj měl ~55 % zátěže z jiných programů):
+
+| | |
+|---|---|
+| první otevření | **285–330 ms** — načtení nativní knihovny 160–210 ms, kontext 80–195 ms, zbytek zařízení, syntéza a buffery |
+| úplně první spuštění po stažení knihovny | 1,5 s — LWJGL rozbaluje natives do cache, jen jednou |
+| každé další otevření (nový svět) | 55–150 ms |
+| zavření | 24–55 ms |
+
+Proto se engine otevírá **dřív než okno** — čtvrtsekunda se lépe prosedí před oknem než na
+zamrzlém černém obraze. Znovuotevření při zakládání světa zdrží kliknutí na „Create World"
+o ~0,1–0,2 s, než naskočí loading screen; samotné generování trvá déle.
+
+**⚠️ Chyba zvuku hru nepoloží.** Bez zvukového zařízení nebo bez nativní knihovny se engine
+otevře tichý: důvod na stderr, `play*()` nic nedělají, ladicí výpis ukáže `sound off`. Stejný
+přístup jako u ukládání světa.
+
+**⚠️ Zvuk kliknutí v menu hraje AŽ PO akci tlačítka.** „Create World" a „Load World" engine
+zavřou a otevřou nový, takže zvuk pouštěný před akcí by se hned uťal. `Hud` nemá nic
+klikacího a sloty inventáře nezní ani v Minecraftu.
+
+**Placeholdery jsou syntetizované — stejná filozofie jako procedurální textury.** Žádné soubory,
+jen kód, který zvuk spočítá (`SoundSynth`): šum z hashe (vyjde pokaždé stejně), jednopólové
+filtry a obálka s náběhem a doběhem do nuly (bez lupnutí). Zvuk je druh × materiál. Druh dává
+délku a doznívání — krok 0,09 s, položení 0,13 s, rozbití 0,24 s —, materiál barvu: hlína je
+tlumený zrnitý šum, kámen ostřejší šum s cvaknutím 140 Hz, dřevo tlumený tón 200 Hz
+s klepnutím, listí vysoký šum s pomalým náběhem. Kliknutí je pípnutí 1,4 kHz. Všech 13 zvuků
+má dohromady 81 KB a 1,9 s; syntéza se vejde do otevření enginu.
+
+**⚠️ Syntéza nevyrábí vzorky pro OpenAL, ale SOUBOR WAV v paměti.** Nahrávka z disku je jen jiný
+zdroj týchž bajtů a obojí jde stejným dekodérem (`Wav.decode`). Výměna za skutečné zvuky proto
+nevyžaduje změnu kódu: **stačí položit `sounds/<jméno>.wav` vedle hry** (třeba
+`sounds/break_stone.wav`; jména dává `Sound.fileName()`). Soubor přebije syntézu, ostatní zvuky
+zůstanou syntetizované, takže se dá nahrazovat po jednom. Nečitelný nebo nepodporovaný soubor
+se ohlásí na stderr a hraje placeholder. Rozhoduje se na jediném místě, v `SoundLibrary.load()`.
+
+**Čte se WAV PCM 8 i 16 bit, mono i stereo; .ogg zatím ne.** Dekodér Vorbisu je v LWJGL
+v modulu `lwjgl-stb` (STBVorbis), tedy další závislost. Až bude potřeba, je to jeden modul
+v `pom.xml` a jedna větev v `SoundLibrary.load()`.
+
+**⚠️ Všechno se čte jako MONO.** OpenAL umisťuje do prostoru jen monofonní buffery — stereo by
+hrálo „do uší" bez ohledu na polohu zdroje. Stereo soubor se proto při čtení smíchá do jednoho
+kanálu; nahrané rozbití bloku by jinak znělo vždycky zepředu.
+
+**V prostoru zní jen rozbití a položení bloku**, ze středu bloku. Kroky a UI jsou nepoziční
+(zdroj relativní k posluchači na nule). Posluchač je kamera, i ve třetí osobě, aby zvuk seděl
+s obrazem. Útlum je lineární s ořezem: do 1 bloku plná hlasitost, na 16 blocích ticho, jako
+v Minecraftu. Výchozí inverzní model OpenAL jen slábne donekonečna a úplně neutichne nikdy.
+
+**Poloha zdrojů je ve světových souřadnicích jako float — na rozdíl od kreslení.** U obrazu
+dělá krok floatu daleko od počátku (~8 mm na 100 000) třesoucí se geometrii; ucho to nepozná,
+takže převod relativně ke kameře tu není potřeba.
+
+**Materiál bloku je STEJNÉ ROZDĚLENÍ jako tvrdost** (`World.hardness()`): co má stejnou
+tvrdost, zní stejně. Jen rudy s vlastní tvrdostí zní jako kámen a pochodeň jako dřevo, ze
+kterého je. `SoundTest` projde všechny bloky a hlídá, že se tabulky nerozejdou, když přibude
+nový blok.
+
+**⚠️ Cooldown je na DRUH zvuku, ne na jednotlivý zvuk.** Rychlé kopání střídavě hlíny a listí
+by jinak prošlo, protože každý má svůj zvuk — a „kulomet" je problém druhu. Rozbití a položení
+0,1 s, krok 0,15 s, kliknutí 0,05 s. Co přijde během cooldownu, se zahodí, neodkládá: zvuk
+zahraný opožděně by k ničemu nepatřil. Změřeno v `SoundTest`: rozbíjení každý frame zazní
+**10× za sekundu místo 60×**. Odmítnutý pokus cooldown neprodlužuje — jinak by při drženém
+tlačítku nezaznělo už nikdy nic.
+
+**Výška tónu se náhodně mění**, rovnoměrně v 1 ± 0,08 (krok), ± 0,1 (rozbití, položení)
+a ± 0,03 (kliknutí). Dva kroky za sebou pak nezní jako jedna nahrávka puštěná dvakrát; UI
+má znít pořád stejně.
+
+**Kroky se počítají z UJITÉ VZDÁLENOSTI, ne z času** — krok každých 1/0,6 bloku (to je
+`distanceWalkedModified` z Minecraftu), takže interval je přesně délka kroku / rychlost:
+**0,39 s chůzí, 0,30 s sprintem, 1,3 s plížením**. Časovač by musel řešit, co s rozběhnutým
+krokem, když se uprostřed změní rychlost. Posun je skutečný (chůze do zdi nešlape), vzdálenost
+se sčítá i ve vzduchu, ale krok zazní jen na zemi — po skoku dopředu tedy při dopadu, a po
+dlouhém letu jeden, ne salva. Hráč krok jen ohlásí (`Player.stepped`, `stepBlock`) a zvuk
+pouští Main, takže `Player` dál nesahá na nic kromě `World`.
+
+**Blok pod nohama se hledá i pod rohy hitboxu.** Hráč na hraně stojí středem nad vzduchem
+a drží ho kraj hitboxu; bez toho by chůze po hraně byla neslyšná.
+
+**Hlasitost je jedna konstanta**, `SoundEngine.MASTER_VOLUME` (0,7).
+
+**Známá zjednodušení:** jeden zvuk na druh a materiál (Minecraft jich má několik a střídá je —
+tady to zastupuje obměna výšky); chybí ťukání při kopání, dopad z výšky, plavání a hudba;
+fond má 16 zdrojů a když jsou všechny obsazené, nový zvuk se zahodí; kliknutí na „Quit" utne
+ukončení hry; kroky zní i po dně pod vodou.
+
 ### Ostatní
 
 **Pozadí menu je jeden quad, ne stovky dlaždic.** Textura má `GL_REPEAT` a UV jdou od 0
@@ -1053,7 +1163,10 @@ stádií prasklin.
 
 **Blok v ruce — hotovo.** Model v perspektivě před kamerou, máchnutí při kopání i pokládání.
 
-**Další na řadě:** zvuky.
+**Zvuk — hotovo.** OpenAL, kroky, rozbití a položení bloku v prostoru, kliknutí v menu,
+syntetizované placeholdery nahraditelné soubory `sounds/<jméno>.wav` bez změny kódu. Zbývá:
+skutečné nahrávky, víc variant na zvuk, ťukání při kopání, dopad, plavání, hudba, .ogg
+(modul `lwjgl-stb`) a nastavení hlasitosti v UI.
 
 **Model postavy a pohledy — hotovo.** Postava z kvádrů s placeholder skinem v šabloně Minecraftu,
 chůze, pohupování a máchnutí, F5 přes tři pohledy s kamerou, která neprojede terénem. Zbývá:

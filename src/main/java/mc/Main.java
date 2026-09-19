@@ -32,6 +32,12 @@ public class Main {
     private final Player player = new Player();
     private World world = new World(); // nahrazuje se při vytvoření nového světa
 
+    /**
+     * Zvuk. Žije stejně jako svět: při založení nebo načtení světa se zavře
+     * a otevře nový, při ukončení hry zavře. Otevírá se v init().
+     */
+    private SoundEngine sound;
+
     // Vytváří se až po GL.createCapabilities(), proto nejsou inicializované u deklarace.
     private WorldRenderer worldRenderer;
     private Renderer2D shapes;
@@ -146,6 +152,7 @@ public class Main {
         }
 
         world.shutdown();
+        sound.shutdown();
         worldRenderer.delete();
         text.delete();
         font.delete();
@@ -164,6 +171,11 @@ public class Main {
     }
 
     private void init() {
+        // Zvuk se otevírá DŘÍV než okno: poprvé to trvá ~0,3 s (načtení
+        // nativní knihovny a kontext OpenAL) a to je lepší prosedět před
+        // oknem než na zamrzlém černém obrazu. Menu ho potřebuje na kliknutí.
+        sound = SoundEngine.open(SoundLibrary.SOUND_DIR);
+
         if (!glfwInit()) throw new IllegalStateException("Unable to init GLFW");
 
         glfwDefaultWindowHints();
@@ -346,6 +358,8 @@ public class Main {
                         && world.placeBlock(px, py, pz, selected.block())) {
                     inventory.removeOne(selectedSlot);
                     swing.trigger();
+                    // V prostoru, ze středu položeného bloku.
+                    sound.playAt(Sound.placeOf(selected.block()), px + 0.5f, py + 0.5f, pz + 0.5f);
                 }
             }
         });
@@ -545,6 +559,11 @@ public class Main {
         world.shutdown();
         world = new World();
 
+        // Zvuk symetricky se světem: nový svět nezdědí nic, co ještě hraje
+        // ze starého. Změřeno: zavření ~30 ms, nové otevření 55-150 ms.
+        sound.shutdown();
+        sound = SoundEngine.open(SoundLibrary.SOUND_DIR);
+
         worldRenderer.reset();
         worldRenderer.setBuildBudget(WorldRenderer.BUILD_BUDGET_LOADING);
 
@@ -661,6 +680,14 @@ public class Main {
         // V první osobě kamera v očích, ve třetí za hráčem nebo před ním.
         camera.follow(world, player.x, player.eyeY(), player.z);
 
+        // Posluchač je tam, kde kamera - poziční zvuky pak sedí s obrazem
+        // i ve třetí osobě. Kroky jsou nepoziční, hrají "v hlavě".
+        sound.listen(camera.x, camera.y, camera.z, camera.viewDirection());
+
+        if (player.stepped) {
+            sound.play(Sound.stepOf(player.stepBlock));
+        }
+
         // ⚠️ Míří se z OČÍ, ne z kamery. Ve třetí osobě by paprsek z kamery
         // za zády trefil blok mezi kamerou a hráčem a zepředu by mířil úplně
         // jinam, než kam hráč kouká. Minecraft to dělá stejně.
@@ -675,7 +702,7 @@ public class Main {
 
         if (mining.update(world, dt, miningHeld, hit)) {
             // Vytěžený kus jde do inventáře; co se nevejde, vypadne na zem.
-            mining.harvest(world, inventory, drops);
+            mining.harvest(world, inventory, drops, sound);
         }
 
         // Až po pohybu hráče, ať se sbírá podle toho, kde hráč stojí teď.
@@ -808,6 +835,11 @@ public class Main {
         return menu.buttonAt(mouseX, mouseY, width, height);
     }
 
+    /**
+     * Kliknutí v menu. Zvuk kliknutí hraje AŽ PO akci tlačítka: "Create World"
+     * a "Load World" zvukový engine zavřou a otevřou nový (jako svět), takže
+     * zvuk pouštěný předtím by se hned uťal.
+     */
     private void handleMenuClick() {
         if (state == GameState.MAIN_MENU) {
             int index = hoveredButton(mainMenu);
@@ -826,10 +858,13 @@ public class Main {
                 glfwSetWindowShouldClose(window, true);
             }
 
+            sound.play(Sound.CLICK);
             return;
         }
 
-        switch (hoveredButton(pauseMenu)) {
+        int index = hoveredButton(pauseMenu);
+
+        switch (index) {
             case 0 -> setState(GameState.PLAYING);
             case 1 -> {
                 // Odchod do menu svět zahazuje, takže se musí uložit teď.
@@ -837,6 +872,10 @@ public class Main {
                 setState(GameState.MAIN_MENU);
             }
             default -> { }
+        }
+
+        if (index >= 0) {
+            sound.play(Sound.CLICK);
         }
     }
 
@@ -889,8 +928,9 @@ public class Main {
                         worldRenderer.drawnSections(),
                         worldRenderer.drawnFaces(),
                         worldRenderer.pendingBuilds()),
-                String.format("E inventory   held %d/%d slots   on ground %d",
-                        usedSlots(), Inventory.SIZE, drops.size()),
+                String.format("E inventory   held %d/%d slots   on ground %d   sound %s",
+                        usedSlots(), Inventory.SIZE, drops.size(),
+                        sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off"),
                 mining.isActive()
                         ? String.format("mining %.0f%%   stage %d",
                                 mining.progress() * 100, mining.stage())

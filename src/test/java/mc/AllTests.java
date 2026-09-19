@@ -89,6 +89,10 @@ public class AllTests {
         CameraTest.main(args);
         failures += CameraTest.failures;
 
+        System.out.println(NEWLINE + "========== SoundTest ==========");
+        SoundTest.main(args);
+        failures += SoundTest.failures;
+
         System.out.println(NEWLINE + "========== LightTest ==========");
         LightTest.main(args);
         failures += LightTest.failures;
