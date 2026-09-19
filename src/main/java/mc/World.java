@@ -57,6 +57,14 @@ public class World {
     /** Výška světa v blocích. 128 = 8 sekcí po 16. */
     public static final int WORLD_HEIGHT = 128;
 
+    /**
+     * Seed, se kterým vznikly všechny světy před zavedením seedů.
+     *
+     * ⚠️ Nesahat: starý uložený svět má pod stavbami terén z téhohle čísla,
+     * takže migrovaný svět ho musí dostat, aby vypadal stejně.
+     */
+    public static final long DEFAULT_SEED = 12345L;
+
     // --- parametry generování terénu ---
     private static final double TERRAIN_FREQUENCY = 0.007;
     private static final int    TERRAIN_AMPLITUDE = 20;
