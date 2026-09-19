@@ -105,6 +105,10 @@ public class AllTests {
         SkyTest.main(args);
         failures += SkyTest.failures;
 
+        System.out.println(NEWLINE + "========== BlockRegistryTest ==========");
+        BlockRegistryTest.main(args);
+        failures += BlockRegistryTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);
