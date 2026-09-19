@@ -107,9 +107,48 @@ public final class Textures {
     {
         int[] fromFile = AtlasImage.load(file);
 
-        return fromFile != null
-                ? new AtlasPixels(fromFile, true)
-                : new AtlasPixels(blockAtlasPixels(), false);
+        if(fromFile != null)
+        {
+            return new AtlasPixels(fromFile, true);
+        }
+
+        int[] pixels = blockAtlasPixels();
+        markMissingTiles(pixels, BlockRegistry.active());
+        return new AtlasPixels(pixels, false);
+    }
+
+    /**
+     * Dlaždice bloků z labu, které procedurální atlas nezná, vyplní křiklavou
+     * šachovnicí "neznámý blok".
+     *
+     * Bloky z labu mají dlaždice namalované v textures/atlas.png. Když ten
+     * soubor zmizí a blocks.json zůstane, byly by jejich buňky v procedurálním
+     * atlasu prázdné - průhledné, a v neprůhledném průchodu tedy černé.
+     * Šachovnice ukáže, že chybí textura, ne že je blok černý. Bez bloků
+     * z labu se nemění nic.
+     */
+    static void markMissingTiles(int[] pixels, BlockRegistry registry)
+    {
+        boolean[] used = registry.usedTiles();
+
+        for(int tile = BlockAtlas.TILE_COUNT; tile < used.length; tile++)
+        {
+            if(!used[tile])
+            {
+                continue;
+            }
+
+            int originX = BlockAtlas.column(tile) * BlockAtlas.TILE_PIXELS;
+            int originY = BlockAtlas.row(tile) * BlockAtlas.TILE_PIXELS;
+
+            for(int y = 0; y < BlockAtlas.TILE_PIXELS; y++)
+            {
+                for(int x = 0; x < BlockAtlas.TILE_PIXELS; x++)
+                {
+                    pixels[(originY + y) * BlockAtlas.ATLAS_PIXELS + originX + x] = unknown(x, y);
+                }
+            }
+        }
     }
 
     /**
@@ -180,8 +219,14 @@ public final class Textures {
             default -> tile >= BlockAtlas.TILE_CRACK_FIRST
                     && tile < BlockAtlas.TILE_CRACK_FIRST + BlockAtlas.CRACK_STAGES
                     ? crack(x, y, tile - BlockAtlas.TILE_CRACK_FIRST)
-                    : ((x >> 3) ^ (y >> 3)) == 0 ? UNKNOWN_A : UNKNOWN_B;   // šachovnice
+                    : unknown(x, y);
         };
+    }
+
+    /** Šachovnice magenta/černá - "tady chybí textura". */
+    private static int unknown(int x, int y)
+    {
+        return ((x >> 3) ^ (y >> 3)) == 0 ? UNKNOWN_A : UNKNOWN_B;
     }
 
     /**

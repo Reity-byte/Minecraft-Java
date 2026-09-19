@@ -32,6 +32,8 @@ public final class BlockAtlas {
 
     // Indexy dlaždic v atlasu. Přidat blok = nová dlaždice tady,
     // její vykreslení v Textures.blockAtlas() a case v tile().
+    // ⚠️ Nové vestavěné dlaždice přidávat ODSPODU (27, 28, ...): texture lab
+    // přiděluje buňky blokům z labu od konce atlasu (63, 62, ...) - viz BlockDraft.
     public static final int TILE_GRASS_TOP  = 0;
     public static final int TILE_GRASS_SIDE = 1;
     public static final int TILE_DIRT       = 2;
@@ -76,9 +78,20 @@ public final class BlockAtlas {
 
     private BlockAtlas() {}
 
-    /** face je jedna z konstant FACE_*. */
+    /**
+     * face je jedna z konstant FACE_*.
+     *
+     * Bloky z texture labu (id od BlockRegistry.FIRST_ID) mají dlaždice
+     * v datech - v textures/blocks.json, ne v tomhle switchi.
+     */
     public static int tile(byte blockId, int face)
     {
+        if(blockId >= BlockRegistry.FIRST_ID)
+        {
+            BlockDef custom = BlockRegistry.lookup(blockId);
+            return custom != null ? custom.tile(face) : TILE_UNKNOWN;
+        }
+
         return switch(blockId)
         {
             case World.GRASS -> switch(face)

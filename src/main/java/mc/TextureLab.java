@@ -1,6 +1,7 @@
 package mc;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -122,8 +123,8 @@ public class TextureLab {
 
     private boolean editingName = false;
 
-    /** Založený blok, který si ještě nevyzvedl Main (dá ho hráči), jinak AIR. */
-    private byte createdBlock = World.AIR;
+    /** Založené bloky, které si ještě nevyzvedl Main (dá je hráči). */
+    private final List<Byte> createdBlocks = new ArrayList<>();
 
     public TextureLab(int[] atlasPixels, Texture atlas, boolean fromFile,
                       Renderer2D shapes, TextRenderer text)
@@ -148,14 +149,14 @@ public class TextureLab {
     }
 
     /**
-     * Blok založený od minulého dotazu (Main ho dá hráči do inventáře),
-     * nebo World.AIR. Vrací ho jen jednou.
+     * Bloky založené od minulého dotazu - Main je dá hráči do inventáře.
+     * Každý vrací jen jednou.
      */
-    public byte takeCreatedBlock()
+    public List<Byte> takeCreatedBlocks()
     {
-        byte block = createdBlock;
-        createdBlock = World.AIR;
-        return block;
+        List<Byte> taken = new ArrayList<>(createdBlocks);
+        createdBlocks.clear();
+        return taken;
     }
 
     // ------------------------------------------------------------------
@@ -380,7 +381,7 @@ public class TextureLab {
         draft = null;
         baseRegistry = null;
         editingName = false;
-        createdBlock = def.id();
+        createdBlocks.add(def.id());
 
         preview.show(def.id(), true);
         say("Created " + def.name() + " (id " + def.id() + ") - " + CREATED_STACK + " go to your inventory");

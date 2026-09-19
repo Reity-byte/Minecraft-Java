@@ -29,6 +29,9 @@ public class World {
 
     // Pojmenovaná ID bloků, ať se v kódu nemotají magická čísla.
     // Přidat nový typ = nová konstanta zde + dlaždice v BlockAtlas a Textures.
+    // ⚠️ Vestavěné bloky mají id jen 0 až 63. Od BlockRegistry.FIRST_ID (64)
+    // výš jsou bloky z texture labu (textures/blocks.json) - jejich vlastnosti
+    // nejsou tady v kódu, ale v BlockDef, a ptají se na ně metody níž.
     public static final byte AIR    = 0;
     public static final byte GRASS  = 1;
     public static final byte STONE  = 2;
@@ -1150,12 +1153,26 @@ public class World {
      */
     public static boolean isOpaque(byte blockId)
     {
+        // Blok z labu je vždycky plná krychle, takže rozhodují jen jeho data.
+        // Neznámé id (blocks.json zmizel) se chová jako dřív: plná kostka.
+        if(blockId >= BlockRegistry.FIRST_ID)
+        {
+            BlockDef custom = BlockRegistry.lookup(blockId);
+            return custom == null || custom.opaque();
+        }
+
         return blockId != AIR && blockId != WATER && BlockModels.isFullCube(blockId);
     }
 
     /** Zastaví blok hráče? */
     public static boolean blocksMovement(byte blockId)
     {
+        if(blockId >= BlockRegistry.FIRST_ID)
+        {
+            BlockDef custom = BlockRegistry.lookup(blockId);
+            return custom == null || custom.solid();
+        }
+
         return blockId != AIR && blockId != WATER && blockId != TORCH;
     }
 
@@ -1168,6 +1185,14 @@ public class World {
      */
     public static float hardness(byte blockId)
     {
+        // Blok z labu nese tvrdost v datech, ve stejných sekundách jako tady.
+        BlockDef custom = BlockRegistry.lookup(blockId);
+
+        if(custom != null)
+        {
+            return custom.hardness();
+        }
+
         return switch(blockId)
         {
             case TORCH -> 0.05f;
@@ -1181,7 +1206,11 @@ public class World {
         };
     }
 
-    /** Dá se blok zaměřit paprskem a rozbít? */
+    /**
+     * Dá se blok zaměřit paprskem a rozbít? Blok z labu vždycky - i když
+     * není pevný ani neprůhledný, musí jít vytěžit, jinak by ve světě
+     * zůstal navždy.
+     */
     public static boolean isTargetable(byte blockId)
     {
         return blockId != AIR && blockId != WATER;

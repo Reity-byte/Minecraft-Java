@@ -86,6 +86,14 @@ public enum Sound {
          */
         public static Material of(byte block)
         {
+            // Blok z labu má jen tvrdost, takže zní podle ní - stejné skupiny.
+            BlockDef custom = BlockRegistry.lookup(block);
+
+            if(custom != null)
+            {
+                return byHardness(custom.hardness());
+            }
+
             return switch(block)
             {
                 case World.AIR, World.WATER -> null;
@@ -96,6 +104,20 @@ public enum Sound {
                 // Stejně jako tvrdost: neznámý blok se chová jako hlína.
                 default -> EARTH;
             };
+        }
+
+        /**
+         * Materiál podle tvrdosti, pro bloky, které nic jiného nemají (bloky
+         * z labu). Hranice leží mezi tvrdostmi skupin vestavěných bloků:
+         * listí 0,2 | hlína 0,5 | dřevo 0,8 | kámen 1,8 a víc. SoundTest hlídá,
+         * že vestavěné bloky (kromě pochodně a rud) vyjdou stejně jako v of().
+         */
+        public static Material byHardness(float hardness)
+        {
+            if(hardness < 0.35f) return PLANT;
+            if(hardness < 0.65f) return EARTH;
+            if(hardness < 1.3f)  return WOOD;
+            return STONE;
         }
     }
 

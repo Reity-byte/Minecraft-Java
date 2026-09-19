@@ -5,7 +5,10 @@ import org.lwjgl.opengl.GL;
 
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL33.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.lwjgl.system.MemoryUtil.NULL;
 
@@ -99,6 +102,9 @@ public class Main {
 
     /** Otevřený texture lab, nebo null; a kam se z něj vrací. */
     private TextureLab lab;
+
+    /** Bloky založené v labu, které hráč ještě nedostal - viz giveCreatedBlocks(). */
+    private final List<Byte> createdBlocks = new ArrayList<>();
     private GameState labReturnState = GameState.MAIN_MENU;
 
     /** Ladicí výpis vlevo nahoře. F3 ho schová a zase ukáže. */
@@ -248,6 +254,22 @@ public class Main {
             lastX = xpos;
             lastY = ypos;
             camera.processMouse(dx, dy);
+        });
+
+        // Jméno nového bloku v labu se píše ZNAKY, ne kódy kláves - velká
+        // písmena, mezery a rozložení klávesnice pak fungují samy.
+        glfwSetCharCallback(window, (win, codepoint) -> {
+            if (state == GameState.TEXTURE_LAB) {
+                lab.typed(codepoint);
+            }
+        });
+
+        // PNG přetažené do okna lab rovnou naimportuje. Okno výběru souboru
+        // nabídnout nejde - AWT běží headless (viz main()).
+        glfwSetDropCallback(window, (win, count, names) -> {
+            if (state == GameState.TEXTURE_LAB && count > 0) {
+                lab.fileDropped(GLFWDropCallback.getName(names, 0));
+            }
         });
 
         glfwSetKeyCallback(window, (win, key, scancode, action, mods) -> {
@@ -456,6 +478,14 @@ public class Main {
         glEnable(GL_CULL_FACE);
 
         glClearColor(WorldRenderer.SKY_R, WorldRenderer.SKY_G, WorldRenderer.SKY_B, 1.0f);
+
+        // Bloky z texture labu (textures/blocks.json) PŘED atlasem: procedurální
+        // atlas podle nich vyznačí dlaždice, které bez atlas.png nemá. Když
+        // soubor není, registr je prázdný a hra se chová přesně jako dřív.
+        BlockRegistry.activate(BlockRegistry.load(BlockRegistry.FILE));
+        System.out.println("Bloky z labu: " + BlockRegistry.active().size()
+                + (Files.isRegularFile(BlockRegistry.FILE) ? " (" + BlockRegistry.FILE.toAbsolutePath() + ")"
+                : " (" + BlockRegistry.FILE + " neni)"));
 
         // Až tady, protože shadery a textury potřebují aktivní kontext
         // Atlas vlastní Main a půjčuje ho renderu světa i ikonám bloků.
@@ -679,9 +709,29 @@ public class Main {
 
     private void closeTextureLab() {
         atlasFromFile = lab.fromFile();
+        createdBlocks.addAll(lab.takeCreatedBlocks());
         lab.delete();
         lab = null;
         setState(labReturnState);
+
+        if (state == GameState.PLAYING) {
+            giveCreatedBlocks();
+        }
+    }
+
+    /**
+     * Blok založený v labu dostane hráč hromádku do inventáře, ať ho jde hned
+     * vyzkoušet - receptem ho vyrobit nejde. Z labu otevřeného v menu počká
+     * na první svět, jinak by ho načtení uloženého inventáře přepsalo.
+     * Co se do plného inventáře nevejde, hráč vyhodí před sebe.
+     */
+    private void giveCreatedBlocks() {
+        for (byte block : createdBlocks) {
+            ItemStack rest = inventory.add(ItemStack.of(block, TextureLab.CREATED_STACK));
+            drops.throwFrom(player, camera.getLookDirection(), rest);
+        }
+
+        createdBlocks.clear();
     }
 
     private void closeContainer() {
@@ -732,6 +782,7 @@ public class Main {
         if (missingColumns == 0 && pendingMeshes == 0 && loadingFrames > 3) {
             worldRenderer.setBuildBudget(WorldRenderer.BUILD_BUDGET_PLAYING);
             setState(GameState.PLAYING);
+            giveCreatedBlocks();
         }
     }
 
@@ -1027,9 +1078,10 @@ public class Main {
                         worldRenderer.pendingBuilds()),
                 String.format("E inventory   held %d/%d slots   on ground %d",
                         usedSlots(), Inventory.SIZE, drops.size()),
-                String.format("sound %s   atlas %s",
+                String.format("sound %s   atlas %s   lab blocks %d",
                         sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off",
-                        atlasFromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural"),
+                        atlasFromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural",
+                        BlockRegistry.active().size()),
                 mining.isActive()
                         ? String.format("mining %.0f%%   stage %d",
                                 mining.progress() * 100, mining.stage())

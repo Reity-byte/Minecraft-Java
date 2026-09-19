@@ -9,6 +9,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 /**
  * Uložení a načtení světa.
@@ -214,7 +216,21 @@ public final class WorldStorage {
                 }
             }
 
-            return new Save(x, y, z, yaw, pitch, flying, selectedSlot, changes, inventory);
+            Save save = new Save(x, y, z, yaw, pitch, flying, selectedSlot, changes, inventory);
+
+            // Stejná opatrnost jako u GENERATOR_VERSION: varovat, nepadat.
+            // Svět s bloky z labu, které blocks.json nezná (soubor zmizel nebo
+            // blok z něj někdo smazal), se načte a ty kostky se ukážou jako
+            // "neznámý blok" - dokud se blocks.json nevrátí, pak zase správně.
+            SortedSet<Integer> unknown = unknownLabBlocks(save, BlockRegistry.active());
+
+            if(!unknown.isEmpty())
+            {
+                System.err.println("Ulozeny svet obsahuje bloky z labu " + unknown + ", ktere "
+                        + BlockRegistry.FILE + " nezna - ukazou se jako neznamy blok.");
+            }
+
+            return save;
         }
         catch(IOException e)
         {
@@ -222,5 +238,56 @@ public final class WorldStorage {
             System.err.println("Nacteni sveta selhalo: " + e);
             return null;
         }
+    }
+
+    /**
+     * Id bloků z labu (od BlockRegistry.FIRST_ID), která uložený svět nese -
+     * v postavených blocích i v inventáři.
+     *
+     * Formát souboru se kvůli nim NEMĚNÍ: id bloku z labu je byte jako
+     * u vestavěných bloků a je stabilní napříč sezeními (BlockRegistry ho
+     * nikdy nepřečísluje ani nepoužije podruhé), takže se ukládá a načítá
+     * úplně stejně. Svět bez bloků z labu je bajt po bajtu tentýž jako dřív.
+     */
+    public static SortedSet<Integer> labBlockIds(Save save)
+    {
+        SortedSet<Integer> ids = new TreeSet<>();
+
+        for(Map<Integer, Byte> column : save.changes().values())
+        {
+            for(byte block : column.values())
+            {
+                if(block >= BlockRegistry.FIRST_ID)
+                {
+                    ids.add((int) block);
+                }
+            }
+        }
+
+        for(ItemStack stack : save.inventory())
+        {
+            if(stack != null && stack.block() >= BlockRegistry.FIRST_ID)
+            {
+                ids.add((int) stack.block());
+            }
+        }
+
+        return ids;
+    }
+
+    /** Ty z labBlockIds(), které registr nezná. */
+    public static SortedSet<Integer> unknownLabBlocks(Save save, BlockRegistry registry)
+    {
+        SortedSet<Integer> unknown = new TreeSet<>();
+
+        for(int id : labBlockIds(save))
+        {
+            if(registry.get((byte) id) == null)
+            {
+                unknown.add(id);
+            }
+        }
+
+        return unknown;
     }
 }
