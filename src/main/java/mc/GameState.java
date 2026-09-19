@@ -19,5 +19,8 @@ public enum GameState {
     PAUSED,
 
     /** Otevřený inventář nebo crafting table. Svět stojí, kurzor je volný. */
-    CONTAINER
+    CONTAINER,
+
+    /** Texture lab - úpravy dlaždic atlasu (F6 nebo z hlavního menu). */
+    TEXTURE_LAB
 }

@@ -54,6 +54,12 @@ public class Menu {
         return labels.length;
     }
 
+    /** Popisek tlačítka - podle něj se rozhoduje, co klik udělá (pořadí se mění). */
+    public String label(int index)
+    {
+        return index >= 0 && index < labels.length ? labels[index] : "";
+    }
+
     private static float buttonLeft(int screenWidth, int scale)
     {
         return Gui.snap((screenWidth - BUTTON_WIDTH * scale) / 2f, scale);

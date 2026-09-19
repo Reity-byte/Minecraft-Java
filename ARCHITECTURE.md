@@ -32,7 +32,7 @@ V Git Bashi je nutné classpath převádět `cygpath -w` a spojovat středníkem
 
 ## Testy
 
-`src/test/java/mc/` — **711 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **765 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -63,13 +63,16 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `PlayerModelTest` | Animace: rozmach podle rychlosti, **opačná fáze nohou**, ruka proti noze, délka kroku, strop při letu, **nezávislost na FPS**, pohupování, máchnutí z `HandSwing`, držení. Model: rozměry jako hitbox, **pravá ruka vpravo, obličej vepředu**, končetiny v póze, držený blok u pěsti, odstín podle směru ve světě. Skin: každá stěna míří do vybarvené části |
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
 | `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
+| `TextureLabTest` | Index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, hit-testy rozvržení, **náhled = bajt po bajtu tentýž mesh jako ve hře** |
 
 **Testovat jde všechno kromě renderu** — `World`, `Player`, `Raycaster`, `ChunkMesh.build()`,
 `Menu.buttonAt()`, `BlockAtlas`, `Textures.blockAtlasPixels()`, `DroppedItems`,
 `DroppedItemMesh.build()`, `PlayerAnimation`, `PlayerModelMesh.build()`,
 `Textures.playerSkinPixels()` ani `Camera.follow()` nesahají na GL. Myš v `ContainerScreen`
 (klik, shift-klik, tažení) taky ne — na GL sahá jen jeho kreslení. Ze zvuku potřebuje OpenAL
-jen `SoundEngine`; výběr zvuku, cooldown, kroky, syntéza i čtení WAV jdou bez něj.
+jen `SoundEngine`; výběr zvuku, cooldown, kroky, syntéza i čtení WAV jdou bez něj. Z texture labu
+jdou bez GL `AtlasEditor`, `AtlasImage`, `TextureLabLayout` i stavba meshe náhledu
+(`BlockPreview.build()`).
 
 ⚠️ **Testy volají `world.updateBlocking()`, ne `update()`** — ta je od zavedení worker vlákna
 asynchronní a po návratu ještě žádný sloupec existovat nemusí. Blokující varianta si chybějící
@@ -114,8 +117,9 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `Gui` — celočíselné měřítko UI a zarovnání na GUI pixel
 - `Palette` — ploché barvy UI na jednom místě, aby HUD a menu vypadaly jako jedna věc
 - `Renderer2D` — obdélníky, rámečky, bevel, libovolné čtyřúhelníky; sdílí HUD i menu
-- `Texture` — RGBA textura, `GL_NEAREST`
-- `Textures` — procedurální dlaždice, atlas bloků a placeholder skin postavy (jediné místo výměny skinu)
+- `Texture` — RGBA textura, `GL_NEAREST`; `update()` přepíše obsah té samé textury
+- `Textures` — procedurální dlaždice, atlas bloků a placeholder skin postavy (jediné místo výměny skinu);
+  přepínač atlasu `textures/atlas.png` / procedurální
 - `BackgroundRenderer` — dlaždicované pozadí hlavního menu, vlastní texturovaný shader
 - `FontAtlas` — ASCII 32–126 → jednokanálová textura (`GL_RED`), bez antialiasingu
 - `TextRenderer` — sazba textu, počátek vlevo nahoře, kreslí v celočíselném měřítku
@@ -123,6 +127,14 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `Menu` — tlačítka s bevelem, animované zvýraznění, hit-testing
 - `ContainerScreen` — kreslení a myš (klik, shift-klik, tažení) nad **seznamem mřížek**; jedna třída pro inventář i crafting table
 - `BlockIcon` — izometrická kostka bloku, sdílená hotbarem i sloty
+
+**Texture lab (F6)**
+- `TextureLab` — obrazovka: přehled atlasu, plátno, paleta, HSV, hex, tlačítka; kreslení a vstup
+- `TextureLabLayout` — rozvržení v GUI pixelech a hit-testy; **bez GL**
+- `AtlasEditor` — pixely atlasu: souřadnice, malování tahem, undo, kapátko, barvy; **bez GL**
+- `AtlasImage` — atlas jako PNG (ImageIO), řádky překlopené, alfa zachovaná; **bez GL**
+- `BlockPreview` — živá kostka: malý skutečný svět → `ChunkMesh` → světový shader, kamera obíhá
+- `ImageRenderer` — libovolný výřez textury jako obdélník (shader `UI_TEXTURED`)
 
 **Hra**
 - `Player` — hitbox, gravitace, kolize; ohlašuje kroky (`stepped`, `stepBlock`)
@@ -1035,6 +1047,93 @@ tady to zastupuje obměna výšky); chybí ťukání při kopání, dopad z vý�
 fond má 16 zdrojů a když jsou všechny obsazené, nový zvuk se zahodí; kliknutí na „Quit" utne
 ukončení hry; kroky zní i po dně pod vodou.
 
+### Texture lab
+
+**Vývojářská obrazovka na úpravy dlaždic atlasu, na F6 nebo z hlavního menu („Texture Lab").**
+Vlevo přehled atlasu (klik vybere dlaždici), uprostřed dlaždice jako plátno 16×16 (levé
+tlačítko maluje, tažením čára, pravé bere barvu), vpravo živý 3D náhled bloku, pod tím paleta,
+HSV posuvníky, hex a tlačítka Save / Revert / Close. F6 je volná — Minecraft ji nepoužívá,
+F3 je ladicí výpis a F5 pohled. Otevřený ze hry nechává za sebou kreslit svět.
+
+**⚠️ Proč živý náhled přes SKUTEČNÝ shader, ne malování naslepo.** Dlaždice na plátně vypadá
+jinak než na bloku: boky jsou ztmavené na 0,6 a 0,8, spodek na 0,5, a vzor, který se na plátně
+jeví jako nenápadný šum, se na stěnách vedle sebe opakuje jako tapeta. Malovat naslepo znamená
+pro každou změnu restartovat hru. Náhled proto nejde „podobnou kostkou", ale celou cestou jako
+hra: blok stojí v malém skutečném světě, světlo mu spočítá `LightEngine`, sekci postaví
+`ChunkMesh.build()` a kreslí ji světový shader s týmž atlasem. `SHADE_*`, UV vzorce,
+půltexelové zúžení, modely (pochodeň, plot), průhlednost vody i záře pochodně jsou tak
+přesně jako ve hře, protože je počítá tentýž kód. `TextureLabTest` porovná mesh náhledu
+s meshem, který hra postaví pro tentýž blok v jiném světě — bajt po bajtu.
+
+**⚠️ Prázdný svět NESTAČÍ — změřeno testem.** První verze stavěla náhled nad světem bez
+načtených sloupců: `World` na nenačtené místo odpovídá „vzduch s plným sluncem", což vypadá
+jako přesně okolí bloku ve vzduchu. Test ale ukázal rozdíl ve spodní stěně všech plných
+krychlí: ve hře plný blok zastíní buňku pod sebou (sluneční světlo 14, ne 15), takže jeho
+spodek vyjde 0,4917 místo 0,5. Malý skutečný svět (3×3 sloupce) ten vlastní stín má.
+Změřeno: připravit ho trvá **23 ms**, přepnutí bloku v náhledu (položení, světlo, mesh)
+nejvýš **2 ms**, otevření celého labu **~100 ms**, frame labu **1,4 ms**.
+
+**⚠️ OTÁČÍ SE KAMERA, NE BLOK.** Ztmavení stěn je ve hře vázané na osy SVĚTA (vršek 1,
+boky X 0,6, boky Z 0,8). Kdyby se točil blok, točily by se s ním i odstíny a náhled by
+ukazoval něco, co ve hře nikdy neuvidíš. Kamera obíhá kolem bloku jako hráč, který kolem něj
+chodí. Světlo je poledne bez mlhy.
+
+**⚠️ Lab maluje PŘÍMO DO ATLASU HRY, ne do kopie.** `AtlasEditor` upravuje totéž pole pixelů,
+ze kterého je nahraná textura atlasu, a lab ho jednou za frame (když se něco změnilo) nahraje
+do TÉŽE textury přes `Texture.update()` (`glTexSubImage2D`). Změnu tak ve stejném framu vidí
+náhledová kostka, ikony v hotbaru i svět za labem. Ověřeno sondou s GL oknem: po přemalování
+dlaždice kamene načerveno měla kostka hned v dalším framu barvu přesně červená × 0,8 (bok Z).
+Neuložené úpravy zůstanou ve hře do jejího ukončení; na disk je dostane až Save.
+
+**Plátno a přehled atlasu se kreslí z textury na grafice, ne z pixelů na CPU** (`ImageRenderer`
+na existujícím shaderu `UI_TEXTURED`). Ukazují tedy přesně to, co pak vzorkuje svět. Výřez
+dlaždice na plátně jde přesně po hranách, ne se zúžením z `BlockAtlas` — to by krajní pixely
+ukázalo poloviční. Plátno je zarovnané na celé pixely, takže středy fragmentů hranu netrefí.
+
+**⚠️ Řádek 0 je DOLE — na plátně, v přehledu atlasu i v poli pixelů.** Tak čte data GL a tak
+počítá řádky `BlockAtlas`; dlaždice pak na plátně stojí stejně jako na boku bloku. Myš chodí
+z GLFW s počátkem nahoře, takže se řádek překlápí na jediném místě, v `TextureLabLayout`.
+
+**Editovaných 16×16 texelů je přesně to, co hra vzorkuje.** UV z `BlockAtlas` jsou zúžené
+o půl texelu a končí ve STŘEDECH krajních texelů dlaždice; při `GL_NEAREST` je tak dostupných
+všech 16 sloupců a řádků a ani jeden texel sousední dlaždice. `TextureLabTest` to ověřuje pro
+každou dlaždici.
+
+**Lab má vlastní referenční velikost 448×256 GUI pixelů**, ne 320×240 z `Gui`: vedle sebe
+potřebuje atlas, plátno i náhled. Bere největší CELÉ měřítko, při kterém se vejde (na
+1024×768 je to 2, na Full HD 4), takže pixely zůstávají ostré.
+
+**Paleta:** první řádek pevný — průhledná (guma, na vodu a praskliny), černá, tři šedé, bílá
+a šest sytých barev; druhý řádek jsou nejčastější barvy vybrané dlaždice, protože pixel-art
+se maluje hlavně odstíny, které v dlaždici už jsou. K tomu kapátko (pravé tlačítko), HSV
+posuvníky a hex `AARRGGBB` (klik na pole, psát, Enter). HSV se drží zvlášť, ne jen jako
+přepočet z barvy — u šedé by se jinak odstín ztratil a posuvník odstínu skákal na červenou.
+
+**Undo (Ctrl+Z) je snímek dlaždice před tahem**, 1 KB na krok, nejvýš 100 kroků. Celý tah
+tažením je jeden krok. Revert undo zahazuje — vracel by tahy na jiný obsah.
+
+**Kam se ukládá: `textures/atlas.png`**, relativně k pracovnímu adresáři hry, stejně jako
+`saves/` a `sounds/`. PNG 128×128 s alfou; řádky se při zápisu i čtení překlápějí, takže
+v editoru obrázků leží atlas správně (dlaždice 0 vlevo dole, tráva nahoře ne vzhůru nohama).
+AWT `ImageIO` je součást JDK — žádná nová závislost.
+
+**⚠️ Přepínač procedurální / nahraná textura je jeden: existence souboru.** `Textures.atlasPixels()`
+při startu zkusí `textures/atlas.png`; když existuje a má 128×128, použije se, jinak procedurální
+generování jako dřív. Smazání souboru vrací hru k procedurálnímu atlasu. Poškozený soubor nebo
+jiný rozměr se ohlásí na stderr a hra jede procedurálně. Který atlas běží, píše konzole při
+startu (`Atlas bloku: …`), ladicí výpis (`atlas textures/atlas.png` / `atlas procedural`)
+i titulek labu. Revert v labu vrací k tomu, co je na disku. `BlockAtlas` o ničem z toho neví —
+pro něj jsou to pořád jen pixely v mřížce.
+
+**Mapování blok → dlaždice lab nemění**, jen čte (`BlockAtlas.tile()`): u dlaždice ukáže, které
+bloky ji používají, seřazené podle počtu stěn (hlína: hlína na šesti stěnách, pak spodek trávy),
+a klik na náhled přepne na další z nich. Praskliny a volné buňky žádný blok nemají — jdou
+malovat, jen bez náhledu.
+
+**Známá zjednodušení:** jeden atlas, žádné resource packy; nová dlaždice ani nové mapování
+se v labu přidat nedá; bez animovaných textur; praskliny nemají náhled přes blok; náhled je
+vždycky poledne.
+
 ### Ostatní
 
 **Pozadí menu je jeden quad, ne stovky dlaždic.** Textura má `GL_REPEAT` a UV jdou od 0
@@ -1079,6 +1178,8 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | LMB / PMB táhnout v inventáři | rozdělit drženou hromádku rovnoměrně / po jednom kusu |
 | Q / Ctrl+Q | vyhodit z ruky jeden kus / celou hromádku (držené Q sype dál) |
 | F5 | pohled: první osoba → třetí zezadu → třetí zepředu → zpět |
+| F3 | ladicí výpis vlevo nahoře — schovat / ukázat (výchozí: ukázaný) |
+| F6 | texture lab (znovu F6 nebo Esc zavře); taky z hlavního menu „Texture Lab" |
 | PMB na crafting table | otevře mřížku 3×3 |
 | LMB (držet) | kopat — doba podle tvrdosti bloku |
 | T | posun času o desetinu cyklu (ladění) |
@@ -1100,14 +1201,19 @@ Hráč: hitbox 0,6 × 1,8, oči 1,62, chůze 4,3 b/s, gravitace 28 b/s², skok *
 pixelové písmo, izometrické kostky v hotbaru, dlaždicované pozadí. Další úprava vzhledu =
 změna `Palette` a konstant v GUI pixelech v `Hud`/`Menu`, ne nový kód.
 
-**Texture atlas — hotovo.** Mřížka 4×4 dlaždic po 16×16 (`BlockAtlas`), textury generuje
+**Texture atlas — hotovo.** Mřížka 8×8 dlaždic po 16×16, tedy atlas 128×128 (`BlockAtlas`);
+obsazených je 27 buněk (16 dlaždic bloků, neznámý blok a 10 stádií prasklin). Textury generuje
 procedurálně `Textures.blockAtlasPixels()`. Tráva má jinou texturu shora, z boku i zespodu.
 Přidat blok = konstanta ve `World`, dlaždice v `BlockAtlas`, její kresba v `Textures`
-a case v `colorFor()` kvůli hotbaru. V mřížce zbývá 9 volných buněk.
+a case v `colorFor()` kvůli hotbaru. Volných je 37 buněk.
 
-**Ruční textury místo procedurálních** je teď výměna jedné metody. `Texture` bere pole
-`0xAARRGGBB`, takže stačí načíst PNG přes `ImageIO` a poskládat ho do stejné mřížky —
-`BlockAtlas` o způsobu vzniku pixelů neví.
+**Ruční textury místo procedurálních — hotovo, přes texture lab.** Upravený atlas se uloží
+do `textures/atlas.png` a hra ho při startu načte místo procedurálního; viz sekce Texture lab.
+
+**Texture lab — hotovo.** F6 nebo „Texture Lab" v hlavním menu: úpravy dlaždic s živou 3D
+kostkou přes skutečný mesher a shader, export do PNG. Zbývá: víc atlasů / resource packy,
+přidávání nových dlaždic a mapování blok → dlaždice (lab edituje jen obsah existujících),
+animované textury.
 
 **Jeskyně a rudy — hotovo.** 3D šum, uhlí a železo s vlastními hloubkami. Přidat další rudu
 = konstanta ve `World`, řádek v `oreAt()`, dlaždice v `BlockAtlas` a `Textures`.

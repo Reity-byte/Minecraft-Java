@@ -89,6 +89,20 @@ public class Main {
     /** Vytváří se až po GL kontextu, proto ne u deklarace. */
     private Texture blockAtlas;
     private Texture playerSkin;
+
+    /**
+     * Pixely atlasu, ze kterých je nahraná textura blockAtlas. Drží se, protože
+     * je texture lab upravuje na místě a přenahrává do téže textury.
+     */
+    private int[] atlasPixels;
+    private boolean atlasFromFile;
+
+    /** Otevřený texture lab, nebo null; a kam se z něj vrací. */
+    private TextureLab lab;
+    private GameState labReturnState = GameState.MAIN_MENU;
+
+    /** Ladicí výpis vlevo nahoře. F3 ho schová a zase ukáže. */
+    private boolean showDebug = true;
     private BlockIcon icons;
     private SkyRenderer sky;
     private HeldItemRenderer heldItem;
@@ -147,8 +161,13 @@ public class Main {
         // GL objekty se musí uvolnit, dokud je kontext ještě aktivní
         // Zavření okna uprostřed hry je běžný způsob, jak skončit - svět
         // se proto uloží i tady, ne jen při odchodu do menu.
-        if (state == GameState.PLAYING || state == GameState.PAUSED) {
+        if (state == GameState.PLAYING || state == GameState.PAUSED
+                || (state == GameState.TEXTURE_LAB && labReturnState == GameState.PLAYING)) {
             saveWorld();
+        }
+
+        if (lab != null) {
+            lab.delete();
         }
 
         world.shutdown();
@@ -208,6 +227,12 @@ public class Main {
                 return;
             }
 
+            // V labu tažení maluje (nebo posouvá posuvník barvy).
+            if (state == GameState.TEXTURE_LAB) {
+                lab.drag(xpos, ypos, width, height);
+                return;
+            }
+
             // Rozhlížení jen ve hře. V menu by kamera utíkala pod kurzorem.
             if (state != GameState.PLAYING) {
                 return;
@@ -234,7 +259,24 @@ public class Main {
                 return;
             }
 
+            // Lab dostává i opakování klávesy - držené Backspace nebo Ctrl+Z.
+            // Zavírá se ale jen stiskem: podržené F6 by jinak lab otevřelo
+            // a opakováním hned zase zavřelo.
+            if (state == GameState.TEXTURE_LAB) {
+                if (action != GLFW_RELEASE && lab.key(key, mods) && action == GLFW_PRESS) {
+                    closeTextureLab();
+                }
+                return;
+            }
+
             if (action != GLFW_PRESS) {
+                return;
+            }
+
+            // F6 otevře texture lab ze hry i z hlavního menu. Volná klávesa:
+            // Minecraft ji nepoužívá, F3 je ladicí výpis a F5 pohled.
+            if (key == GLFW_KEY_F6 && (state == GameState.PLAYING || state == GameState.MAIN_MENU)) {
+                openTextureLab();
                 return;
             }
 
@@ -276,6 +318,10 @@ public class Main {
                 player.flying = !player.flying;
                 player.vy = 0; // ať se po vypnutí letu nezačne padat setrvačností
             }
+            // F3 schová a zase ukáže ladicí výpis.
+            if (key == GLFW_KEY_F3) {
+                showDebug = !showDebug;
+            }
             // F5 přepíná pohled: první osoba -> zezadu -> zepředu -> zpět.
             if (key == GLFW_KEY_F5) {
                 camera.view = camera.view.next();
@@ -316,6 +362,19 @@ public class Main {
                             (mods & GLFW_MOD_SHIFT) != 0, inventory);
                 } else if (action == GLFW_RELEASE) {
                     screen.release(mouseX, mouseY, width, height, left, inventory);
+                }
+                return;
+            }
+
+            if (state == GameState.TEXTURE_LAB) {
+                boolean left = button == GLFW_MOUSE_BUTTON_LEFT;
+
+                if (action == GLFW_PRESS && (left || button == GLFW_MOUSE_BUTTON_RIGHT)) {
+                    if (lab.press(mouseX, mouseY, width, height, left)) {
+                        closeTextureLab();
+                    }
+                } else if (action == GLFW_RELEASE) {
+                    lab.release();
                 }
                 return;
             }
@@ -400,7 +459,13 @@ public class Main {
 
         // Až tady, protože shadery a textury potřebují aktivní kontext
         // Atlas vlastní Main a půjčuje ho renderu světa i ikonám bloků.
-        blockAtlas = Textures.blockAtlas();
+        // textures/atlas.png z texture labu, když existuje; jinak procedurální.
+        Textures.AtlasPixels atlasSource = Textures.atlasPixels(Textures.ATLAS_FILE);
+        atlasPixels = atlasSource.pixels();
+        atlasFromFile = atlasSource.fromFile();
+        System.out.println("Atlas bloku: " + (atlasFromFile
+                ? Textures.ATLAS_FILE.toAbsolutePath() : "proceduralni (" + Textures.ATLAS_FILE + " neni)"));
+        blockAtlas = Textures.blockAtlas(atlasPixels);
         icons = new BlockIcon(blockAtlas);
 
         // Skin se nahrazuje v jediném místě - v Textures.playerSkin().
@@ -431,9 +496,10 @@ public class Main {
 
         if (next == GameState.MAIN_MENU) {
             mainMenuHasLoad = WorldStorage.exists(SAVE_PATH);
+            // Texture Lab je vývojářská volba - na úpravy atlasu netřeba svět.
             mainMenu = mainMenuHasLoad
-                    ? new Menu("Minecraft Base", "Create World", "Load World", "Quit")
-                    : new Menu("Minecraft Base", "Create World", "Quit");
+                    ? new Menu("Minecraft Base", "Create World", "Load World", "Texture Lab", "Quit")
+                    : new Menu("Minecraft Base", "Create World", "Texture Lab", "Quit");
         }
 
         // Kurzor je chycený jen při hraní; v menu musí být vidět a volný.
@@ -484,6 +550,20 @@ public class Main {
                     world.update(player.x, player.z);
                     renderWorld();
                     screen.render(shapes, text, icons, width, height, mouseX, mouseY);
+                }
+                case TEXTURE_LAB -> {
+                    // Otevřený ze hry: svět za labem se kreslí dál, i s upraveným
+                    // atlasem. Z menu: pozadí menu.
+                    if (labReturnState == GameState.PLAYING) {
+                        world.update(player.x, player.z);
+                        renderWorld();
+                    } else {
+                        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                        background.draw(width, height, Palette.BACKGROUND_TINT);
+                    }
+
+                    lab.update(dt);
+                    lab.render(width, height, mouseX, mouseY);
                 }
             }
 
@@ -584,6 +664,24 @@ public class Main {
         screen = ContainerScreen.craftingTable(inventory, craftingLarge, craftingResult);
         screen.refreshResult();
         setState(GameState.CONTAINER);
+    }
+
+    /**
+     * Texture lab upravuje TENTÝŽ atlas, ze kterého kreslí hra - pixely i GL
+     * texturu. Neuložené úpravy proto zůstanou vidět i po zavření labu, dokud
+     * se hra neukončí.
+     */
+    private void openTextureLab() {
+        lab = new TextureLab(atlasPixels, blockAtlas, atlasFromFile, shapes, text);
+        labReturnState = state;
+        setState(GameState.TEXTURE_LAB);
+    }
+
+    private void closeTextureLab() {
+        atlasFromFile = lab.fromFile();
+        lab.delete();
+        lab = null;
+        setState(labReturnState);
     }
 
     private void closeContainer() {
@@ -712,7 +810,7 @@ public class Main {
 
         drawHeldItem();
 
-        hud.draw(width, height, world, inventory, selectedSlot, debugLines());
+        hud.draw(width, height, world, inventory, selectedSlot, showDebug ? debugLines() : null);
     }
 
     /**
@@ -849,13 +947,12 @@ public class Main {
             }
 
             // Pořadí tlačítek se liší podle toho, jestli je co načítat -
-            // proto se neporovnává s pevnými indexy dvakrát.
-            if (index == 0) {
-                startWorldCreation();
-            } else if (mainMenuHasLoad && index == 1) {
-                loadWorld();
-            } else {
-                glfwSetWindowShouldClose(window, true);
+            // proto se rozhoduje podle popisku, ne podle indexu.
+            switch (mainMenu.label(index)) {
+                case "Create World" -> startWorldCreation();
+                case "Load World" -> loadWorld();
+                case "Texture Lab" -> openTextureLab();
+                default -> glfwSetWindowShouldClose(window, true);
             }
 
             sound.play(Sound.CLICK);
@@ -928,9 +1025,11 @@ public class Main {
                         worldRenderer.drawnSections(),
                         worldRenderer.drawnFaces(),
                         worldRenderer.pendingBuilds()),
-                String.format("E inventory   held %d/%d slots   on ground %d   sound %s",
-                        usedSlots(), Inventory.SIZE, drops.size(),
-                        sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off"),
+                String.format("E inventory   held %d/%d slots   on ground %d",
+                        usedSlots(), Inventory.SIZE, drops.size()),
+                String.format("sound %s   atlas %s",
+                        sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off",
+                        atlasFromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural"),
                 mining.isActive()
                         ? String.format("mining %.0f%%   stage %d",
                                 mining.progress() * 100, mining.stage())
@@ -947,7 +1046,8 @@ public class Main {
                                     ? String.format("swimming %.0f%%", player.submerged * 100)
                                 : player.onGround ? "on ground" : "in air",
                         player.vy),
-                "F fly   C noclip   1-9 slot   Q drop   F5 view   T time   V vsync   Esc pause"
+                "F fly   C noclip   1-9 slot   Q drop   T time   V vsync   Esc pause",
+                "F3 debug   F5 view   F6 texture lab"
         };
     }
 

@@ -554,4 +554,8 @@ public class ChunkMesh {
     {
         return (opaqueVertices + transparentVertices) / VERTICES_PER_FACE;
     }
+
+    /** Pro testy: postavené vrcholy obou sad, jak by šly na grafiku. */
+    float[] opaqueData()      { return Arrays.copyOf(opaque, opaqueFloats); }
+    float[] transparentData() { return Arrays.copyOf(transparent, transparentFloats); }
 }

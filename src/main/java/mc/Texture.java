@@ -54,7 +54,27 @@ public class Texture {
     /** Postaví texturu z pole 0xAARRGGBB, řádek po řádku odspodu. */
     public static Texture fromArgb(int[] argb, int width, int height, int wrap)
     {
-        ByteBuffer pixels = BufferUtils.createByteBuffer(width * height * 4);
+        return new Texture(toRgba(argb), width, height, wrap);
+    }
+
+    /**
+     * Přepíše celý obsah textury novými pixely stejných rozměrů. Stejná
+     * textura, stejné id - všechno, co ji používá (svět, ikony, ruka), uvidí
+     * změnu hned v příštím kreslení. Na tom stojí živý náhled v texture labu.
+     */
+    public void update(int[] argb)
+    {
+        glBindTexture(GL_TEXTURE_2D, id);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
+                GL_RGBA, GL_UNSIGNED_BYTE, toRgba(argb));
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    /** 0xAARRGGBB → bajty R, G, B, A, jak je chce glTexImage2D. */
+    private static ByteBuffer toRgba(int[] argb)
+    {
+        ByteBuffer pixels = BufferUtils.createByteBuffer(argb.length * 4);
 
         for(int value : argb)
         {
@@ -65,8 +85,7 @@ public class Texture {
         }
 
         pixels.flip();
-
-        return new Texture(pixels, width, height, wrap);
+        return pixels;
     }
 
     public int id()     { return id; }

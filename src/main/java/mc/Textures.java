@@ -1,5 +1,7 @@
 package mc;
 
+import java.nio.file.Path;
+
 import static org.lwjgl.opengl.GL33.GL_CLAMP_TO_EDGE;
 import static org.lwjgl.opengl.GL33.GL_REPEAT;
 
@@ -78,16 +80,42 @@ public final class Textures {
     }
 
     /**
-     * Atlas textur bloků, 4x4 dlaždice po 16x16.
+     * Kam texture lab ukládá upravený atlas a odkud se při startu hry načte.
+     * Relativně k pracovnímu adresáři, stejně jako saves/ a sounds/.
+     */
+    public static final Path ATLAS_FILE = Path.of("textures", "atlas.png");
+
+    /** Pixely atlasu a odkud přišly - ladicí výpis i lab to ukazují. */
+    public record AtlasPixels(int[] pixels, boolean fromFile) {}
+
+    /**
+     * Pixely atlasu pro hru.
+     *
+     * ⚠️ TOHLE JE PŘEPÍNAČ mezi procedurální a nahranou texturou: když soubor
+     * existuje a jde přečíst, použije se on; jinak procedurální generování
+     * jako dřív. Smazání souboru tedy vrací hru k procedurálnímu atlasu.
+     * BlockAtlas o tom neví - pro něj jsou to pořád jen pixely v mřížce.
+     */
+    public static AtlasPixels atlasPixels(Path file)
+    {
+        int[] fromFile = AtlasImage.load(file);
+
+        return fromFile != null
+                ? new AtlasPixels(fromFile, true)
+                : new AtlasPixels(blockAtlasPixels(), false);
+    }
+
+    /**
+     * Atlas textur bloků jako GL textura.
      *
      * ⚠️ Wrap je CLAMP_TO_EDGE, ne REPEAT. U atlasu by opakování znamenalo, že
      * UV mírně za okrajem sáhne na protilehlou stranu ATLASU - tedy do úplně
      * jiné dlaždice. CLAMP to zarazí na kraji; přesahu přes hranici dlaždice
      * brání navíc půltexelové zúžení v BlockAtlas.
      */
-    public static Texture blockAtlas()
+    public static Texture blockAtlas(int[] pixels)
     {
-        return Texture.fromArgb(blockAtlasPixels(),
+        return Texture.fromArgb(pixels,
                 BlockAtlas.ATLAS_PIXELS, BlockAtlas.ATLAS_PIXELS, GL_CLAMP_TO_EDGE);
     }
 

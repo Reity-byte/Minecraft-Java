@@ -93,6 +93,10 @@ public class AllTests {
         SoundTest.main(args);
         failures += SoundTest.failures;
 
+        System.out.println(NEWLINE + "========== TextureLabTest ==========");
+        TextureLabTest.main(args);
+        failures += TextureLabTest.failures;
+
         System.out.println(NEWLINE + "========== LightTest ==========");
         LightTest.main(args);
         failures += LightTest.failures;
