@@ -64,6 +64,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
 | `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
 | `TextureLabTest` | Index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře** |
+| `OptionsTest` | Nastavení: výchozí hodnoty = dnešní hra, oříznutí na meze, **render ≤ simulation po 2000 náhodných změnách**, převod na čísla enginu (dohled < `(loadRadius-1)·16`), `options.json` tam a zpět, **chybějící i šest druhů poškozeného souboru → výchozí hodnoty**, jedna špatná hodnota → výchozí jen pro ni, záloha `.bak`, obrazovka Options (hit-testy, tažení posuvníku i mimo dráhu, žádné překryvy), výběr monitoru pro fullscreen, plánování stropu FPS, křivka jasu, GUI měřítko |
 | `BlockRegistryTest` | `textures/blocks.json`: tvar výstupu, round-trip přes text i disk, **neexistující a poškozený soubor → jen vestavěné bloky** (náhodné bajty, useknutý JSON, špatné typy), přeskočení jednotlivých neplatných bloků, **stabilita id přes víc sezení** (i po ručním smazání bloku ze souboru), novější `format`, escape v JSON, plný registr, **záloha poškozeného souboru do `.bak`** |
 | `LabBlockTest` | Blok z labu ve hře: pevný/neprůhledný/obojí ne, neznámé id, **doba kopání podle tvrdosti z dat** (`Mining`), vytěžený blok do inventáře a zpět do světa, **každá stěna meshe bere UV ze své dlaždice**, culling a stín podle neprůhlednosti, hráč duchem propadne a na mramoru stojí, paprsek zaměří i ducha, zvuk podle tvrdosti, náhled labu = mesh hry, **uložený svět nese id beze změny formátu** (svět bez bloků z labu je bajt po bajtu stejný), koloběh lab → soubor → restart |
 
@@ -118,8 +119,18 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `Inventory` — kontejner hráče, sloty 0–8 hotbar, 9–35 batoh; shift-klik (`quickMove`)
 - `Recipes` — tvarované i bezetvarové recepty, hledané kdekoliv v mřížce
 
+**Nastavení a obrazovky**
+- `Options` — hodnoty nastavení, meze a `options.json`; **bez GL**
+- `OptionsScreen` — obrazovka Options ve dvou sloupcích; hit-testy a hodnoty **bez GL**
+- `ScreenLayout` — rozvržení obrazovky v GUI pixelech a hit-testy; **bez GL**
+- `Widgets` — tlačítko, posuvník, zapuštěné pole a texty pro nové obrazovky
+- `TextField` — obsah a úpravy textového pole; **bez GL**
+- `WindowMode` — přepnutí okno / celá obrazovka (GLFW), výběr monitoru **bez GL**
+- `FrameLimiter` — strop FPS, když je vsync vypnutý; plánování **bez GL**
+- `SafeFiles` — atomický zápis textového souboru se zálohou `.bak`; **bez GL**
+
 **2D vrstva**
-- `Gui` — celočíselné měřítko UI a zarovnání na GUI pixel
+- `Gui` — celočíselné měřítko UI (i volba GUI Scale) a zarovnání na GUI pixel
 - `Palette` — ploché barvy UI na jednom místě, aby HUD a menu vypadaly jako jedna věc
 - `Renderer2D` — obdélníky, rámečky, bevel, libovolné čtyřúhelníky; sdílí HUD i menu
 - `Texture` — RGBA textura, `GL_NEAREST`; `update()` přepíše obsah té samé textury
@@ -1067,6 +1078,92 @@ tady to zastupuje obměna výšky); chybí ťukání při kopání, dopad z vý�
 fond má 16 zdrojů a když jsou všechny obsazené, nový zvuk se zahodí; kliknutí na „Quit" utne
 ukončení hry; kroky zní i po dně pod vodou.
 
+### Nastavení (Options)
+
+**Co bylo natvrdo v kódu a teď je v nastavení:** FOV (`Main.FOV = 70`), dohled
+(`World.renderDistance = 96` bloků), okruh načítání (`World.loadRadius = 8`,
+`unloadRadius = 10`), citlivost myši (`Camera` 0,12 °/px) a měřítko UI (`Gui.scale`
+čistě automatické). Za běhu šel dřív přepnout jen vsync (V) a to se nikam neukládalo;
+celá obrazovka ani fullscreen neexistovaly. **Natvrdo dál zůstává** délka dne
+(`DayCycle.DAY_LENGTH`), hlasitost (`SoundEngine.MASTER_VOLUME` — zvuk je mimo rozsah
+zadání), rozpočty na stavbu meshů, dosah zvuku, vzdálenost kreslení položek na zemi
+a měřítko texture labu.
+
+**Deset hodnot, a každá je tu proto, že engine umí, co mění:** Fullscreen, VSync,
+Max Framerate, Render Distance, Simulation Distance, FOV, Brightness, GUI Scale,
+Sensitivity, Invert Mouse. Vynechané jsou věci, které by musel nejdřív umět engine
+(hlasitost je mimo zadání, plynulé osvětlení jde zapnout jen přestavbou všech meshů,
+mraky a částice nejsou, přebindování kláves je mimo rozsah).
+
+**⚠️ Render distance nikdy není větší než simulation distance.** Simulation distance
+je, kam se sloupce NAČÍTAJÍ (generují, svítí, drží změny a předměty na zemi); render
+distance je, co se z nich kreslí — kreslit jde jen načtené. Posunutí jednoho posuvníku
+přes druhý proto potáhne i ten druhý. (Vanilla Minecraft má vztah opačně, protože
+tam se chunky posílají klientovi na render distance a simulation distance řeší jen
+tikání; tady „simulation" přímo znamená načtení, takže opačný vztah nedává smysl.)
+Převod na engine: `loadRadius = simulation + 2` a `renderDistance = render · 16`.
+Ty dva chunky navíc jsou proto, že se sekce mešuje, až když jsou načtení všichni čtyři
+sousedi, a kamera může stát kdekoliv ve svém chunku. Výchozí 6/6 dá přesně dnešních
+`loadRadius 8` a `renderDistance 96`.
+
+**Změna se projeví HNED.** Obrazovka mění přímo `Options` a hlásí to Mainu, který
+`applyOptions()` rozveze do `World` (okruhy, dohled), `Camera` (citlivost, obrácená
+osa), `Gui` (měřítko), `WorldRenderer` (jas), GLFW (vsync, fullscreen) a do matice
+(FOV). Posuvník render distance tak ubírá a přidává svět při tažení — proto se
+obrazovka otevřená z pauzy kreslí přes svět a svět se pod ní dál generuje.
+
+**Jas nezvedá všechno stejně.** Ztmavení stěn je v tomhle enginu ZAPEČENÉ ve světle
+vrcholu (boky 0,6 a 0,8, spodek 0,5), takže gamma křivka z Minecraftu by na plném
+slunci srovnala boky s vrškem a bloky by ztratily tvar. Vzorec je proto
+`light + 0,25 · jas · (1 − light)⁴`: tmu zvedne (0,05 → 0,26), šero znatelně
+(0,2 → 0,30) a osvětlené stěny skoro vůbec (0,6 → 0,606). Je ve `Options.brighten()`
+i ve fragment shaderu světa (`uBrightness`); nenastavený uniform je 0, takže náhled
+v labu vypadá dál stejně.
+
+**Fullscreen přepíná TÝŽ window a TÝŽ GL kontext** (`glfwSetWindowMonitor`), takže se
+nic nenahrává znovu. Poloha a velikost okna se zapamatují před přepnutím, jinak by
+se okno vrátilo do rohu v rozlišení monitoru. Jde na monitor, na kterém okno leží
+největší plochou — na dvou monitorech by jinak hra skočila na primární. F11 přepíná
+odkudkoliv, jako v Minecraftu.
+
+**Strop FPS čeká na PLÁNOVANÝ začátek dalšího framu**, ne „period od konce tohohle" —
+jinak by FPS vyšlo vždycky nižší než strop (frame 3 ms + čekání 8,3 ms = 88 místo 120).
+Spí se `Thread.sleep`, poslední milisekunda se dočeká aktivně (Windows budí vlákno
+s přesností kolem milisekundy). S vsyncem se nečeká vůbec — ten frame časuje sám.
+
+**Soubor `options.json` v pracovním adresáři hry** (vedle `saves/` a `textures/`),
+stejný vzor jako `textures/blocks.json`: chybějící = výchozí hodnoty mlčky, poškozený =
+výchozí hodnoty a zpráva na stderr, **jedna špatná hodnota = výchozí jen pro ni**
+(ostatní se načtou), hodnota mimo meze se ořízne a ohlásí. Zápis je atomický přes
+`.tmp` a nečitelný soubor se před přepsáním zálohuje do `options.json.bak` —
+společný kód je v `SafeFiles`. Ukládá se při zavření obrazovky a hned po F11 / V.
+
+```json
+{
+  "format": 1,
+  "fullscreen": false,
+  "vsync": true,
+  "maxFps": 0,
+  "renderDistance": 6,
+  "simulationDistance": 6,
+  "fov": 70,
+  "brightness": 0.00,
+  "guiScale": 0,
+  "sensitivity": 1.00,
+  "invertMouse": false
+}
+```
+
+`maxFps: 0` = bez stropu, `guiScale: 0` = automaticky. **Zvolené GUI měřítko nikdy
+nepřeroste to, co se vejde** (`Gui.scale`), jinak by na malém okně byla tlačítka mimo
+obrazovku.
+
+**Obrazovky mimo lab mají společné kousky** (`ScreenLayout`, `Widgets`, `TextField`):
+tlačítko s bevelem jako v menu, zapuštěné pole jako slot inventáře a posuvník jako
+HSV posuvníky labu. Není to nový UI systém — je to totéž, co už hra kreslí, jen na
+jednom místě. Rozvržení je v GUI pixelech a měřítko je `Gui.scale()`, takže obrazovky
+reagují na volbu GUI Scale ve stejném framu.
+
 ### Texture lab
 
 **Vývojářská obrazovka na úpravy dlaždic atlasu, na F6 nebo z hlavního menu („Texture Lab").**
@@ -1307,6 +1404,7 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | Q / Ctrl+Q | vyhodit z ruky jeden kus / celou hromádku (držené Q sype dál) |
 | F5 | pohled: první osoba → třetí zezadu → třetí zepředu → zpět |
 | F3 | ladicí výpis vlevo nahoře — schovat / ukázat (výchozí: ukázaný) |
+| F11 | okno / celá obrazovka (uloží se do `options.json`) |
 | F6 | texture lab (znovu F6 nebo Esc zavře); taky z hlavního menu „Texture Lab" |
 | v labu: New block / Import PNG | nový blok z labu (Esc zruší) / načíst `textures/import.png`; PNG přetažené do okna se naimportuje hned |
 | PMB na crafting table | otevře mřížku 3×3 |
