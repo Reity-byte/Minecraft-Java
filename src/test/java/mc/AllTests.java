@@ -117,6 +117,10 @@ public class AllTests {
         WorldSavesTest.main(args);
         failures += WorldSavesTest.failures;
 
+        System.out.println(NEWLINE + "========== SeedTest ==========");
+        SeedTest.main(args);
+        failures += SeedTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

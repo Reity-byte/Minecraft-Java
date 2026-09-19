@@ -1,17 +1,24 @@
 package mc;
 
 /**
- * Classic 2D Simplex noise (Ken Perlin's improved/simplex algorithm).
+ * Classic 2D/3D Simplex noise (Ken Perlin's improved/simplex algorithm).
  * This is a well-known, standard implementation — nothing here is
  * project-specific, so treat it as a library, not something you need
  * to understand line by line.
  *
  * What you need to know to USE it:
- *   double value = SimplexNoise.noise(x, z);       // 2D - vysky terenu
- *   double value = SimplexNoise.noise(x, y, z);    // 3D - jeskyne
+ *   SimplexNoise noise = new SimplexNoise(seed);
+ *   double value = noise.sample(x, z);          // 2D - vysky terenu
+ *   double value = noise.sample(x, y, z);       // 3D - jeskyne
  *   -> returns a value roughly in the range [-1, 1]
  *   -> nearby inputs give similar outputs (that's the whole point)
  *   -> same input always gives the same output (deterministic, no randomness per call)
+ *
+ * Instance je NEMENNA (permutacni tabulka je final), takze z ni smi cist
+ * i worker vlakno soubezne s hlavnim - bez zamku.
+ *
+ * Staticke noise(...) je porad tady a vola vychozi instanci se seedem
+ * World.DEFAULT_SEED; pouziva to ChunkTest jako nezavislou repliku fbm().
  */
 public class SimplexNoise {
 
@@ -21,18 +28,43 @@ public class SimplexNoise {
             {0,1,1},{0,-1,1},{0,1,-1},{0,-1,-1}
     };
 
-    private static final int[] p = new int[256];
-    private static final int[] perm = new int[512];
+    /** Sum vychoziho seedu (12345) - pro staticke noise(...). */
+    private static final SimplexNoise DEFAULT = new SimplexNoise(World.DEFAULT_SEED);
 
-    static {
-        // fixed seed so terrain is reproducible between runs;
-        // change the seed value if you want a different-looking world
-        java.util.Random rand = new java.util.Random(12345);
+    private final int[] perm = new int[512];
+    private final long seed;
+
+    /**
+     * Permutacni tabulka zamichana podle seedu.
+     *
+     * ⚠️ Random si ze seedu bere JEN DOLNICH 48 BITU, takze dva seedy lisici
+     * se jen v hornich 16 bitech by daly uplne stejny sum. Horni bity se proto
+     * do dolnich primichaji. Pro seedy 0 az 2^48-1 (vcetne vychoziho 12345)
+     * je tabulka presne ta, kterou by dal new Random(seed) - stary teren se
+     * tim nehne ani o blok.
+     */
+    public SimplexNoise(long seed) {
+        this.seed = seed;
+
+        java.util.Random rand = new java.util.Random(seed ^ (seed >>> 48));
         java.util.List<Integer> list = new java.util.ArrayList<>();
         for (int i = 0; i < 256; i++) list.add(i);
         java.util.Collections.shuffle(list, rand);
-        for (int i = 0; i < 256; i++) p[i] = list.get(i);
-        for (int i = 0; i < 512; i++) perm[i] = p[i & 255];
+        for (int i = 0; i < 512; i++) perm[i] = list.get(i & 255);
+    }
+
+    public long seed() {
+        return seed;
+    }
+
+    /** 2D simplex noise se seedem 12345. */
+    public static double noise(double xin, double yin) {
+        return DEFAULT.sample(xin, yin);
+    }
+
+    /** 3D simplex noise se seedem 12345. */
+    public static double noise(double xin, double yin, double zin) {
+        return DEFAULT.sample(xin, yin, zin);
     }
 
     private static double dot(int[] g, double x, double y) {
@@ -44,7 +76,7 @@ public class SimplexNoise {
     }
 
     /** 2D simplex noise. Returns a value approximately in [-1, 1]. */
-    public static double noise(double xin, double yin) {
+    public double sample(double xin, double yin) {
         double n0, n1, n2;
 
         double F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
@@ -98,7 +130,7 @@ public class SimplexNoise {
      * Pouziva to generovani jeskyn - ty potrebuji sum, ktery se meni i s vyskou.
      * S 2D sumem by vsechny jeskyne byly svisle protazene skrz cely sloupec.
      */
-    public static double noise(double xin, double yin, double zin) {
+    public double sample(double xin, double yin, double zin) {
         double n0, n1, n2, n3;
 
         final double F3 = 1.0 / 3.0;

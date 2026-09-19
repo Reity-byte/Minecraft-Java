@@ -34,6 +34,7 @@ public class CaveTest {
 
     public static void main(String[] args) {
         World w = new World();
+        TerrainGenerator gen = w.generator();
         w.loadRadius = RADIUS;
         w.unloadRadius = RADIUS + 2;
 
@@ -269,8 +270,8 @@ public class CaveTest {
         int oreNeg = 0, orePos = 0;
         for (int y = 10; y < 40; y++) {
             for (int i = 0; i < 64; i++) {
-                if (World.oreAt(-1 - i, y, -1 - i) != World.STONE) oreNeg++;
-                if (World.oreAt(i, y, i) != World.STONE) orePos++;
+                if (gen.oreAt(-1 - i, y, -1 - i) != World.STONE) oreNeg++;
+                if (gen.oreAt(i, y, i) != World.STONE) orePos++;
             }
         }
         check("rudy vznikaji i v zapornych souradnicich", oreNeg > 0, "" + oreNeg);
@@ -295,7 +296,7 @@ public class CaveTest {
         boolean stable = true;
         for (int i = 0; i < 500; i++) {
             int x = i * 7 - 1000, y = 5 + i % 40, z = i * 13 - 500;
-            if (World.isCave(x, y, z) != World.isCave(x, y, z)) stable = false;
+            if (gen.isCave(x, y, z) != gen.isCave(x, y, z)) stable = false;
         }
         check("isCave je deterministicka", stable, "");
 
