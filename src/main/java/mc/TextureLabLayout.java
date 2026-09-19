@@ -6,9 +6,11 @@ package mc;
  * ---------------------------------------------------------------------------
  * Všechno je v GUI PIXELECH od LEVÉHO HORNÍHO rohu panelu, jako rozvržení
  * v ContainerScreen, a na obrazovku se násobí CELÝM měřítkem. Lab má ale
- * vlastní referenční velikost (448 x 256), ne 320 x 240 z Gui: potřebuje
- * vedle sebe atlas, plátno i náhled, takže bere největší celé měřítko, při
- * kterém se vejde. Na 1024 x 768 to je 2, na Full HD 4.
+ * vlastní referenční velikost (448 x 300), ne 320 x 240 z Gui: potřebuje
+ * vedle sebe atlas, plátno i náhled a pod nimi paletu celého atlasu, takže
+ * bere největší celé měřítko, při kterém se vejde. Na 1024 x 768 to je 2,
+ * na Full HD 3. (S výškou 256, bez palety celého atlasu, to na Full HD
+ * byla 4 - paleta stála jeden stupeň, ale i 3 dává lab 1344 x 900.)
  *
  * ⚠️ Plátno i přehled atlasu mají řádek 0 DOLE, jako atlas a GL. Myš chodí
  * z GLFW s počátkem nahoře, takže se řádek při hit-testu překlápí - na jednom
@@ -18,7 +20,7 @@ package mc;
 public final class TextureLabLayout {
 
     public static final int WIDTH = 448;
-    public static final int HEIGHT = 256;
+    public static final int HEIGHT = 300;
 
     /** Obdélník v GUI pixelech, počátek vlevo nahoře. */
     public record Rect(int x, int y, int w, int h) {
@@ -56,14 +58,46 @@ public final class TextureLabLayout {
     public static final Rect VALUE = new Rect(146, 228, 128, 8);
 
     // --- tlačítka a texty ---
-    public static final Rect SAVE = new Rect(284, 154, 156, 18);
-    public static final Rect REVERT = new Rect(284, 176, 156, 18);
+    public static final Rect SAVE = new Rect(284, 154, 76, 18);
+    public static final Rect REVERT = new Rect(364, 154, 76, 18);
+    public static final Rect IMPORT = new Rect(284, 176, 76, 18);
+    public static final Rect NEW_BLOCK = new Rect(364, 176, 76, 18);
     public static final Rect CLOSE = new Rect(284, 198, 156, 18);
+
+    /**
+     * Barvy celého atlasu - široký pruh pod vším ostatním. Stejný krok
+     * a velikost vzorku jako paleta dlaždice, jen 43 sloupců přes celý panel.
+     */
+    public static final int GLOBAL_COLUMNS = 43;
+    public static final int GLOBAL_ROWS = 2;
+    public static final Rect GLOBAL = new Rect(8, 252,
+            GLOBAL_COLUMNS * SWATCH_PITCH, GLOBAL_ROWS * SWATCH_PITCH);
+
+    // --- nový blok: formulář vlevo místo informací o dlaždici ---
+    public static final Rect NAME = new Rect(8, 154, 128, 12);
+    public static final Rect SOFTER = new Rect(8, 168, 12, 12);
+    public static final Rect HARDER = new Rect(124, 168, 12, 12);
+
+    /** Celý řádek tvrdosti; hodnota se píše mezi - a +. */
+    public static final Rect HARDNESS_ROW = new Rect(20, 168, 104, 12);
+    public static final Rect SOLID = new Rect(8, 182, 62, 12);
+    public static final Rect OPAQUE = new Rect(74, 182, 62, 12);
+
+    /** Políčko stěny: náhled dlaždice a pod ním jméno stěny. Vršek, bok, spodek. */
+    public static final int FACE_SLOT_W = 40, FACE_SLOT_H = 30;
+    public static final int FACE_SLOT_Y = 196;
+    private static final int[] FACE_SLOT_X = {8, 96, 52};   // index = BlockAtlas.FACE_*
+
+    // ... a vpravo místo tlačítek atlasu
+    public static final Rect NEW_TILE = new Rect(284, 154, 156, 18);
+    public static final Rect CREATE = new Rect(284, 176, 156, 18);
+    public static final Rect CANCEL = new Rect(284, 198, 156, 18);
 
     public static final int TITLE_Y = 6;
     public static final int INFO_Y = 154;
-    public static final int STATUS_Y = 222;
-    public static final int HELP_Y = 244;
+    public static final int GLOBAL_LABEL_Y = 241;
+    public static final int STATUS_Y = 276;
+    public static final int HELP_Y = 288;
 
     private final int scale;
     private final int left;
@@ -183,23 +217,76 @@ public final class TextureLabLayout {
     /** Index vzorku pod myší (po řádcích), nebo -1. Mezera mezi vzorky nic netrefí. */
     public int swatchAt(double mouseX, double mouseY)
     {
-        float gx = guiX(mouseX) - SWATCHES.x();
-        float gy = guiY(mouseY) - SWATCHES.y();
+        return gridAt(SWATCHES, SWATCH_COLUMNS, mouseX, mouseY);
+    }
 
-        if(gx < 0 || gy < 0 || gx >= SWATCHES.w() || gy >= SWATCHES.h()
+    public static Rect swatchRect(int index)
+    {
+        return gridRect(SWATCHES, SWATCH_COLUMNS, index);
+    }
+
+    /** Vzorek globální palety (barvy celého atlasu) pod myší, nebo -1. */
+    public int globalSwatchAt(double mouseX, double mouseY)
+    {
+        return gridAt(GLOBAL, GLOBAL_COLUMNS, mouseX, mouseY);
+    }
+
+    public static Rect globalSwatchRect(int index)
+    {
+        return gridRect(GLOBAL, GLOBAL_COLUMNS, index);
+    }
+
+    private int gridAt(Rect area, int columns, double mouseX, double mouseY)
+    {
+        float gx = guiX(mouseX) - area.x();
+        float gy = guiY(mouseY) - area.y();
+
+        if(gx < 0 || gy < 0 || gx >= area.w() || gy >= area.h()
                 || gx % SWATCH_PITCH >= SWATCH_SIZE || gy % SWATCH_PITCH >= SWATCH_SIZE)
         {
             return -1;
         }
 
-        return (int) (gy / SWATCH_PITCH) * SWATCH_COLUMNS + (int) (gx / SWATCH_PITCH);
+        return (int) (gy / SWATCH_PITCH) * columns + (int) (gx / SWATCH_PITCH);
     }
 
-    public static Rect swatchRect(int index)
+    private static Rect gridRect(Rect area, int columns, int index)
     {
-        return new Rect(SWATCHES.x() + (index % SWATCH_COLUMNS) * SWATCH_PITCH,
-                SWATCHES.y() + (index / SWATCH_COLUMNS) * SWATCH_PITCH,
+        return new Rect(area.x() + (index % columns) * SWATCH_PITCH,
+                area.y() + (index / columns) * SWATCH_PITCH,
                 SWATCH_SIZE, SWATCH_SIZE);
+    }
+
+    // ------------------------------------------------------------------
+    // formulář nového bloku
+    // ------------------------------------------------------------------
+
+    /** Políčko stěny; face je BlockAtlas.FACE_*. */
+    public static Rect faceSlot(int face)
+    {
+        return new Rect(FACE_SLOT_X[face], FACE_SLOT_Y, FACE_SLOT_W, FACE_SLOT_H);
+    }
+
+    /** Náhled dlaždice uvnitř políčka stěny - 16 x 16, pixel na pixel jako přehled atlasu. */
+    public static Rect faceTileRect(int face)
+    {
+        Rect slot = faceSlot(face);
+        return new Rect(slot.x() + (slot.w() - AtlasEditor.TILE) / 2, slot.y() + 2,
+                AtlasEditor.TILE, AtlasEditor.TILE);
+    }
+
+    /** Stěna, na jejíž políčko myš ukazuje, nebo -1. */
+    public int faceAt(double mouseX, double mouseY)
+    {
+        for(int face : BlockDraft.FACES)
+        {
+            if(hit(faceSlot(face), mouseX, mouseY))
+            {
+                return face;
+            }
+        }
+
+        return -1;
     }
 
     /** Poloha myši na posuvníku jako 0 až 1 (mimo se ořízne - kvůli tažení přes okraj). */

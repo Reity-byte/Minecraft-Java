@@ -1,10 +1,13 @@
 package mc;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Iterator;
 
 /**
  * Atlas bloků jako soubor PNG - zápis z texture labu a čtení při startu.
@@ -77,39 +80,100 @@ public final class AtlasImage {
             return null;
         }
 
+        Loaded loaded = read(file);
+
+        if(loaded.pixels() == null)
+        {
+            System.err.println("Atlas " + file + ": " + loaded.error() + " - pouzije se proceduralni");
+        }
+
+        return loaded.pixels();
+    }
+
+    /** Pixely atlasu, nebo důvod, proč z obrázku atlas není (anglicky - ukazuje ho lab). */
+    public record Loaded(int[] pixels, String error) {}
+
+    /**
+     * Přečte obrázek jako atlas a zkontroluje rozměr.
+     *
+     * ⚠️ Rozměr se zjišťuje z HLAVIČKY, ještě než se obrázek dekóduje. Do
+     * importu se dá strčit cokoliv, třeba fotka 8000 x 6000 - dekódovat ji
+     * celou jen proto, aby se pak odmítla, by stálo stovky megabajtů.
+     */
+    public static Loaded read(Path file)
+    {
         int size = BlockAtlas.ATLAS_PIXELS;
 
-        try
+        if(!Files.isRegularFile(file))
         {
-            BufferedImage image = ImageIO.read(file.toFile());
-
-            if(image == null)
-            {
-                System.err.println("Atlas " + file + ": neni to obrazek - pouzije se proceduralni");
-                return null;
-            }
-
-            if(image.getWidth() != size || image.getHeight() != size)
-            {
-                System.err.println("Atlas " + file + ": ma " + image.getWidth() + "x" + image.getHeight()
-                        + ", ceka se " + size + "x" + size + " - pouzije se proceduralni");
-                return null;
-            }
-
-            int[] pixels = new int[size * size];
-
-            for(int y = 0; y < size; y++)
-            {
-                image.getRGB(0, size - 1 - y, size, 1, pixels, y * size, size);
-            }
-
-            return pixels;
+            return new Loaded(null, "file not found");
         }
-        catch(IOException e)
+
+        try(ImageInputStream input = ImageIO.createImageInputStream(file.toFile()))
         {
-            System.err.println("Atlas " + file + " nejde precist: " + e.getMessage()
-                    + " - pouzije se proceduralni");
-            return null;
+            Iterator<ImageReader> readers = input == null ? null : ImageIO.getImageReaders(input);
+
+            if(readers == null || !readers.hasNext())
+            {
+                return new Loaded(null, "not an image");
+            }
+
+            ImageReader reader = readers.next();
+
+            try
+            {
+                reader.setInput(input, true, true);
+
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+
+                if(width != size || height != size)
+                {
+                    return new Loaded(null, "image is " + width + "x" + height + ", needs " + size + "x" + size);
+                }
+
+                BufferedImage image = reader.read(0);
+                int[] pixels = new int[size * size];
+
+                for(int y = 0; y < size; y++)
+                {
+                    // Řádek y atlasu (odspodu) je řádek size-1-y obrázku (shora).
+                    image.getRGB(0, size - 1 - y, size, 1, pixels, y * size, size);
+                }
+
+                return new Loaded(pixels, null);
+            }
+            finally
+            {
+                reader.dispose();
+            }
         }
+        catch(IOException | RuntimeException e)
+        {
+            // RuntimeException: dekodéry ImageIO na poškozených datech umí
+            // hodit i něco jiného než IOException - a lab kvůli tomu padat nemá.
+            return new Loaded(null, "can't read it (" + e.getMessage() + ")");
+        }
+    }
+
+    /**
+     * Import hotového atlasu do editoru labu. Vrací zprávu pro stavový řádek.
+     *
+     * ⚠️ Při JAKÉKOLIV chybě zůstane atlas beze změny - obrázek se nejdřív
+     * celý přečte a zkontroluje a do editoru jde až potom, najednou.
+     * Povedený import jde vrátit přes Ctrl+Z a na disk jde až se Save.
+     */
+    public static String importInto(AtlasEditor editor, Path file)
+    {
+        Loaded loaded = read(file);
+
+        if(loaded.pixels() == null)
+        {
+            return "Not imported: " + loaded.error() + " - atlas unchanged";
+        }
+
+        editor.importAtlas(loaded.pixels());
+        String name = file.getFileName() == null ? file.toString() : file.getFileName().toString();
+        return "Imported " + name + " - Ctrl+Z undoes, Save keeps it";
     }
 }

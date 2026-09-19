@@ -10,8 +10,9 @@ import java.util.List;
 
 /**
  * Overuje texture lab bez GL: souradnice pixelu a dlazdic, shodu s INSET
- * v BlockAtlas, malovani a undo, barvy, zapis a cteni PNG, hit-testy
- * rozvrzeni - a ze zivy nahled stavi TYZ mesh, jaky postavi hra.
+ * v BlockAtlas, malovani a undo, barvy, zapis a cteni PNG, globalni paletu,
+ * import hotoveho PNG, navrh noveho bloku, hit-testy rozvrzeni - a ze zivy
+ * nahled stavi TYZ mesh, jaky postavi hra.
  */
 public class TextureLabTest {
 
@@ -28,6 +29,9 @@ public class TextureLabTest {
         painting();
         blocksAndColors();
         png();
+        globalPalette();
+        importPng();
+        blockDraft();
         layout();
         preview();
 
@@ -305,6 +309,237 @@ public class TextureLabTest {
         }
     }
 
+
+    // ==================================================================
+
+    /**
+     * Globalni paleta je cista funkce nad polem pixelu: barvy z CELEHO atlasu,
+     * nejcastejsi prvni, bez pruhlednych, a pro zobrazeni serazene podle odstinu.
+     */
+    static void globalPalette() {
+        int a = 0xFF102030, b = 0xFF405060, c = 0x80708090, d = 0xFFA0B0C0;
+        int[] pixels = new int[size * size];               // vsechno pruhledne (0)
+        int[] order = {a, c, a, b, a, c, b, a, a, d};      // a 5x, c 2x (driv), b 2x, d 1x
+        for (int i = 0; i < order.length; i++) pixels[i * 37] = order[i];
+        int[] before = pixels.clone();
+
+        int[] colors = AtlasEditor.atlasColors(pixels, 10);
+        check("globalni paleta: nejcastejsi prvni, pri shode driv nalezena, bez pruhledne",
+                Arrays.equals(colors, new int[]{a, c, b, d}), Arrays.toString(colors));
+        check("globalni paleta: limit se dodrzi", AtlasEditor.atlasColors(pixels, 2).length == 2, "");
+        check("globalni paleta: poloprusvitna barva se pocita, jen alfa 0 ne",
+                Arrays.stream(colors).anyMatch(x -> x == c), "");
+        check("globalni paleta je cista funkce - pole pixelu nezmeni", Arrays.equals(pixels, before), "");
+
+        // Na skutecnem atlasu: barvy z ruznych dlazdic, a presne ty, ktere v nem jsou.
+        int[] atlasPixels = Textures.blockAtlasPixels();
+        int[] all = AtlasEditor.atlasColors(atlasPixels, Integer.MAX_VALUE);
+        java.util.Set<Integer> distinct = new java.util.HashSet<>();
+        for (int p : atlasPixels) if ((p >>> 24) != 0) distinct.add(p);
+        boolean allPresent = all.length == distinct.size();
+        for (int x : all) allPresent &= distinct.contains(x);
+        check("globalni paleta atlasu = presne mnozina jeho nepruhlednych barev", allPresent,
+                all.length + " vs " + distinct.size());
+
+        AtlasEditor editor = new AtlasEditor(atlasPixels.clone());
+        editor.select(BlockAtlas.TILE_GRASS_TOP);
+        int grass = editor.tileColors(1)[0];
+        editor.select(BlockAtlas.TILE_STONE);
+        int stone = editor.tileColors(1)[0];
+        editor.select(BlockAtlas.TILE_WATER);
+        int water = editor.tileColors(1)[0];
+        java.util.List<Integer> global = Arrays.stream(all).boxed().toList();
+        check("globalni paleta ma barvy z ruznych bloku (trava, kamen, voda)",
+                global.contains(grass) && global.contains(stone) && global.contains(water), "");
+
+        boolean[] tiles = AtlasEditor.tilesWithColor(atlasPixels, stone);
+        check("najeti na barvu kamene najde dlazdici kamene, ne travy",
+                tiles[BlockAtlas.TILE_STONE] && !tiles[BlockAtlas.TILE_GRASS_TOP], "");
+        int[] marked = new int[size * size];
+        marked[AtlasEditor.pixelIndex(3, 4, 5)] = d;
+        marked[AtlasEditor.pixelIndex(40, 15, 15)] = d;
+        boolean[] where = AtlasEditor.tilesWithColor(marked, d);
+        int count = 0;
+        for (boolean w : where) if (w) count++;
+        check("tilesWithColor najde presne dlazdice s tou barvou", where[3] && where[40] && count == 2, "" + count);
+
+        // Razeni podle odstinu: permutace vstupu, sede napred, podobne vedle sebe.
+        int[] sorted = AtlasEditor.byHue(all);
+        int[] s1 = sorted.clone(), s2 = all.clone();
+        Arrays.sort(s1);
+        Arrays.sort(s2);
+        check("razeni podle odstinu nic neprida ani neubere", Arrays.equals(s1, s2), "");
+
+        boolean graysFirst = true, groupsAscending = true, valueAscending = true;
+        boolean seenColor = false;
+        for (int i = 0; i < sorted.length; i++) {
+            int g = AtlasEditor.hueGroup(sorted[i]);
+            if (g >= 0) seenColor = true;
+            else if (seenColor) graysFirst = false;
+            if (i > 0) {
+                int prev = AtlasEditor.hueGroup(sorted[i - 1]);
+                if (g < prev) groupsAscending = false;
+                if (g == prev && AtlasEditor.toHsv(sorted[i])[2] < AtlasEditor.toHsv(sorted[i - 1])[2] - 1e-6f)
+                    valueAscending = false;
+            }
+        }
+        check("sede barvy jsou na zacatku", graysFirst, "");
+        check("barevne jdou po vysecich odstinu a v kazde od tmave ke svetle",
+                groupsAscending && valueAscending, "");
+
+        int brownA = 0xFF8B6D4B, brownB = 0xFF866043, green = 0xFF5B8C3A;
+        int[] mixed = AtlasEditor.byHue(new int[]{brownA, green, 0xFF7F7F7F, brownB});
+        int ia = -1, ib = -1;
+        for (int i = 0; i < mixed.length; i++) {
+            if (mixed[i] == brownA) ia = i;
+            if (mixed[i] == brownB) ib = i;
+        }
+        check("dve skoro stejne hnede skonci vedle sebe", Math.abs(ia - ib) == 1 && mixed[0] == 0xFF7F7F7F,
+                Arrays.toString(mixed));
+    }
+
+    // ==================================================================
+
+    /**
+     * Import hotoveho PNG do editoru: spravny rozmer se nacte a jde vratit,
+     * spatny se odmitne srozumitelnou hlaskou a atlas zustane beze zmeny.
+     */
+    static void importPng() throws IOException {
+        Path dir = Files.createTempDirectory("mc-import");
+
+        try {
+            int[] original = Textures.blockAtlasPixels();
+            int[] external = original.clone();
+            for (int i = 0; i < external.length; i += 3) external[i] = 0xFF00FF00 | (i & 0xFF);
+            Path good = dir.resolve("from-aseprite.png");
+            AtlasImage.save(external, good);
+
+            AtlasEditor editor = new AtlasEditor(original.clone());
+            int revision = editor.revision();
+            String message = AtlasImage.importInto(editor, good);
+            check("PNG 128x128 se naimportuje do editoru (vcetne orientace radku)",
+                    Arrays.equals(editor.pixels(), external), message);
+            check("import je neulozeny a posune revizi (globalni paleta se prepocita)",
+                    editor.isUnsaved() && editor.revision() != revision, "");
+            check("zprava o importu jmenuje soubor", message.contains("from-aseprite.png"), message);
+            check("Ctrl+Z vrati cely atlas pred importem",
+                    editor.undo() && Arrays.equals(editor.pixels(), original), "");
+
+            java.util.function.BiConsumer<String, Path> rejected = (name, file) -> {
+                AtlasEditor e = new AtlasEditor(original.clone());
+                String m = AtlasImage.importInto(e, file);
+                check(name + " se odmitne a atlas zustane beze zmeny",
+                        Arrays.equals(e.pixels(), original) && e.undoDepth() == 0 && !e.isUnsaved()
+                                && m.contains("unchanged"), m);
+            };
+
+            Path small = dir.resolve("small.png");
+            ImageIO.write(new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB), "png", small.toFile());
+            rejected.accept("PNG 64x64", small);
+            String m64 = AtlasImage.importInto(new AtlasEditor(original.clone()), small);
+            check("hlaska rika, jaky rozmer ma a jaky ma mit",
+                    m64.contains("64x64") && m64.contains("128x128"), m64);
+
+            Path wide = dir.resolve("wide.png");
+            ImageIO.write(new BufferedImage(128, 64, BufferedImage.TYPE_INT_ARGB), "png", wide.toFile());
+            rejected.accept("PNG 128x64", wide);
+
+            Path big = dir.resolve("big.png");
+            ImageIO.write(new BufferedImage(256, 256, BufferedImage.TYPE_INT_ARGB), "png", big.toFile());
+            rejected.accept("PNG 256x256 (jina mrizka)", big);
+
+            Path junk = dir.resolve("junk.png");
+            Files.write(junk, "tohle neni png".getBytes());
+            rejected.accept("soubor, ktery neni obrazek,", junk);
+            rejected.accept("neexistujici soubor", dir.resolve("missing.png"));
+        } finally {
+            try (var walk = Files.walk(dir)) {
+                for (Path p : walk.sorted((x, y) -> y.getNameCount() - x.getNameCount()).toList())
+                    Files.deleteIfExists(p);
+            }
+        }
+    }
+
+    // ==================================================================
+
+    /**
+     * Navrh noveho bloku bez GL: prideleni volne bunky atlasu, kontrola jmena
+     * a tvrdosti na stejne skale jako vestavene bloky.
+     */
+    static void blockDraft() {
+        BlockRegistry empty = BlockRegistry.empty();
+
+        check("prvni nova dlazdice je posledni bunka atlasu (63)", BlockDraft.freeTile(empty) == 63, "");
+        check("rezervovana bunka (jina stena navrhu) se preskoci", BlockDraft.freeTile(empty, 63) == 62, "");
+
+        // Pridelovat, dokud to jde: musi vyjit presne volne bunky 27..63.
+        java.util.List<Integer> taken = new java.util.ArrayList<>();
+        int next;
+        while ((next = BlockDraft.freeTile(empty, taken.stream().mapToInt(Integer::intValue).toArray())) >= 0
+                && taken.size() < 100) taken.add(next);
+        boolean exact = taken.size() == AtlasEditor.tileCount() - BlockAtlas.TILE_COUNT;
+        for (int t : taken) exact &= t >= BlockAtlas.TILE_COUNT;
+        check("volnych bunek je 37 (obsazeno 27) a vestavene dlazdice ani praskliny se neprideli",
+                exact, taken.size() + " bunek");
+        check("plny atlas: freeTile vrati -1, lab ukaze hlasku",
+                BlockDraft.freeTile(empty, taken.stream().mapToInt(Integer::intValue).toArray()) == -1, "");
+
+        BlockRegistry withBlock = empty.with(empty.define("Marble", 1.5f, true, true, 63, 62, 63));
+        check("bunky pouzite blokem z labu se znovu neprideli", BlockDraft.freeTile(withBlock) == 61, "");
+
+        boolean allBuiltin = true;
+        for (int id = 1; id <= World.FENCE; id++) {
+            float h = World.hardness((byte) id);
+            boolean found = false;
+            for (float step : BlockDraft.HARDNESS_STEPS) found |= step == h;
+            allBuiltin &= found;
+        }
+        check("tvrdosti na vyber obsahuji vsechny tvrdosti vestavenych bloku (stejna skala)", allBuiltin, "");
+        check("tvrdost 1,8 s se ukaze jako kamen", BlockDraft.hardnessLike(1.8f).equals("Stone"), "");
+        check("tvrdost se pise bez zbytecnych nul",
+                TextureLab.seconds(1.8f).equals("1.8 s") && TextureLab.seconds(0.05f).equals("0.05 s")
+                        && TextureLab.seconds(1f).equals("1 s") && TextureLab.seconds(0f).equals("0 s"), "");
+
+        BlockDraft draft = new BlockDraft(BlockAtlas.TILE_STONE);
+        check("bez jmena blok nejde zalozit", draft.problem(empty) != null, "");
+        draft.name = "stone";
+        check("jmeno vestaveneho bloku se odmitne (bez ohledu na velikost pismen)",
+                draft.problem(empty) != null, "" + draft.problem(empty));
+        draft.name = "Marble";
+        check("jmeno uz zalozeneho bloku z labu se odmitne", draft.problem(withBlock) != null, "");
+        draft.name = "  Basalt  ";
+        check("platny navrh jde zalozit", draft.problem(withBlock) == null, "" + draft.problem(withBlock));
+
+        for (int i = 0; i < 50; i++) draft.harder();
+        check("tvrdost nepretece nahoru",
+                draft.hardness() == BlockDraft.HARDNESS_STEPS[BlockDraft.HARDNESS_STEPS.length - 1], "");
+        for (int i = 0; i < 50; i++) draft.softer();
+        check("tvrdost nepretece dolu", draft.hardness() == 0f, "");
+
+        draft.tiles[BlockAtlas.FACE_TOP] = 60;
+        draft.tiles[BlockAtlas.FACE_BOTTOM] = 59;
+        BlockDef def = draft.toDef(withBlock);
+        check("navrh dostane dalsi id a dlazdice po stenach",
+                def.id() == BlockRegistry.FIRST_ID + 1 && def.name().equals("Basalt")
+                        && def.tile(BlockAtlas.FACE_TOP) == 60 && def.tile(BlockAtlas.FACE_BOTTOM) == 59
+                        && def.tile(BlockAtlas.FACE_SIDE) == BlockAtlas.TILE_STONE, def.toString());
+
+        BlockRegistry full = empty;
+        for (int id = BlockRegistry.FIRST_ID; id <= BlockRegistry.LAST_ID; id++)
+            full = full.with(full.define("B" + id, 1f, true, true, 0, 0, 0));
+        check("dosla id: navrh rekne proc, nespadne", full.isFull() && draft.problem(full) != null,
+                "" + draft.problem(full));
+
+        // Jmeno bloku z labu v UI - jen dokud je jeho registr aktivni.
+        try {
+            BlockRegistry.activate(withBlock);
+            check("lab zna jmeno bloku z labu", TextureLab.blockName((byte) BlockRegistry.FIRST_ID).equals("Marble"), "");
+        } finally {
+            BlockRegistry.activate(BlockRegistry.empty());
+        }
+        check("bez registru je to zase jen cislo", TextureLab.blockName((byte) BlockRegistry.FIRST_ID).startsWith("Block"), "");
+    }
+
     // ==================================================================
 
     /** Stred obdelniku v souradnicich mysi (GLFW, pocatek nahore). */
@@ -361,11 +596,61 @@ public class TextureLabTest {
         check("kazdy vzorek palety jde trefit", swatches, "");
         check("mezera mezi vzorky nic netrefi", l.swatchAt(gapX, centre(l, gap)[1]) == -1, "");
 
+        boolean global = true;
+        int globalCount = TextureLabLayout.GLOBAL_COLUMNS * TextureLabLayout.GLOBAL_ROWS;
+        for (int i = 0; i < globalCount; i++) {
+            double[] c = centre(l, TextureLabLayout.globalSwatchRect(i));
+            global &= l.globalSwatchAt(c[0], c[1]) == i && l.swatchAt(c[0], c[1]) == -1;
+        }
+        check("kazdy vzorek globalni palety jde trefit (a neni to vzorek dlazdice)", global, "");
+
+        boolean faces = true;
+        for (int face : BlockDraft.FACES) {
+            double[] c = centre(l, TextureLabLayout.faceSlot(face));
+            faces &= l.faceAt(c[0], c[1]) == face;
+        }
+        check("kazde policko steny noveho bloku jde trefit", faces, "");
+        check("policka sten jdou zleva: vrsek, bok, spodek",
+                TextureLabLayout.faceSlot(BlockAtlas.FACE_TOP).x() < TextureLabLayout.faceSlot(BlockAtlas.FACE_SIDE).x()
+                        && TextureLabLayout.faceSlot(BlockAtlas.FACE_SIDE).x() < TextureLabLayout.faceSlot(BlockAtlas.FACE_BOTTOM).x(), "");
+
+        // V kazdem rezimu se zadne dva ovladaci prvky neprekryvaji a vsechny
+        // lezi uvnitr panelu - jinak by klik trefil dva naraz.
+        TextureLabLayout.Rect[] shared = {TextureLabLayout.ATLAS, TextureLabLayout.CANVAS, TextureLabLayout.PREVIEW,
+                TextureLabLayout.SWATCHES, TextureLabLayout.CURRENT, TextureLabLayout.HEX, TextureLabLayout.HUE,
+                TextureLabLayout.SATURATION, TextureLabLayout.VALUE, TextureLabLayout.GLOBAL};
+        TextureLabLayout.Rect[] atlasMode = {TextureLabLayout.SAVE, TextureLabLayout.REVERT, TextureLabLayout.IMPORT,
+                TextureLabLayout.NEW_BLOCK, TextureLabLayout.CLOSE};
+        TextureLabLayout.Rect[] blockMode = {TextureLabLayout.NAME, TextureLabLayout.SOFTER, TextureLabLayout.HARDER,
+                TextureLabLayout.SOLID, TextureLabLayout.OPAQUE, TextureLabLayout.faceSlot(0),
+                TextureLabLayout.faceSlot(1), TextureLabLayout.faceSlot(2), TextureLabLayout.NEW_TILE,
+                TextureLabLayout.CREATE, TextureLabLayout.CANCEL};
+        check("rezim atlasu: prvky se neprekryvaji a jsou v panelu", separate(shared, atlasMode), "");
+        check("rezim noveho bloku: prvky se neprekryvaji a jsou v panelu", separate(shared, blockMode), "");
+        check("meritko labu: 1280 x 720 -> 2, Full HD -> 3",
+                TextureLabLayout.scaleFor(1280, 720) == 2 && TextureLabLayout.scaleFor(1920, 1080) == 3, "");
+
         TextureLabLayout.Rect bar = TextureLabLayout.HUE;
         check("posuvnik dava 0 az 1 a mimo se orizne",
                 l.sliderValue(bar, l.screenX(bar)) == 0f
                         && Math.abs(l.sliderValue(bar, l.screenX(bar) + bar.w() * l.scale() / 2.0) - 0.5f) < 1e-4f
                         && l.sliderValue(bar, 99999) == 1f && l.sliderValue(bar, -99999) == 0f, "");
+    }
+
+    static boolean separate(TextureLabLayout.Rect[] a, TextureLabLayout.Rect[] b) {
+        java.util.List<TextureLabLayout.Rect> all = new java.util.ArrayList<>(Arrays.asList(a));
+        all.addAll(Arrays.asList(b));
+        for (int i = 0; i < all.size(); i++) {
+            TextureLabLayout.Rect r = all.get(i);
+            if (r.x() < 0 || r.y() < 0 || r.x() + r.w() > TextureLabLayout.WIDTH
+                    || r.y() + r.h() > TextureLabLayout.HEIGHT) return false;
+            for (int j = i + 1; j < all.size(); j++) {
+                TextureLabLayout.Rect q = all.get(j);
+                if (r.x() < q.x() + q.w() && q.x() < r.x() + r.w() && r.y() < q.y() + q.h() && q.y() < r.y() + r.h())
+                    return false;
+            }
+        }
+        return true;
     }
 
     // ==================================================================

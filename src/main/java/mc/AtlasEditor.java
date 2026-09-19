@@ -2,6 +2,8 @@ package mc;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,8 +33,14 @@ public final class AtlasEditor {
     /** Kolik tahů jde vrátit. Tah je snímek jedné dlaždice, tedy 1 KB. */
     static final int UNDO_LIMIT = 100;
 
-    /** Snímek dlaždice před tahem - na tom stojí undo. */
+    /**
+     * Snímek dlaždice před tahem - na tom stojí undo. Import celého atlasu
+     * má snímek celého atlasu (tile = WHOLE_ATLAS, 64 KB), aby šel vrátit
+     * jedním Ctrl+Z jako kterýkoliv tah.
+     */
     private record Snapshot(int tile, int[] pixels) {}
+
+    private static final int WHOLE_ATLAS = -1;
 
     private final int[] pixels;
     private int tile = 0;
@@ -43,6 +51,13 @@ public final class AtlasEditor {
 
     /** Změny od posledního uložení nebo načtení. */
     private boolean unsaved = false;
+
+    /**
+     * Počítadlo změn pixelů. Na rozdíl od dirty ho nikdo nenuluje - kdo si
+     * z pixelů něco počítá (globální paleta), pozná podle něj, že je čas
+     * přepočítat, a nemusí to dělat každý frame.
+     */
+    private int revision = 0;
 
     private final Deque<Snapshot> undo = new ArrayDeque<>();
 
@@ -97,6 +112,7 @@ public final class AtlasEditor {
     public int tile()     { return tile; }
     public int color()    { return color; }
     public boolean isUnsaved() { return unsaved; }
+    public int revision()      { return revision; }
 
     public void select(int tile)
     {
@@ -140,8 +156,62 @@ public final class AtlasEditor {
         endStroke();
         System.arraycopy(newPixels, 0, pixels, 0, pixels.length);
         undo.clear();
-        dirty = true;
+        changed();
         unsaved = false;
+    }
+
+    /**
+     * Import hotového atlasu (z Aseprite, GIMPu...) do editoru - k dalšímu
+     * dolaďování, ne rovnou na disk. Na rozdíl od replaceAll() jde vrátit
+     * (Ctrl+Z vrátí celý atlas) a zůstává neuložený, dokud nepřijde Save.
+     */
+    public void importAtlas(int[] newPixels)
+    {
+        if(newPixels.length != pixels.length)
+        {
+            throw new IllegalArgumentException("atlas ma " + newPixels.length + " pixelu");
+        }
+
+        endStroke();
+        pushUndo(new Snapshot(WHOLE_ATLAS, pixels.clone()));
+        System.arraycopy(newPixels, 0, pixels, 0, pixels.length);
+        changed();
+    }
+
+    /**
+     * Zkopíruje obsah dlaždice do jiné (výchozí obsah nové dlaždice bloku).
+     * Jde vrátit jako tah - cílová buňka mohla mít namalované něco svého.
+     */
+    public void copyTile(int source, int target)
+    {
+        endStroke();
+        pushUndo(new Snapshot(target, copyTile(target)));
+
+        int[] content = copyTile(source);
+
+        for(int y = 0; y < TILE; y++)
+        {
+            System.arraycopy(content, y * TILE, pixels, pixelIndex(target, 0, y), TILE);
+        }
+
+        changed();
+    }
+
+    private void pushUndo(Snapshot snapshot)
+    {
+        undo.push(snapshot);
+
+        while(undo.size() > UNDO_LIMIT)
+        {
+            undo.removeLast();
+        }
+    }
+
+    private void changed()
+    {
+        dirty = true;
+        unsaved = true;
+        revision++;
     }
 
     // ------------------------------------------------------------------
@@ -155,13 +225,7 @@ public final class AtlasEditor {
     public void beginStroke(int x, int y)
     {
         endStroke();
-
-        undo.push(new Snapshot(tile, copyTile(tile)));
-
-        while(undo.size() > UNDO_LIMIT)
-        {
-            undo.removeLast();
-        }
+        pushUndo(new Snapshot(tile, copyTile(tile)));
 
         stroking = true;
         lastX = x;
@@ -200,7 +264,10 @@ public final class AtlasEditor {
         return stroking;
     }
 
-    /** Vrátí poslední tah. Dlaždice se přepne na tu, ve které tah byl. */
+    /**
+     * Vrátí poslední tah. Dlaždice se přepne na tu, ve které tah byl;
+     * po vrácení importu zůstane vybraná ta, co byla.
+     */
     public boolean undo()
     {
         endStroke();
@@ -211,15 +278,21 @@ public final class AtlasEditor {
             return false;
         }
 
-        tile = snapshot.tile();
-
-        for(int y = 0; y < TILE; y++)
+        if(snapshot.tile() == WHOLE_ATLAS)
         {
-            System.arraycopy(snapshot.pixels(), y * TILE, pixels, pixelIndex(tile, 0, y), TILE);
+            System.arraycopy(snapshot.pixels(), 0, pixels, 0, pixels.length);
+        }
+        else
+        {
+            tile = snapshot.tile();
+
+            for(int y = 0; y < TILE; y++)
+            {
+                System.arraycopy(snapshot.pixels(), y * TILE, pixels, pixelIndex(tile, 0, y), TILE);
+            }
         }
 
-        dirty = true;
-        unsaved = true;
+        changed();
         return true;
     }
 
@@ -247,8 +320,7 @@ public final class AtlasEditor {
         if(pixels[index] != color)
         {
             pixels[index] = color;
-            dirty = true;
-            unsaved = true;
+            changed();
         }
     }
 
@@ -330,6 +402,92 @@ public final class AtlasEditor {
                 .toArray();
     }
 
+    // ------------------------------------------------------------------
+    // barvy celého atlasu (globální paleta)
+    //
+    // Paleta dlaždice ukazuje jen odstíny té jedné dlaždice. Na sjednocení
+    // odstínů NAPŘÍČ bloky - aby hlína, bok trávy a nový blok neměly tři
+    // skoro stejné hnědé - je potřeba vidět barvy celého atlasu vedle sebe.
+    // Všechno tady jsou čisté funkce nad polem pixelů, bez stavu editoru.
+    // ------------------------------------------------------------------
+
+    /** Pod touhle sytostí je barva "šedá" a odstín u ní nic neznamená. */
+    static final float GRAY_SATURATION = 0.12f;
+
+    /**
+     * Barvy použité KDEKOLIV v atlasu, nejčastější první, nejvýš max. Při
+     * shodném počtu rozhoduje, která se v poli objevila dřív, takže výsledek
+     * je pro tentýž atlas pokaždé stejný.
+     *
+     * Plně průhledné pixely se nepočítají: jsou to hlavně prázdné buňky
+     * atlasu a guma je v pevném řádku palety.
+     */
+    public static int[] atlasColors(int[] atlasPixels, int max)
+    {
+        Map<Integer, Integer> counts = new LinkedHashMap<>();
+
+        for(int argb : atlasPixels)
+        {
+            if((argb >>> 24) != 0)
+            {
+                counts.merge(argb, 1, Integer::sum);
+            }
+        }
+
+        // Řazení ve streamu je stabilní - shody zůstanou v pořadí výskytu.
+        return counts.entrySet().stream()
+                .sorted((a, b) -> b.getValue() - a.getValue())
+                .limit(max)
+                .mapToInt(Map.Entry::getKey)
+                .toArray();
+    }
+
+    /**
+     * Seřadí barvy tak, aby PODOBNÉ ODSTÍNY LEŽELY VEDLE SEBE: nejdřív šedé
+     * od tmavé ke světlé, pak po výsečích odstínu (12 po 30°) a v každé
+     * od tmavé ke světlé. Dvě skoro stejné hnědé z různých bloků tak skončí
+     * hned u sebe a je vidět, že jde o dvě barvy místo jedné. Podle četnosti
+     * by byly rozházené po celém řádku.
+     */
+    public static int[] byHue(int[] colors)
+    {
+        return Arrays.stream(colors).boxed()
+                .sorted(Comparator.comparingInt(AtlasEditor::hueGroup)
+                        .thenComparingDouble(argb -> toHsv(argb)[2])
+                        .thenComparingDouble(argb -> toHsv(argb)[1]))
+                .mapToInt(Integer::intValue)
+                .toArray();
+    }
+
+    /** -1 pro šedé, jinak výseč odstínu 0 až 11. */
+    static int hueGroup(int argb)
+    {
+        float[] hsv = toHsv(argb);
+
+        if(hsv[1] < GRAY_SATURATION)
+        {
+            return -1;
+        }
+
+        return Math.min(11, (int) (hsv[0] / 30f));
+    }
+
+    /** Které dlaždice barvu obsahují (index = dlaždice) - lab je při najetí na vzorek zvýrazní. */
+    public static boolean[] tilesWithColor(int[] atlasPixels, int argb)
+    {
+        boolean[] found = new boolean[tileCount()];
+
+        for(int i = 0; i < atlasPixels.length; i++)
+        {
+            if(atlasPixels[i] == argb)
+            {
+                found[tileAt(i % SIZE, i / SIZE)] = true;
+            }
+        }
+
+        return found;
+    }
+
     /**
      * Bloky, které dlaždici používají, podle toho, na kolika stěnách - první
      * je ten, komu dlaždice patří nejvíc (hlína je hlína na šesti stěnách,
@@ -345,8 +503,10 @@ public final class AtlasEditor {
         {
             byte block = (byte) id;
 
-            // Neznámé id dá TILE_UNKNOWN - to nejsou skutečné bloky.
-            if(BlockAtlas.tile(block, BlockAtlas.FACE_SIDE) == BlockAtlas.TILE_UNKNOWN)
+            // Neznámé id dá TILE_UNKNOWN - to nejsou skutečné bloky. Blok
+            // z labu je skutečný, i kdyby si tu křiklavou dlaždici vybral.
+            if(BlockAtlas.tile(block, BlockAtlas.FACE_SIDE) == BlockAtlas.TILE_UNKNOWN
+                    && BlockRegistry.lookup(block) == null)
             {
                 continue;
             }

@@ -85,6 +85,13 @@ public final class Textures {
      */
     public static final Path ATLAS_FILE = Path.of("textures", "atlas.png");
 
+    /**
+     * Odkud lab importuje hotový atlas, když se mu žádný soubor nepřetáhne
+     * do okna. Okno souborů nabídnout nejde: AWT běží headless (viz Main)
+     * a tinyfd by byl nový modul LWJGL, tedy další závislost.
+     */
+    public static final Path IMPORT_FILE = Path.of("textures", "import.png");
+
     /** Pixely atlasu a odkud přišly - ladicí výpis i lab to ukazují. */
     public record AtlasPixels(int[] pixels, boolean fromFile) {}
 

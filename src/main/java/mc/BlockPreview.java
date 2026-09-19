@@ -99,7 +99,17 @@ public class BlockPreview {
     /** Přepne náhled na jiný blok. World.AIR = nic (dlaždici nepoužívá žádný blok). */
     public void show(byte newBlock)
     {
-        if(newBlock == block)
+        show(newBlock, false);
+    }
+
+    /**
+     * rebuild = postavit znovu, i když jde o tentýž blok. Rozepsaný blok
+     * z labu má pořád stejné id, ale mění se mu dlaždice i neprůhlednost -
+     * a to jsou UV a světlo v meshi, ne jen pixely atlasu.
+     */
+    public void show(byte newBlock, boolean rebuild)
+    {
+        if(newBlock == block && !rebuild)
         {
             return;
         }
