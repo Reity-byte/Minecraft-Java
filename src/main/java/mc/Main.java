@@ -82,6 +82,7 @@ public class Main {
 
     /** Vytváří se až po GL kontextu, proto ne u deklarace. */
     private Texture blockAtlas;
+    private Texture playerSkin;
     private BlockIcon icons;
     private SkyRenderer sky;
     private HeldItemRenderer heldItem;
@@ -91,6 +92,13 @@ public class Main {
 
     /** Předměty na zemi. Neukládají se, takže nový i načtený svět začíná bez nich. */
     private final DroppedItems drops = new DroppedItems();
+
+    /**
+     * Postava hráče ve třetí osobě. Animace běží i v první osobě, aby po F5
+     * nenaskočila z klidu uprostřed kroku.
+     */
+    private final PlayerAnimation animation = new PlayerAnimation();
+    private final PlayerModelMesh playerMesh = new PlayerModelMesh();
 
     /** Otevřená obrazovka kontejneru, nebo null. */
     private ContainerScreen screen;
@@ -145,6 +153,8 @@ public class Main {
         dirtTile.delete();
         icons.delete();
         heldItem.delete();
+        playerMesh.delete();
+        playerSkin.delete();
         blockAtlas.delete();
         sky.delete();
         shapes.delete();
@@ -253,6 +263,10 @@ public class Main {
             if (key == GLFW_KEY_F) {
                 player.flying = !player.flying;
                 player.vy = 0; // ať se po vypnutí letu nezačne padat setrvačností
+            }
+            // F5 přepíná pohled: první osoba -> zezadu -> zepředu -> zpět.
+            if (key == GLFW_KEY_F5) {
+                camera.view = camera.view.next();
             }
             // výběr slotu hotbaru číselnými klávesami
             if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) {
@@ -375,7 +389,9 @@ public class Main {
         blockAtlas = Textures.blockAtlas();
         icons = new BlockIcon(blockAtlas);
 
-        worldRenderer = new WorldRenderer(blockAtlas);
+        // Skin se nahrazuje v jediném místě - v Textures.playerSkin().
+        playerSkin = Textures.playerSkin();
+        worldRenderer = new WorldRenderer(blockAtlas, playerSkin);
         sky = new SkyRenderer();
         heldItem = new HeldItemRenderer(blockAtlas);
         shapes = new Renderer2D();
@@ -587,7 +603,7 @@ public class Main {
         }
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        worldRenderer.render(world, camera, width, height, FOV, false, day, drops.items());
+        worldRenderer.render(world, camera, width, height, FOV, false, day, drops.items(), null);
 
         int missingColumns = world.pendingColumns();
         int pendingMeshes = worldRenderer.pendingBuilds();
@@ -633,11 +649,23 @@ public class Main {
         // který se ještě nevygeneroval.
         world.update(player.x, player.z);
 
-        player.update(world, dt, camera.yaw);
-        camera.setPosition(player.x, player.eyeY(), player.z);
+        float beforeX = player.x;
+        float beforeZ = player.z;
 
+        player.update(world, dt, camera.yaw);
+
+        // Animace se řídí SKUTEČNÝM posunem, ne vstupem - chůze do zdi
+        // nohama nemáchá, i když se drží W.
+        animation.update(dt, (float) Math.hypot(player.x - beforeX, player.z - beforeZ));
+
+        // V první osobě kamera v očích, ve třetí za hráčem nebo před ním.
+        camera.follow(world, player.x, player.eyeY(), player.z);
+
+        // ⚠️ Míří se z OČÍ, ne z kamery. Ve třetí osobě by paprsek z kamery
+        // za zády trefil blok mezi kamerou a hráčem a zepředu by mířil úplně
+        // jinam, než kam hráč kouká. Minecraft to dělá stejně.
         float[] dir = camera.getLookDirection();
-        hit = Raycaster.cast(world, camera.x, camera.y, camera.z, dir[0], dir[1], dir[2], 8f);
+        hit = Raycaster.cast(world, player.x, player.eyeY(), player.z, dir[0], dir[1], dir[2], 8f);
 
         swing.update(dt);
 
@@ -685,7 +713,8 @@ public class Main {
     private void drawHeldItem() {
         ItemStack held = inventory.hotbar(selectedSlot);
 
-        if (held.isEmpty()) {
+        // Ve třetí osobě drží blok model postavy - viz playerBody().
+        if (held.isEmpty() || camera.view != Camera.View.FIRST_PERSON) {
             return;
         }
 
@@ -701,6 +730,30 @@ public class Main {
 
         heldItem.draw(width, height, FOV, held.block(),
                 swing.fast(), swing.slow(), light);
+    }
+
+    /**
+     * Postava v aktuální póze, nebo null v první osobě - tam se vlastní tělo
+     * nekreslí a místo něj je vidět jen ruka (HeldItemRenderer).
+     */
+    private PlayerModelMesh playerBody() {
+        if (camera.view == Camera.View.FIRST_PERSON) {
+            return null;
+        }
+
+        ItemStack held = inventory.hotbar(selectedSlot);
+        PlayerPose pose = animation.pose(camera.pitch, swing.fast(), swing.slow(), !held.isEmpty());
+
+        // Jedno světlo pro celou postavu, z buňky s hlavou - jako u ruky
+        // v první osobě. Denní dobu dopočítá shader.
+        int cell = world.cellAt((int) Math.floor(player.x),
+                (int) Math.floor(player.eyeY()), (int) Math.floor(player.z));
+
+        playerMesh.build(pose, player.x, player.y, player.z, camera.yaw, held.block(),
+                World.cellSky(cell) / 15f, World.cellBlockLight(cell) / 15f,
+                camera.x, camera.y, camera.z);
+
+        return playerMesh;
     }
 
     private void renderWorld() {
@@ -729,7 +782,8 @@ public class Main {
             sky.draw(worldRenderer.viewProjection(camera, width, height, FOV), day);
         }
 
-        worldRenderer.render(world, camera, width, height, FOV, underwater, day, drops.items());
+        worldRenderer.render(world, camera, width, height, FOV, underwater, day,
+                drops.items(), playerBody());
 
         if (state == GameState.PLAYING && hit != null) {
             worldRenderer.drawBlockOutline(hit.x(), hit.y(), hit.z(), camera);
@@ -853,7 +907,7 @@ public class Main {
                                     ? String.format("swimming %.0f%%", player.submerged * 100)
                                 : player.onGround ? "on ground" : "in air",
                         player.vy),
-                "F fly   C noclip   1-9 slot   Q drop   T time   V vsync   Esc pause"
+                "F fly   C noclip   1-9 slot   Q drop   F5 view   T time   V vsync   Esc pause"
         };
     }
 

@@ -66,6 +66,9 @@ public class WorldRenderer {
      */
     private final Texture atlas;
 
+    /** Skin postavy ve třetí osobě. Vlastní ho Main, stejně jako atlas. */
+    private final Texture skin;
+
     /** Meshe po sloupcích, stejný klíč jako používá World. Pole má jednu položku na sekci. */
     private final Map<Long, ChunkMesh[]> columnMeshes = new HashMap<>();
 
@@ -116,9 +119,10 @@ public class WorldRenderer {
     private int meshesBuiltThisFrame = 0;
     private int pendingCount = 0;
 
-    public WorldRenderer(Texture atlas)
+    public WorldRenderer(Texture atlas, Texture skin)
     {
         this.atlas = atlas;
+        this.skin = skin;
         createOutlineMesh();
     }
 
@@ -126,8 +130,14 @@ public class WorldRenderer {
     // hlavní render
     // ------------------------------------------------------------------
 
+    /**
+     * @param droppedItems předměty na zemi
+     * @param body         postava hráče už postavená v póze, nebo null
+     *                     (v první osobě se vlastní tělo nekreslí)
+     */
     public void render(World world, Camera camera, int width, int height, float fovDegrees,
-                       boolean underwater, DayCycle day, List<DroppedItem> droppedItems)
+                       boolean underwater, DayCycle day, List<DroppedItem> droppedItems,
+                       PlayerModelMesh body)
     {
         meshesBuiltThisFrame = 0;
         drawnSections = 0;
@@ -252,6 +262,7 @@ public class WorldRenderer {
         // hloubku, takže položka nakreslená po ní by přes hladinu prosvítala
         // bez modrého nádechu, jako by ležela nad vodou.
         drawDroppedItems(droppedItems, world, camera);
+        drawPlayer(body);
 
         drawTransparent(camera);
 
@@ -282,6 +293,29 @@ public class WorldRenderer {
 
         itemMesh.upload();
         itemMesh.draw();
+    }
+
+    /**
+     * Postava ve třetí osobě. Stejný světový shader jako položky na zemi -
+     * vrcholy jsou relativní ke kameře, takže posun je nula - jen se pro tělo
+     * na chvíli podstrčí textura skinu místo atlasu. Držený blok jde pak zase
+     * z atlasu, a ten musí zůstat navázaný i pro vodu po nás.
+     */
+    private void drawPlayer(PlayerModelMesh body)
+    {
+        if(body == null || body.isEmpty())
+        {
+            return;
+        }
+
+        shader.setVector3("uChunkOffset", 0f, 0f, 0f);
+        body.upload();
+
+        glBindTexture(GL_TEXTURE_2D, skin.id());
+        body.drawSkin();
+
+        glBindTexture(GL_TEXTURE_2D, atlas.id());
+        body.drawItem();
     }
 
     /**

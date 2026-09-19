@@ -81,6 +81,14 @@ public class AllTests {
         SwingTest.main(args);
         failures += SwingTest.failures;
 
+        System.out.println(NEWLINE + "========== PlayerModelTest ==========");
+        PlayerModelTest.main(args);
+        failures += PlayerModelTest.failures;
+
+        System.out.println(NEWLINE + "========== CameraTest ==========");
+        CameraTest.main(args);
+        failures += CameraTest.failures;
+
         System.out.println(NEWLINE + "========== LightTest ==========");
         LightTest.main(args);
         failures += LightTest.failures;

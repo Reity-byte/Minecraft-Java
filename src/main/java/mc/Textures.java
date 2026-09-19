@@ -349,6 +349,115 @@ public final class Textures {
         return PLANK_TONES[hash(x >> 1, y >> 1) & 3];
     }
 
+    // ------------------------------------------------------------------
+    // skin postavy
+    // ------------------------------------------------------------------
+
+    private static final int[] SKIN_TONES  = {0xFFC69C7C, 0xFFBE9474, 0xFFCCA383, 0xFFB88E6E};
+    private static final int[] HAIR_TONES  = {0xFF3B2A1E, 0xFF34251A, 0xFF412F22, 0xFF2E2117};
+    private static final int[] SHIRT_TONES = {0xFF1F9C9C, 0xFF1A9292, 0xFF24A6A6, 0xFF178888};
+    private static final int[] PANTS_TONES = {0xFF3A3A9C, 0xFF343492, 0xFF4040A6, 0xFF2F2F88};
+    private static final int[] SHOE_TONES  = {0xFF4A4A4A, 0xFF434343, 0xFF515151, 0xFF3C3C3C};
+    private static final int EYE_WHITE = 0xFFF2F2F2;
+    private static final int EYE_IRIS  = 0xFF4A3A9C;
+    private static final int MOUTH     = 0xFF8A5A48;
+
+    /**
+     * Skin postavy jako textura.
+     *
+     * ⚠️ TOHLE JE JEDINÉ MÍSTO, KDE SE SKIN VYMĚNÍ. Skutečný skin znamená
+     * nahradit playerSkinPixels() načtením PNG 64x64:
+     *
+     *   BufferedImage image = ImageIO.read(...);
+     *   int[] pixels = image.getRGB(0, 0, 64, 64, null, 0, 64);
+     *
+     * getRGB vrací 0xAARRGGBB po řádcích SHORA, tedy přesně v pořadí, ve kterém
+     * je tahle metoda chce. PlayerModelMesh o původu pixelů neví - jeho UV jsou
+     * souřadnice šablony skinu z Minecraftu.
+     *
+     * ⚠️ Pixely jdou do GL v pořadí OBRÁZKU (horní řádek první), ne odspodu
+     * jako atlas. GL pak má t = 0 u horního okraje a UV modelu jsou rovnou
+     * souřadnice ve skinu dělené 64 - bez překlápění, které by se u načteného
+     * PNG snadno zapomnělo.
+     */
+    public static Texture playerSkin()
+    {
+        return Texture.fromArgb(playerSkinPixels(),
+                PlayerModelMesh.SKIN_SIZE, PlayerModelMesh.SKIN_SIZE, GL_CLAMP_TO_EDGE);
+    }
+
+    /**
+     * Placeholder skin: každý díl těla má svou barvu (kůže, vlasy, tričko,
+     * kalhoty, boty) a obličej dvě oči a pusu, aby šlo poznat, kam postava
+     * kouká. Rozložení je šablona Minecraftu 64x64, takže se barvy trefí
+     * přesně na díly modelu. Nepokryté části šablony (druhá vrstva - klobouk,
+     * bunda) zůstávají průhledné; model je nekreslí.
+     */
+    static int[] playerSkinPixels()
+    {
+        int size = PlayerModelMesh.SKIN_SIZE;
+        int[] pixels = new int[size * size];
+
+        // Rozbalení kvádrů (u, v, šířka, výška, hloubka) - stejná čísla jako
+        // PlayerModelMesh.PARTS.
+        paintBox(pixels, 0, 0, 8, 8, 8, SKIN_TONES);      // hlava
+        paintBox(pixels, 16, 16, 8, 12, 4, SHIRT_TONES);  // trup
+        paintBox(pixels, 40, 16, 4, 12, 4, SKIN_TONES);   // pravá ruka
+        paintBox(pixels, 32, 48, 4, 12, 4, SKIN_TONES);   // levá ruka
+        paintBox(pixels, 0, 16, 4, 12, 4, PANTS_TONES);   // pravá noha
+        paintBox(pixels, 16, 48, 4, 12, 4, PANTS_TONES);  // levá noha
+
+        // Vlasy: celý vršek a týl hlavy, po stranách a na čele horní dva řádky.
+        paintRect(pixels, 8, 0, 8, 8, HAIR_TONES);
+        paintRect(pixels, 0, 8, 32, 2, HAIR_TONES);
+        paintRect(pixels, 24, 8, 8, 8, HAIR_TONES);
+
+        // Obličej: předek hlavy je u = 8..15, v = 8..15.
+        pixels[12 * size + 9]  = EYE_WHITE;
+        pixels[12 * size + 10] = EYE_IRIS;
+        pixels[12 * size + 13] = EYE_IRIS;
+        pixels[12 * size + 14] = EYE_WHITE;
+        pixels[14 * size + 11] = MOUTH;
+        pixels[14 * size + 12] = MOUTH;
+
+        // Rukávy: vršek ruky a horní čtyři pixely jejích boků.
+        paintRect(pixels, 44, 16, 4, 4, SHIRT_TONES);
+        paintRect(pixels, 40, 20, 16, 4, SHIRT_TONES);
+        paintRect(pixels, 36, 48, 4, 4, SHIRT_TONES);
+        paintRect(pixels, 32, 52, 16, 4, SHIRT_TONES);
+
+        // Boty: spodek nohy a dolní dva pixely jejích boků.
+        paintRect(pixels, 8, 16, 4, 4, SHOE_TONES);
+        paintRect(pixels, 0, 30, 16, 2, SHOE_TONES);
+        paintRect(pixels, 24, 48, 4, 4, SHOE_TONES);
+        paintRect(pixels, 16, 62, 16, 2, SHOE_TONES);
+
+        return pixels;
+    }
+
+    /**
+     * Vybarví celé rozbalení kvádru ze šablony: nahoře vršek a spodek (každý
+     * w x d), pod nimi čtyři boky vedle sebe (d, w, d, w široké, h vysoké).
+     */
+    private static void paintBox(int[] pixels, int u, int v, int w, int h, int d, int[] tones)
+    {
+        paintRect(pixels, u + d, v, 2 * w, d, tones);
+        paintRect(pixels, u, v + d, 2 * d + 2 * w, h, tones);
+    }
+
+    private static void paintRect(int[] pixels, int x, int y, int width, int height, int[] tones)
+    {
+        int size = PlayerModelMesh.SKIN_SIZE;
+
+        for(int py = y; py < y + height; py++)
+        {
+            for(int px = x; px < x + width; px++)
+            {
+                pixels[py * size + px] = tones[hash(px, py) & 3];
+            }
+        }
+    }
+
     /**
      * Rozhoz bitů ze dvou souřadnic. Násobí se velkými lichými prvočísly,
      * aby se sousední pixely nelišily jen v nejnižším bitu a nevznikly pruhy.

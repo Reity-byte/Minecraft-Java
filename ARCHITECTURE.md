@@ -31,7 +31,7 @@ V Git Bashi je nutné classpath převádět `cygpath -w` a spojovat středníkem
 
 ## Testy
 
-`src/test/java/mc/` — **609 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **662 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -59,11 +59,14 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty |
 | `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků**, kmen stojí na zemi, řetěz kmen→prkna→stůl |
 | `AtlasTest` | Mapování blok+stěna → dlaždice, UV uvnitř atlasu, půltexelové zúžení, obsah a determinismus textur |
+| `PlayerModelTest` | Animace: rozmach podle rychlosti, **opačná fáze nohou**, ruka proti noze, délka kroku, strop při letu, **nezávislost na FPS**, pohupování, máchnutí z `HandSwing`, držení. Model: rozměry jako hitbox, **pravá ruka vpravo, obličej vepředu**, končetiny v póze, držený blok u pěsti, odstín podle směru ve světě. Skin: každá stěna míří do vybarvené části |
+| `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
 
 **Testovat jde všechno kromě renderu** — `World`, `Player`, `Raycaster`, `ChunkMesh.build()`,
-`Menu.buttonAt()`, `BlockAtlas`, `Textures.blockAtlasPixels()`, `DroppedItems` ani
-`DroppedItemMesh.build()` nesahají na GL. Myš v `ContainerScreen` (klik, shift-klik, tažení)
-taky ne — na GL sahá jen jeho kreslení.
+`Menu.buttonAt()`, `BlockAtlas`, `Textures.blockAtlasPixels()`, `DroppedItems`,
+`DroppedItemMesh.build()`, `PlayerAnimation`, `PlayerModelMesh.build()`,
+`Textures.playerSkinPixels()` ani `Camera.follow()` nesahají na GL. Myš v `ContainerScreen`
+(klik, shift-klik, tažení) taky ne — na GL sahá jen jeho kreslení.
 
 ⚠️ **Testy volají `world.updateBlocking()`, ne `update()`** — ta je od zavedení worker vlákna
 asynchronní a po návratu ještě žádný sloupec existovat nemusí. Blokující varianta si chybějící
@@ -95,7 +98,8 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `BlockAtlas` — blok + stěna → dlaždice a její UV; **bez GL**, aby šel mesher testovat
 - `BlockModels` — tvar bloku jako seznam kvádrů; **bez GL**
 - `ShaderProgram`, `Shaders` — obal nad GLSL + zdrojáky
-- `Camera` — yaw/pitch → view matice (JOML)
+- `Camera` — yaw/pitch → view matice (JOML); pohledy F5 a kamera třetí osoby s kolizí
+- `PlayerModelMesh` — postava z kvádrů v póze → trojúhelníky pro světový shader; `build()` **bez GL**
 
 **Inventář a crafting (bez GL)**
 - `ItemStack` — neměnná hromádka: blok + počet
@@ -108,7 +112,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `Palette` — ploché barvy UI na jednom místě, aby HUD a menu vypadaly jako jedna věc
 - `Renderer2D` — obdélníky, rámečky, bevel, libovolné čtyřúhelníky; sdílí HUD i menu
 - `Texture` — RGBA textura, `GL_NEAREST`
-- `Textures` — procedurální dlaždice (zatím hlína)
+- `Textures` — procedurální dlaždice, atlas bloků a placeholder skin postavy (jediné místo výměny skinu)
 - `BackgroundRenderer` — dlaždicované pozadí hlavního menu, vlastní texturovaný shader
 - `FontAtlas` — ASCII 32–126 → jednokanálová textura (`GL_RED`), bez antialiasingu
 - `TextRenderer` — sazba textu, počátek vlevo nahoře, kreslí v celočíselném měřítku
@@ -124,6 +128,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `DroppedItems` — všechny položky na zemi: vyhození, sběr, zánik; **bez GL**
 - `DroppedItemMesh` — položky na zemi → trojúhelníky pro světový shader; `build()` **bez GL**
 - `HandSwing` — máchnutí rukou; **bez GL**
+- `PlayerAnimation` — chůze, klid a máchnutí ve třetí osobě → `PlayerPose` (úhly kloubů); **bez GL**
 - `Raycaster` — DDA (Amanatides–Woo)
 - `GameState` — MAIN_MENU / CREATING_WORLD / PLAYING / PAUSED
 - `Main` — okno, vstup, stavový automat
@@ -829,6 +834,97 @@ jednu křivku prošla.
 Klidová poloha není zvláštní případ: je to táž matice s nulami — posun vpravo dolů
 (`0,56; −0,52; −0,72`) a natočení o 45°, aby se kostka nedívala na kameru čelem.
 
+### Postava a pohledy
+
+**F5 přepíná tři pohledy cyklicky: první osoba → zezadu → zepředu → zpět**, jako v Minecraftu
+(`Camera.View`). Přepnutí je okamžité.
+
+**⚠️ `yaw` a `pitch` jsou pořád pohled HRÁČE.** Pohled zepředu otáčí jen to, kam se dívá kamera
+(`viewDirection()`, z něj `viewMatrix()` a tím i obloha), ne kam se dívá hráč. Pohyb, míření,
+hlava modelu i vyhazování předmětů jedou dál z `getLookDirection()`.
+
+**⚠️ Míří se z OČÍ, ne z kamery.** Paprsek pro kopání a pokládání startuje v očích hráče ve všech
+pohledech. Z kamery za zády by trefil blok mezi kamerou a hráčem, zepředu by mířil proti pohledu.
+Obrys a praskliny se kreslí na tentýž blok, jen se na něj kouká odjinud.
+
+**Kamera třetí osoby stojí 4 bloky od očí po přímce pohledu a zkracuje se o terén.** Vrhá se osm
+rovnoběžných paprsků z rohů krychličky ±0,1 kolem očí — Minecraft to dělá stejně — a bere se
+nejkratší zásah. Jeden paprsek by stačil na to, aby kamera nebyla v bloku, ale ne na blízkou
+ořezovou rovinu: kamera by skončila přesně na stěně a do bloku by nahlédla. Poloměr 0,1 ji drží
+dál, než leží ořezová rovina (0,05). Poloha se počítá znovu každý frame, takže v chodbě kamera
+sama přijede k hráči a na volném prostranství zase odjede.
+
+**Paprsky jsou existující `Raycaster`, žádná nová fyzika.** Raycaster vrací blok a normálu stěny,
+kterou do něj paprsek vstoupil — z toho se vzdálenost dopočítá přesně: stěna s normálou +X leží
+v rovině x = blok + 1, takže t = (rovina − start) / směr. Kamera se tím zarazí o všechno, co jde
+zaměřit (pochodeň a plot jako plná buňka), a vodou projede. `CameraTest` hlídá, že vyjde přesně
+rovina stěny minus poloměr.
+
+**Model je z kvádrů v PIXELECH Minecraftu** — hlava 8³, trup 8×12×4, končetiny 4×12×4, postava
+32 px = výška hitboxu 1,8, tedy 1 px = 0,05625 bloku —, s klouby a pořadím rotací Z, Y, X jako
+`ModelBiped`. Filozofie je stejná jako u `BlockModels` (tvar je seznam kvádrů), data vlastní:
+každý díl se otáčí kolem svého kloubu, takže to nemůže být statický mesh.
+
+**Transformuje se NA CPU a staví znovu každý frame**, stejně jako předměty na zemi. Změřeno:
+animace i stavba všech 252 vrcholů (postava + držený blok) **~2 µs na frame**. Šest dílů jako
+šest draw callů s vlastní maticí by nic neušetřilo a stavba by nešla otestovat bez GL. Vrcholy
+jsou relativní ke kameře a ve světovém formátu, takže postava jde **světovým shaderem** — se
+stejným denním i blokovým světlem a mlhou jako terén, bez vlastního programu. Pro tělo se jen
+na chvíli naváže textura skinu místo atlasu; držený blok leží ve stejném VBO za ním a kreslí se
+z atlasu. Kreslí se před vodou, ze stejného důvodu jako předměty na zemi.
+
+**Ztmavení stěn se počítá ze směru stěny VE SVĚTĚ.** Terén má pevné odstíny os (vršek 1, boky 0,6
+a 0,8, spodek 0,5). Kdyby se vázaly ke stěnám modelu, tmavý bok by se otáčel s postavou. Normála
+se proto otočí maticí dílu a odstíny os se smíchají podle druhých mocnin jejích složek (dávají
+součet 1): stěna podél osy dostane přesně odstín té osy, šikmá plynulý mezistupeň.
+
+**⚠️ Placeholder skin je v šabloně Minecraftu 64×64 a vyměňuje se na JEDNOM místě.**
+`Textures.playerSkinPixels()` kreslí barvy dílů (kůže, vlasy, tričko, kalhoty, boty, oči) přímo
+do rozložení šablony a UV v `PlayerModelMesh` jsou souřadnice té šablony (rozbalení kvádru
+jako `ModelBox`). Skutečný skin = v `Textures.playerSkin()` načíst PNG přes `ImageIO`
+a `getRGB(0, 0, 64, 64, null, 0, 64)` místo `playerSkinPixels()`; model ani UV se nemění.
+Stejný princip jako „ruční textury místo procedurálních" u atlasu bloků.
+
+**⚠️ Skin jde do GL v pořadí OBRÁZKU (horní řádek první), ne odspodu jako atlas.** GL pak má
+t = 0 u horního okraje a UV modelu jsou rovnou souřadnice ve skinu dělené 64, bez překlápění.
+`getRGB` vrací řádky shora, takže načtený PNG sedí taky beze změny — překlopení, které by se
+u načítání snadno zapomnělo, tu vůbec není. `PlayerModelTest` hlídá, že obličej ze šablony
+(u 8–16, v 8–16) leží na přední stěně hlavy a míří ve směru pohledu, a že každá stěna modelu
+míří do vybarvené části skinu.
+
+**Animace jsou vzorce z `ModelBiped`, přepočtené z ticků na sekundy:**
+
+| | vzorec | co dělá |
+|---|---|---|
+| rozmach | `min(1, rychlost / 5 b/s)`, dotahovaný mocninou `0,6^20` za sekundu | jak moc se končetiny rozmáchnou |
+| fáze kroku | `+= rozmach · 13,3 rad/s · dt` | kde v cyklu chůze nohy jsou |
+| noha | `cos(fáze) · 1,4 · rozmach`, levá s opačným znaménkem | krok |
+| ruka | `−cos(fáze) · 1,0 · rozmach` | jde proti noze na téže straně |
+| klid | odklon rukou 0–0,1 rad a kmit ±0,05 rad, každé s jinou periodou | pohupování |
+
+Změřeno: při chůzi 4,3 b/s je rozmach 0,86, noha se vychýlí o 1,2 rad a celý cyklus trvá
+0,55 s — jako v Minecraftu.
+
+**⚠️ Fáze roste rozmachem, ne ujitou vzdáleností.** Při chůzi to vyjde skoro nastejno, ale rozmach
+je shora omezený: let rychlostí 12 b/s tak má stejný rytmus kroků jako sprint, místo aby nohy
+zběsile cupitaly. Rozmach se řídí SKUTEČNÝM posunem hráče za frame, ne vstupem — chůze do zdi
+nohama nemáchá. Dotahování je mocnina, ne násobek, takže `PlayerModelTest` ověřuje stejný
+výsledek při 30 i 120 FPS.
+
+**Máchnutí ve třetí osobě jede na týchž dvou křivkách jako ruka v první.** `HandSwing.fast()` zvedá
+paži o 80° dopředu, `slow()` ji v druhé půlce stočí o 20° přes tělo — stejné úhly jako
+v `HeldItemRenderer`. Přičítá se až nakonec, přes chůzi i držení, protože se kope i za chůze.
+Ruka s blokem je předsunutá o π/10 a za chůze máchá jen napůl, jako v Minecraftu.
+
+**Animace běží i v první osobě**, jen se nekreslí — po F5 postava nenaskočí z klidu uprostřed
+kroku. V první osobě se vlastní tělo nekreslí vůbec a zůstává `HeldItemRenderer`.
+
+**Známá zjednodušení:** trup se natáčí přesně s pohledem (Minecraft nechává tělo zaostávat až
+o 50° a za chůze ho stáčí do směru pohybu); chybí poloha při plížení a plavání; druhá vrstva
+skinu (klobouk, bunda) se nekreslí; starší skiny 64×32 bez levé ruky a nohy by se musely
+zrcadlit; přepnutí pohledu nemá přechod; zaměřovač zůstává vidět i ve třetí osobě (Minecraft
+ho tam skrývá); postava nevrhá stín. Světlo je jedno číslo pro celou postavu, z buňky s hlavou.
+
 ### Ostatní
 
 **Pozadí menu je jeden quad, ne stovky dlaždic.** Textura má `GL_REPEAT` a UV jdou od 0
@@ -872,6 +968,7 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | Shift+LMB v inventáři | přesun hromádky hotbar ↔ batoh; z crafting mřížky zpět do inventáře |
 | LMB / PMB táhnout v inventáři | rozdělit drženou hromádku rovnoměrně / po jednom kusu |
 | Q / Ctrl+Q | vyhodit z ruky jeden kus / celou hromádku (držené Q sype dál) |
+| F5 | pohled: první osoba → třetí zezadu → třetí zepředu → zpět |
 | PMB na crafting table | otevře mřížku 3×3 |
 | LMB (držet) | kopat — doba podle tvrdosti bloku |
 | T | posun času o desetinu cyklu (ladění) |
@@ -958,8 +1055,11 @@ stádií prasklin.
 
 **Další na řadě:** zvuky.
 
-**Model postavy** je dál: sám o sobě není vidět, potřeboval by pohled ze třetí osoby
-a k tomu systém entit s kostrou a animacemi.
+**Model postavy a pohledy — hotovo.** Postava z kvádrů s placeholder skinem v šabloně Minecraftu,
+chůze, pohupování a máchnutí, F5 přes tři pohledy s kamerou, která neprojede terénem. Zbývá:
+tělo zaostávající za hlavou, plížení a plavání, druhá vrstva skinu, načítání skutečného skinu
+(je to výměna jedné metody). Skutečný systém entit (víc postav, jiní hráči) zatím není — model
+je napsaný pro hráče, ale nic v něm na hráče vázané není kromě vstupních parametrů.
 
 **Osvětlení je uzavřené.** Plynulé osvětlení s ambient occlusion, obloha se sluncem, měsícem
 a hvězdami. Co by šlo přidat později: měsíční fáze, barevný nádech při východu a západu,
