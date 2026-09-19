@@ -1,11 +1,20 @@
 package mc;
 
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.TreeSet;
+
 /**
  * Overuje model postavy: matematiku animace (uhel koncetiny podle rychlosti
- * a casu), geometrii modelu v poze a placeholder skin.
+ * a casu), geometrii modelu v poze, placeholder skin a holou ruku v prvni
+ * osobe (HeldItemRenderer), ktera sdili kvadr i UV s modelem.
  *
- * PlayerAnimation, PlayerModelMesh.build() ani Textures.playerSkinPixels()
- * nesahaji na GL, takze jde vsechno krome samotneho kresleni.
+ * PlayerAnimation, PlayerModelMesh.build(), Textures.playerSkinPixels() ani
+ * HeldItemRenderer.build() / matrix() nesahaji na GL, takze jde vsechno krome
+ * samotneho kresleni.
  */
 public class PlayerModelTest {
 
@@ -29,6 +38,7 @@ public class PlayerModelTest {
         animation();
         geometry();
         skin();
+        firstPersonArm();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -315,6 +325,179 @@ public class PlayerModelTest {
         check("oblicej ma oci, tyl ne - je poznat, kam postava kouka", eyes && hairBack, "");
 
         check("druha vrstva skinu (klobouk) zustava pruhledna", (pixels[8 * size + 40] >>> 24) == 0, "");
+    }
+
+    // ==================================================================
+    // hola ruka v prvni osobe
+    // ==================================================================
+
+    static final int HF = HeldItemRenderer.FLOATS_PER_VERTEX;   // x, y, z, u, v, odstin
+
+    /** Pro kazdou stenu (6 vrcholu) mnozina jejich (u, v). */
+    static List<TreeSet<String>> faceUvs(float[] data, int stride, int firstVertex, int vertices) {
+        List<TreeSet<String>> faces = new ArrayList<>();
+        for (int f = 0; f < vertices / 6; f++) {
+            TreeSet<String> uv = new TreeSet<>();
+            for (int i = 0; i < 6; i++) {
+                int o = (firstVertex + f * 6 + i) * stride;
+                uv.add(data[o + 3] + "," + data[o + 4]);
+            }
+            faces.add(uv);
+        }
+        return faces;
+    }
+
+    /** Vrchol i ruky v clip space (pred delenim w). */
+    static Vector4f clip(Matrix4f m, float[] arm, int i) {
+        return m.transform(new Vector4f(arm[i * HF], arm[i * HF + 1], arm[i * HF + 2], 1f));
+    }
+
+    /** Stred pesti (spodni stena kvadru, y0) v NDC. */
+    static float[] fist(Matrix4f m) {
+        PlayerModelMesh.Part p = HeldItemRenderer.ARM;
+        Vector4f c = m.transform(new Vector4f((p.x0() + p.x1()) / 2, p.y0(), (p.z0() + p.z1()) / 2, 1f));
+        return new float[]{c.x / c.w, c.y / c.w};
+    }
+
+    /** Vsechny vrcholy pred kamerou a mezi blizkou a dalekou orezovou rovinou. */
+    static boolean inFront(Matrix4f m, float[] arm, int vertices) {
+        boolean ok = true;
+        for (int i = 0; i < vertices; i++) {
+            Vector4f c = clip(m, arm, i);
+            ok &= c.w > 0 && c.z >= -c.w && c.z <= c.w;
+        }
+        return ok;
+    }
+
+    static void firstPersonArm() {
+        int size = PlayerModelMesh.SKIN_SIZE;
+        float[] arm = new float[HeldItemRenderer.MAX_FLOATS];
+        int n = HeldItemRenderer.build(World.AIR, arm) / HF;
+
+        check("prazdny slot = hola ruka, 6 sten po 6 vrcholech",
+                HeldItemRenderer.isBareHand(World.AIR) && n == 36, n + " vrcholu");
+
+        // ---------- stejny vzhled jako v modelu postavy ----------
+        // UV i rozbaleni jdou z PlayerModelMesh.unfold(); kdyby se ruka
+        // v prvni osobe pocitala jinde, rozjely by se pri zmene skinu.
+        PlayerModelMesh m = build(PlayerPose.REST, 0f, World.AIR);
+        List<TreeSet<String>> fp = faceUvs(arm, HF, 0, n);
+        List<TreeSet<String>> body = faceUvs(m.vertices(), PlayerModelMesh.FLOATS_PER_VERTEX,
+                first(PlayerModelMesh.PART_RIGHT_ARM), 36);
+        check("UV sten ruky v prvni osobe = UV prave ruky postavy", fp.equals(body),
+                fp.size() + " sten");
+
+        float minX = 1e9f, maxX = -1e9f, minY = 1e9f, maxY = -1e9f, minZ = 1e9f, maxZ = -1e9f;
+        for (int i = 0; i < n; i++) {
+            minX = Math.min(minX, arm[i * HF]);     maxX = Math.max(maxX, arm[i * HF]);
+            minY = Math.min(minY, arm[i * HF + 1]); maxY = Math.max(maxY, arm[i * HF + 1]);
+            minZ = Math.min(minZ, arm[i * HF + 2]); maxZ = Math.max(maxZ, arm[i * HF + 2]);
+        }
+        check("ruka meri 4 x 12 x 4 px jako v modelu",
+                maxX - minX == 4f && maxY - minY == 12f && maxZ - minZ == 4f,
+                (maxX - minX) + " x " + (maxY - minY) + " x " + (maxZ - minZ));
+
+        // Kazda stena do vybarvene casti skinu, a to do rozbaleni prave ruky
+        // v sablone (u 40-56, v 16-32).
+        int[] pixels = Textures.playerSkinPixels();
+        boolean mapped = true, rightArm = true;
+        for (int f = 0; f < n / 6; f++) {
+            float su = 0, sv = 0;
+            for (int i = 0; i < 6; i++) { su += arm[(f * 6 + i) * HF + 3]; sv += arm[(f * 6 + i) * HF + 4]; }
+            int u = (int) (su / 6 * size), v = (int) (sv / 6 * size);
+            mapped &= u >= 0 && u < size && v >= 0 && v < size && (pixels[v * size + u] >>> 24) == 0xFF;
+            rightArm &= u >= 40 && u < 56 && v >= 16 && v < 32;
+        }
+        check("kazda stena ruky miri do vybarvene casti skinu", mapped, "");
+        check("a to do rozbaleni prave ruky v sablone", rightArm, "");
+
+        // Odstiny sten jako u bloku v ruce: poradi sten je v obou stejne
+        // (vrsek, spodek, +X, -X, predek, zada).
+        float[] stone = new float[HeldItemRenderer.MAX_FLOATS];
+        HeldItemRenderer.build(World.STONE, stone);
+        boolean shades = true;
+        for (int f = 0; f < 6; f++) shades &= arm[f * 6 * HF + 5] == stone[f * 6 * HF + 5];
+        check("odstiny sten ruky jsou tytez jako u bloku v ruce", shades,
+                arm[5] + " / " + arm[6 * HF + 5] + " / " + arm[12 * HF + 5] + " / " + arm[24 * HF + 5]);
+
+        // ---------- poloha v klidu ----------
+        // Pravy dolni roh obrazu, pred kamerou. Rameno schvalne lezi pod
+        // dolnim okrajem (jako v Minecraftu), pest musi byt videt.
+        for (int[] screen : new int[][]{{1280, 720}, {1024, 768}}) {
+            Matrix4f rest = HeldItemRenderer.armMatrix(new Matrix4f(), screen[0], screen[1], 70f, 0f, 0f);
+            boolean lowerRight = true;
+            for (int i = 0; i < n; i++) {
+                Vector4f c = clip(rest, arm, i);
+                lowerRight &= c.x / c.w > 0 && c.y / c.w < 0;
+            }
+            float[] f = fist(rest);
+            String name = screen[0] + "x" + screen[1];
+            check("v klidu je cela ruka vpravo dole (" + name + ")", lowerRight, "");
+            check("v klidu je cela ruka pred kamerou a mezi orezovymi rovinami (" + name + ")",
+                    inFront(rest, arm, n), "");
+            check("v klidu je pest videt (" + name + ")",
+                    f[0] > 0 && f[0] < 1 && f[1] < 0 && f[1] > -1,
+                    String.format("pest %.2f, %.2f", f[0], f[1]));
+        }
+
+        // ---------- machnuti ----------
+        Matrix4f rest = HeldItemRenderer.armMatrix(new Matrix4f(), 1280, 720, 70f, 0f, 0f);
+        Matrix4f peak = HeldItemRenderer.armMatrix(new Matrix4f(), 1280, 720, 70f, 1f, 0f);
+        float[] r = fist(rest), p = fist(peak);
+        check("pri vrcholu machnuti je pest jinde nez v klidu",
+                Math.hypot(p[0] - r[0], p[1] - r[1]) > 0.3,
+                String.format("klid %.2f, %.2f -> %.2f, %.2f", r[0], r[1], p[0], p[1]));
+        check("a blizko zamerovace, porad pred kamerou",
+                Math.hypot(p[0], p[1]) < 0.5 * Math.hypot(r[0], r[1]) && inFront(peak, arm, n),
+                String.format("%.2f od stredu", Math.hypot(p[0], p[1])));
+
+        // Cele skutecne machnuti z HandSwing: nikdy za kamerou ani za blizkou
+        // rovinou, a po dobehnuti PRESNE zpatky v klidu.
+        HandSwing swing = new HandSwing();
+        swing.trigger();
+        boolean alwaysInFront = true;
+        float[] out = null, back = null;   // pest pri fast = 0,8 cestou tam a zpet
+        boolean peaked = false;
+        float before = 0f;
+        while (swing.isSwinging()) {
+            swing.update(1f / 600f);
+            Matrix4f sm = HeldItemRenderer.armMatrix(new Matrix4f(), 1280, 720, 70f, swing.fast(), swing.slow());
+            alwaysInFront &= inFront(sm, arm, n);
+            if (out == null && swing.fast() >= 0.8f) out = fist(sm);
+            if (swing.fast() < before) peaked = true;
+            if (peaked && back == null && swing.fast() <= 0.8f) back = fist(sm);
+            before = swing.fast();
+        }
+        Matrix4f after = HeldItemRenderer.matrix(new Matrix4f(), World.AIR, 1280, 720, 70f,
+                swing.fast(), swing.slow());
+        check("behem celeho machnuti je ruka pred kamerou", alwaysInFront, "");
+        check("fast = 0, slow = 0 je presne klidova poloha", after.equals(rest), "");
+        // ⚠️ Oblouk, ne kmit: pri stejne hodnote rychle krivky je pest cestou
+        // zpet jinde (niz) nez cestou tam - to dela pomala krivka.
+        check("zpatky jde pest niz nez tam (oblouk, ne kmit)",
+                out != null && back != null && back[1] < out[1] - 0.1f,
+                out == null || back == null ? "" : String.format("tam y %.2f, zpet y %.2f", out[1], back[1]));
+
+        // ---------- s blokem v ruce se dal kresli blok ----------
+        int blockVertices = HeldItemRenderer.build(World.STONE, stone) / HF;
+        int top = BlockAtlas.tile(World.STONE, BlockAtlas.FACE_TOP);
+        int bottom = BlockAtlas.tile(World.STONE, BlockAtlas.FACE_BOTTOM);
+        int side = BlockAtlas.tile(World.STONE, BlockAtlas.FACE_SIDE);
+        boolean fromAtlas = true;
+        for (int i = 0; i < blockVertices; i++) {
+            float u = stone[i * HF + 3], v = stone[i * HF + 4];
+            boolean in = false;
+            for (int t : new int[]{top, bottom, side})
+                in |= u >= BlockAtlas.u0(t) && u <= BlockAtlas.u1(t) && v >= BlockAtlas.v0(t) && v <= BlockAtlas.v1(t);
+            fromAtlas &= in;
+        }
+        check("s blokem v ruce se kresli blok z atlasu, ne ruka",
+                !HeldItemRenderer.isBareHand(World.STONE) && blockVertices == 36 && fromAtlas
+                        && !faceUvs(stone, HF, 0, blockVertices).equals(fp), "");
+        check("a drzi se jako blok, ne jako ruka",
+                HeldItemRenderer.matrix(new Matrix4f(), World.STONE, 1280, 720, 70f, 0f, 0f)
+                        .equals(HeldItemRenderer.blockMatrix(new Matrix4f(), 1280, 720, 70f, 0f, 0f))
+                        && !HeldItemRenderer.blockMatrix(new Matrix4f(), 1280, 720, 70f, 0f, 0f).equals(rest), "");
     }
 
     static boolean allOpaque(int[] pixels, int x, int y, int width, int height) {
