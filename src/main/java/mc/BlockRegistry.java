@@ -1,9 +1,21 @@
 package mc;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Bloky z texture labu nad vestavěnými konstantami ve World.
@@ -244,17 +256,423 @@ public final class BlockRegistry {
     /**
      * Načte registr. Chybějící soubor je běžný stav (mlčky prázdný registr),
      * poškozený se ohlásí na stderr a hra jede jen s vestavěnými bloky.
+     *
+     * ⚠️ JEDEN ŠPATNÝ BLOK NESHODÍ OSTATNÍ. Soubor se dá psát i ručně a překlep
+     * v jednom záznamu (dlaždice 64, zlomkové id, duplicitní jméno) přeskočí
+     * jen ten záznam - se zprávou na stderr. Kdyby kvůli němu zmizely všechny
+     * bloky, svět by přestal znát i jejich kostky. Celý soubor se zahodí jen
+     * tehdy, když to vůbec není JSON nebo chybí format či pole blocks.
      */
     public static BlockRegistry load(Path file)
     {
-        // TODO(registry): JSON, viz zadání
-        return EMPTY;
+        if(Files.notExists(file))
+        {
+            return EMPTY;
+        }
+
+        String json;
+
+        try
+        {
+            json = Files.readString(file, StandardCharsets.UTF_8);
+        }
+        catch(CharacterCodingException e)
+        {
+            System.err.println("Bloky " + file + ": neni to text v UTF-8 - jen vestavene bloky");
+            return EMPTY;
+        }
+        catch(IOException e)
+        {
+            System.err.println("Bloky " + file + " nejdou precist: " + e + " - jen vestavene bloky");
+            return EMPTY;
+        }
+
+        List<String> problems = new ArrayList<>();
+
+        try
+        {
+            BlockRegistry registry = parse(json, problems);
+            report(file.toString(), problems);
+            return registry;
+        }
+        catch(IllegalArgumentException e)
+        {
+            report(file.toString(), problems);
+            System.err.println("Bloky " + file + ": " + e.getMessage() + " - jen vestavene bloky");
+            return EMPTY;
+        }
+        catch(RuntimeException e)
+        {
+            // Pojistka: hra kvůli souboru bloků nesmí spadnout, ani kdyby tu byla chyba v kódu.
+            System.err.println("Bloky " + file + ": neocekavana chyba " + e + " - jen vestavene bloky");
+            return EMPTY;
+        }
     }
 
-    /** Zapíše registr. Chyba hru nepoloží: vrátí false a důvod napíše na stderr. */
+    /**
+     * Zapíše registr. Chyba hru nepoloží: vrátí false a důvod napíše na stderr.
+     *
+     * ⚠️ ZAPISUJE SE DO DOČASNÉHO SOUBORU A TEN SE PAK PŘEJMENUJE. Pád hry,
+     * plný disk nebo výpadek proudu uprostřed zápisu tak nechá starý soubor
+     * celý - přepisovat blocks.json napřímo by v tu chvíli nechalo useknutý
+     * JSON a s ním přišly všechny bloky z labu.
+     *
+     * ⚠️ SOUBOR, KTERÝ NEJDE CELÝ NAČÍST, SE PŘED PŘEPSÁNÍM ZÁLOHUJE do
+     * blocks.json.bak. Poškozený soubor (nebo soubor, ze kterého load musel
+     * přeskočit blok, nebo soubor novějšího formátu) se načetl jen zčásti,
+     * takže registr v paměti nemá všechno, co v něm je. První Save z labu by
+     * ten zbytek tiše smazal; ruční oprava překlepu by pak neměla z čeho
+     * vycházet. Když se zálohovat nepovede, soubor se radši nepřepíše.
+     */
     public boolean save(Path file)
     {
-        // TODO(registry): JSON, viz zadání
-        return false;
+        Path target = file.toAbsolutePath();
+        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+        boolean moved = false;
+
+        try
+        {
+            Path parent = target.getParent();
+
+            if(parent != null)
+            {
+                Files.createDirectories(parent);
+            }
+
+            backupIfDamaged(target);
+
+            // force() dostane data na disk dřív, než přejmenování ukáže nový
+            // soubor - jinak by po výpadku proudu mohl zůstat nový, ale prázdný.
+            try(FileChannel channel = FileChannel.open(temp, StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING))
+            {
+                ByteBuffer bytes = ByteBuffer.wrap(toJson().getBytes(StandardCharsets.UTF_8));
+
+                while(bytes.hasRemaining())
+                {
+                    channel.write(bytes);
+                }
+
+                channel.force(true);
+            }
+
+            try
+            {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            }
+            catch(AtomicMoveNotSupportedException e)
+            {
+                // Některé souborové systémy atomické přejmenování neumí; i tak
+                // je to lepší než psát přímo do cíle.
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            moved = true;
+            return true;
+        }
+        catch(IOException e)
+        {
+            System.err.println("Bloky " + file + " nejdou ulozit: " + e);
+            return false;
+        }
+        finally
+        {
+            if(!moved)
+            {
+                try
+                {
+                    Files.deleteIfExists(temp);
+                }
+                catch(IOException ignored)
+                {
+                    // Zbytek .tmp nevadí - příští zápis ho přepíše.
+                }
+            }
+        }
+    }
+
+    /** Zkopíruje existující soubor do .bak, když ho load nedokáže přečíst celý. */
+    private static void backupIfDamaged(Path file) throws IOException
+    {
+        if(!Files.isRegularFile(file) || loadsCompletely(file))
+        {
+            return;
+        }
+
+        Path backup = file.resolveSibling(file.getFileName() + ".bak");
+        Files.copy(file, backup, StandardCopyOption.REPLACE_EXISTING);
+        System.err.println("Bloky " + file + ": puvodni soubor nesel cely nacist, zaloha je v " + backup);
+    }
+
+    /** Přečte se soubor bez jediné výhrady? Nic nevypisuje - to už udělal load. */
+    private static boolean loadsCompletely(Path file)
+    {
+        try
+        {
+            List<String> problems = new ArrayList<>();
+            parse(Files.readString(file, StandardCharsets.UTF_8), problems);
+            return problems.isEmpty();
+        }
+        catch(IOException | RuntimeException e)
+        {
+            return false;
+        }
+    }
+
+    /**
+     * Registr jako JSON - přesně to, co zapíše save(). Bloky podle id, odsazení
+     * dvě mezery, "\n" i na Windows (soubor má vypadat všude stejně, ať jde
+     * porovnat nebo dát do gitu), na konci nový řádek.
+     */
+    String toJson()
+    {
+        StringBuilder out = new StringBuilder();
+        out.append("{\n");
+        out.append("  \"format\": ").append(FORMAT).append(",\n");
+        out.append("  \"nextId\": ").append(nextId).append(",\n");
+
+        List<BlockDef> list = blocks();
+
+        if(list.isEmpty())
+        {
+            out.append("  \"blocks\": []\n");
+        }
+        else
+        {
+            out.append("  \"blocks\": [\n");
+
+            for(int i = 0; i < list.size(); i++)
+            {
+                BlockDef def = list.get(i);
+
+                // Float.toString nezávisí na locale (vždycky tečka) a vrací nejkratší
+                // zápis, který se přečte zpátky na tentýž float. NaN a nekonečno
+                // JSON nezná - null z nich udělá jeden přeskočený blok místo
+                // souboru, který nejde přečíst celý.
+                String hardness = Float.isFinite(def.hardness()) ? Float.toString(def.hardness()) : "null";
+
+                out.append("    {\n");
+                out.append("      \"id\": ").append(def.id()).append(",\n");
+                out.append("      \"name\": ").append(Json.quote(def.name())).append(",\n");
+                out.append("      \"hardness\": ").append(hardness).append(",\n");
+                out.append("      \"solid\": ").append(def.solid()).append(",\n");
+                out.append("      \"opaque\": ").append(def.opaque()).append(",\n");
+                out.append("      \"tiles\": {\"top\": ").append(def.topTile())
+                        .append(", \"side\": ").append(def.sideTile())
+                        .append(", \"bottom\": ").append(def.bottomTile()).append("}\n");
+                out.append(i < list.size() - 1 ? "    },\n" : "    }\n");
+            }
+
+            out.append("  ]\n");
+        }
+
+        return out.append("}\n").toString();
+    }
+
+    /**
+     * Registr z JSON textu. Když to není JSON nebo chybí format či blocks,
+     * hodí IllegalArgumentException se srozumitelnou zprávou; neplatné
+     * jednotlivé bloky jen přeskočí a ohlásí na stderr.
+     */
+    static BlockRegistry fromJson(String json)
+    {
+        List<String> problems = new ArrayList<>();
+
+        try
+        {
+            return parse(json, problems);
+        }
+        finally
+        {
+            report("", problems);
+        }
+    }
+
+    private static void report(String source, List<String> problems)
+    {
+        String prefix = source.isEmpty() ? "Bloky: " : "Bloky " + source + ": ";
+
+        for(String problem : problems)
+        {
+            System.err.println(prefix + problem);
+        }
+    }
+
+    /**
+     * Vlastní čtení. Chyby celého souboru hází jako IllegalArgumentException,
+     * výhrady k jednotlivým blokům (a varování) přidá do problems - load je
+     * vypíše, save podle nich pozná, že je potřeba záloha.
+     *
+     * ⚠️ nextId = max(nextId ze souboru, největší id ze souboru + 1, FIRST_ID)
+     * a do "největšího id" se počítají i PŘESKOČENÉ bloky. Přeskočený blok
+     * může mít kostky v uloženém světě; kdyby jeho id dostal nový blok,
+     * po opravě souboru by se o id přetahovaly dva bloky.
+     */
+    private static BlockRegistry parse(String json, List<String> problems)
+    {
+        if(!(Json.parse(json) instanceof Map<?, ?> root))
+        {
+            throw new IllegalArgumentException("koren neni objekt");
+        }
+
+        if(!(root.get("format") instanceof Double format))
+        {
+            throw new IllegalArgumentException("chybi cislo \"format\"");
+        }
+        if(format > FORMAT)
+        {
+            // Stejně jako GENERATOR_VERSION: varovat, ale číst - neznámá pole
+            // se ignorují a známé bloky zůstanou.
+            problems.add("format " + number(format) + " je novejsi nez " + FORMAT
+                    + " - nezname udaje se ignoruji");
+        }
+
+        if(!(root.get("blocks") instanceof List<?> entries))
+        {
+            throw new IllegalArgumentException("chybi pole \"blocks\"");
+        }
+
+        BlockDef[] byId = new BlockDef[LAST_ID + 1];
+        Set<String> names = new HashSet<>();
+        int next = FIRST_ID;
+
+        Object rawNext = root.get("nextId");
+
+        if(rawNext != null)
+        {
+            Integer fileNext = wholeNumber(rawNext);
+
+            if(fileNext == null)
+            {
+                problems.add("nextId neni cele cislo - dopocita se z bloku");
+            }
+            else if(fileNext > LAST_ID + 1)
+            {
+                // Radši plný registr než riskovat, že se nějaké id použije podruhé.
+                problems.add("nextId " + fileNext + " je za koncem rozsahu - nova id dosla");
+                next = LAST_ID + 1;
+            }
+            else
+            {
+                next = Math.max(next, fileNext);
+            }
+        }
+
+        for(int i = 0; i < entries.size(); i++)
+        {
+            String where = "blok c. " + (i + 1);
+
+            if(!(entries.get(i) instanceof Map<?, ?> entry))
+            {
+                problems.add(where + " preskocen: neni to objekt");
+                continue;
+            }
+
+            if(!(entry.get("id") instanceof Double rawId))
+            {
+                problems.add(where + " preskocen: chybi id");
+                continue;
+            }
+            if(rawId != Math.rint(rawId) || rawId < FIRST_ID || rawId > LAST_ID)
+            {
+                problems.add(where + " preskocen: id " + number(rawId)
+                        + " neni cele cislo od " + FIRST_ID + " do " + LAST_ID);
+                continue;
+            }
+
+            int id = (int) (double) rawId;
+            where = "blok " + id + " (c. " + (i + 1) + ")";
+
+            // Id je platné, takže ho tenhle záznam drží, i kdyby se dál přeskočil.
+            next = Math.max(next, id + 1);
+
+            if(byId[id] != null)
+            {
+                problems.add(where + " preskocen: id " + id + " uz ma blok \"" + byId[id].name() + "\"");
+                continue;
+            }
+
+            String reason = null;
+            Integer top = null, side = null, bottom = null;
+
+            Object name = entry.get("name");
+            Object hardness = entry.get("hardness");
+            Object solid = entry.get("solid");
+            Object opaque = entry.get("opaque");
+
+            if(!(name instanceof String))
+            {
+                reason = "chybi name nebo to neni text";
+            }
+            else if(!(hardness instanceof Double))
+            {
+                reason = "chybi hardness nebo to neni cislo";
+            }
+            else if(!(solid instanceof Boolean))
+            {
+                reason = "chybi solid nebo to neni true/false";
+            }
+            else if(!(opaque instanceof Boolean))
+            {
+                reason = "chybi opaque nebo to neni true/false";
+            }
+            else if(!(entry.get("tiles") instanceof Map<?, ?> tiles))
+            {
+                reason = "chybi objekt tiles";
+            }
+            else
+            {
+                top = wholeNumber(tiles.get("top"));
+                side = wholeNumber(tiles.get("side"));
+                bottom = wholeNumber(tiles.get("bottom"));
+
+                if(top == null || side == null || bottom == null)
+                {
+                    reason = "tiles musi mit cela cisla top, side a bottom";
+                }
+                else
+                {
+                    reason = validate((String) name, (float) (double) (Double) hardness, top, side, bottom);
+                }
+            }
+
+            if(reason != null)
+            {
+                problems.add(where + " preskocen: " + reason);
+                continue;
+            }
+
+            String trimmed = ((String) name).trim();
+
+            if(!names.add(trimmed.toLowerCase(Locale.ROOT)))
+            {
+                problems.add(where + " preskocen: jmeno \"" + trimmed + "\" uz ma jiny blok");
+                continue;
+            }
+
+            byId[id] = new BlockDef((byte) id, trimmed, (float) (double) (Double) hardness,
+                    (Boolean) solid, (Boolean) opaque, top, side, bottom);
+        }
+
+        return new BlockRegistry(byId, next);
+    }
+
+    /** Celé číslo z JSON hodnoty, nebo null pro jiný typ, zlomek a číslo mimo int. */
+    private static Integer wholeNumber(Object value)
+    {
+        if(value instanceof Double d && d == Math.rint(d) && Math.abs(d) <= Integer.MAX_VALUE)
+        {
+            return (int) (double) d;
+        }
+
+        return null;
+    }
+
+    /** Číslo do zprávy: celé bez ".0". */
+    private static String number(double value)
+    {
+        return value == Math.rint(value) && Math.abs(value) < 1e15
+                ? Long.toString((long) value)
+                : Double.toString(value);
     }
 }
