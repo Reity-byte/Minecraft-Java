@@ -368,6 +368,13 @@ public class Main {
             // bylo stisknuté - proto se sleduje i puštění.
             if (button == GLFW_MOUSE_BUTTON_LEFT && state == GameState.PLAYING) {
                 miningHeld = action == GLFW_PRESS;
+
+                // Zmáčknutí máchne i do vzduchu, s blokem i s prázdnou rukou -
+                // jako v Minecraftu. Držení do vzduchu už znovu nemáchá; opakované
+                // máchání při kopání obstarává update() jen se zaměřeným blokem.
+                if (action == GLFW_PRESS) {
+                    swing.trigger();
+                }
             }
 
             // Obrazovka kontejneru potřebuje zmáčknutí i puštění zvlášť -
@@ -502,7 +509,7 @@ public class Main {
         playerSkin = Textures.playerSkin();
         worldRenderer = new WorldRenderer(blockAtlas, playerSkin);
         sky = new SkyRenderer();
-        heldItem = new HeldItemRenderer(blockAtlas);
+        heldItem = new HeldItemRenderer(blockAtlas, playerSkin);
         shapes = new Renderer2D();
         // Font se rasterizuje MALÝ a na obrazovku se kreslí zvětšený celým
         // číslem (Gui.scale). Při větší velikosti by zvětšení vyšlo obrovské
@@ -884,13 +891,13 @@ public class Main {
 
     /**
      * Ruka se kreslí až po světě a po filtru vody, ale PŘED HUD - hotbar
-     * i zaměřovač jsou nad ní.
+     * i zaměřovač jsou nad ní. S prázdným slotem je vidět holá ruka.
      */
     private void drawHeldItem() {
         ItemStack held = inventory.hotbar(selectedSlot);
 
-        // Ve třetí osobě drží blok model postavy - viz playerBody().
-        if (held.isEmpty() || camera.view != Camera.View.FIRST_PERSON) {
+        // Ve třetí osobě drží blok (i ruku) model postavy - viz playerBody().
+        if (camera.view != Camera.View.FIRST_PERSON) {
             return;
         }
 

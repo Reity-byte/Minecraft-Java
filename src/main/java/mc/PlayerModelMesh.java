@@ -89,6 +89,9 @@ public class PlayerModelMesh {
     private final Vector3f scratch = new Vector3f();
     private float sky, block;
 
+    /** Uložený odkaz, ať emitPart() nevyrábí každý frame nový objekt. */
+    private final FaceSink skinFace = this::face;
+
     private int vao = 0;
     private int vbo = 0;
     private FloatBuffer upload;
@@ -155,7 +158,31 @@ public class PlayerModelMesh {
     private void emitPart(Part p, float rx, float ry, float rz)
     {
         partMatrix(p, rx, ry, rz);
+        unfold(p, skinFace);
+    }
 
+    /**
+     * Příjemce stěn z unfold(): čtyři rohy (poloha v pixelech modelu, u, v
+     * v pixelech skinu) proti směru hodinových ručiček zvenku a normála stěny
+     * v souřadnicích dílu.
+     */
+    interface FaceSink {
+        void face(float ax, float ay, float az, float au, float av,
+                  float bx, float by, float bz, float bu, float bv,
+                  float cx, float cy, float cz, float cu, float cv,
+                  float dx, float dy, float dz, float du, float dv,
+                  float nx, float ny, float nz);
+    }
+
+    /**
+     * Rozbalí kvádr dílu na šest stěn - JEDINÉ místo, kde se počítají UV do
+     * skinu. Sdílí ho postava i holá ruka v první osobě (HeldItemRenderer),
+     * takže ruka vypadá v obou pohledech stejně a skin se mění na jednom místě.
+     *
+     * Pořadí stěn: vršek, spodek, +X, -X, předek, záda.
+     */
+    static void unfold(Part p, FaceSink sink)
+    {
         float x0 = p.x0(), x1 = p.x1();
         float y0 = p.y0(), y1 = p.y1();
         float z0 = p.z0(), z1 = p.z1();
@@ -174,23 +201,23 @@ public class PlayerModelMesh {
         float front = z1, back = z0;
 
         // +Y vršek: předek u v + d, zadek u v
-        face(x0, y1, z0, u + d, v,       x0, y1, z1, u + d, v + d,
-             x1, y1, z1, u + d + w, v + d, x1, y1, z0, u + d + w, v,       0, 1, 0);
+        sink.face(x0, y1, z0, u + d, v,       x0, y1, z1, u + d, v + d,
+                  x1, y1, z1, u + d + w, v + d, x1, y1, z0, u + d + w, v,       0, 1, 0);
         // -Y spodek
-        face(x0, y0, z0, u + d + w, v,   x1, y0, z0, u + d + 2 * w, v,
-             x1, y0, z1, u + d + 2 * w, v + d, x0, y0, z1, u + d + w, v + d, 0, -1, 0);
+        sink.face(x0, y0, z0, u + d + w, v,   x1, y0, z0, u + d + 2 * w, v,
+                  x1, y0, z1, u + d + 2 * w, v + d, x0, y0, z1, u + d + w, v + d, 0, -1, 0);
         // +X levá strana postavy: předek u u + d + w
-        face(x1, y0, back, u + 2 * d + w, v + d + h,  x1, y1, back, u + 2 * d + w, v + d,
-             x1, y1, front, u + d + w, v + d,         x1, y0, front, u + d + w, v + d + h, 1, 0, 0);
+        sink.face(x1, y0, back, u + 2 * d + w, v + d + h,  x1, y1, back, u + 2 * d + w, v + d,
+                  x1, y1, front, u + d + w, v + d,         x1, y0, front, u + d + w, v + d + h, 1, 0, 0);
         // -X pravá strana postavy: předek u u + d
-        face(x0, y0, back, u, v + d + h,              x0, y0, front, u + d, v + d + h,
-             x0, y1, front, u + d, v + d,             x0, y1, back, u, v + d,             -1, 0, 0);
+        sink.face(x0, y0, back, u, v + d + h,              x0, y0, front, u + d, v + d + h,
+                  x0, y1, front, u + d, v + d,             x0, y1, back, u, v + d,             -1, 0, 0);
         // +Z předek (obličej): -X u u + d
-        face(x0, y0, z1, u + d, v + d + h,            x1, y0, z1, u + d + w, v + d + h,
-             x1, y1, z1, u + d + w, v + d,            x0, y1, z1, u + d, v + d,            0, 0, 1);
+        sink.face(x0, y0, z1, u + d, v + d + h,            x1, y0, z1, u + d + w, v + d + h,
+                  x1, y1, z1, u + d + w, v + d,            x0, y1, z1, u + d, v + d,            0, 0, 1);
         // -Z záda: zrcadlově, -X u u + 2d + 2w
-        face(x0, y0, z0, u + 2 * d + 2 * w, v + d + h, x0, y1, z0, u + 2 * d + 2 * w, v + d,
-             x1, y1, z0, u + 2 * d + w, v + d,        x1, y0, z0, u + 2 * d + w, v + d + h, 0, 0, -1);
+        sink.face(x0, y0, z0, u + 2 * d + 2 * w, v + d + h, x0, y1, z0, u + 2 * d + 2 * w, v + d,
+                  x1, y1, z0, u + 2 * d + w, v + d,        x1, y0, z0, u + 2 * d + w, v + d + h, 0, 0, -1);
     }
 
     /**
