@@ -32,7 +32,7 @@ V Git Bashi je nutné classpath převádět `cygpath -w` a spojovat středníkem
 
 ## Testy
 
-`src/test/java/mc/` — **1002 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **1312 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -64,6 +64,10 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
 | `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
 | `TextureLabTest` | Index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře** |
+| `WorldSavesTest` | Světy na disku: **migrace starého `saves/world.dat`** (bajtová shoda, metadata, `world.dat.migrated`, druhý běh bez duplicity, pád uprostřed, obsazené jméno, poškozený zdroj), očištění jména na složku (zakázané znaky, `CON`/`com1`/`aux.txt`, tečky a mezery na konci), unikátní složka bez ohledu na velikost písmen, metadata tam a zpět (i `Long.MIN_VALUE`), **poškozený `world.json` svět neschová**, řazení podle posledního hraní, mazání jen vlastní složky |
+| `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu změřené před refaktorem** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) |
+| `ThumbnailTest` | Náhled: orientace (horní řádek obrazovky = horní řádek obrázku), výřez středu podle poměru stran, zmenšení průměrováním, PNG tam a zpět, odmítnutí příliš velkého obrázku |
+| `WorldScreenTest` | Obrazovky světů: psaní do pole se jménem i seedem, náhled cílové složky (i s `(2)`), Tab/Esc/Enter/Ctrl+V, seznam od naposledy hraného, výběr klikem, **dvojklik hraje**, šipky a rolování, **mazání až po potvrzení**, prázdný seznam, a celá cesta založit → uložit → najít v seznamu → načíst se stejným terénem |
 | `OptionsTest` | Nastavení: výchozí hodnoty = dnešní hra, oříznutí na meze, **render ≤ simulation po 2000 náhodných změnách**, převod na čísla enginu (dohled < `(loadRadius-1)·16`), `options.json` tam a zpět, **chybějící i šest druhů poškozeného souboru → výchozí hodnoty**, jedna špatná hodnota → výchozí jen pro ni, záloha `.bak`, obrazovka Options (hit-testy, tažení posuvníku i mimo dráhu, žádné překryvy), výběr monitoru pro fullscreen, plánování stropu FPS, křivka jasu, GUI měřítko |
 | `BlockRegistryTest` | `textures/blocks.json`: tvar výstupu, round-trip přes text i disk, **neexistující a poškozený soubor → jen vestavěné bloky** (náhodné bajty, useknutý JSON, špatné typy), přeskočení jednotlivých neplatných bloků, **stabilita id přes víc sezení** (i po ručním smazání bloku ze souboru), novější `format`, escape v JSON, plný registr, **záloha poškozeného souboru do `.bak`** |
 | `LabBlockTest` | Blok z labu ve hře: pevný/neprůhledný/obojí ne, neznámé id, **doba kopání podle tvrdosti z dat** (`Mining`), vytěžený blok do inventáře a zpět do světa, **každá stěna meshe bere UV ze své dlaždice**, culling a stín podle neprůhlednosti, hráč duchem propadne a na mramoru stojí, paprsek zaměří i ducha, zvuk podle tvrdosti, náhled labu = mesh hry, **uložený svět nese id beze změny formátu** (svět bez bloků z labu je bajt po bajtu stejný), koloběh lab → soubor → restart |
@@ -98,7 +102,11 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `ChunkColumn` — 8 sekcí nad sebou, líně alokované (prázdná sekce = `null`)
 - `World` — `HashMap<Long, ChunkColumn>`, generování terénu i podzemí na worker vlákně, load/unload, dirty sekce
 - `SimplexNoise` — 2D simplex (výšky) a 3D simplex (jeskyně), pevný seed `12345`
-- `WorldStorage` — uložení a načtení rozdílu proti generátoru; **bez GL**
+- `WorldStorage` — uložení a načtení rozdílu proti generátoru (jeden svět); **bez GL**
+- `WorldSaves` — světy v `saves/<složka>/`, metadata, migrace starého formátu; **bez GL**
+- `Seeds` — seed z textu (prázdné = náhodný); **bez GL**
+- `TerrainGenerator` — neměnný generátor terénu pro jeden seed (výšky, jeskyně, rudy, stromy, spawn); **bez GL**
+- `Thumbnails` — náhled světa: framebuffer → PNG a zpátky; **bez GL**
 - `BlockRegistry` — bloky z texture labu (id 64–127) nad vestavěnými konstantami, `textures/blocks.json`; **bez GL**
 - `BlockDef` — jeden blok z labu: jméno, tvrdost, pevný, neprůhledný, dlaždice po stěnách
 - `Json` — malý čtenář a zapisovač JSON pro `blocks.json` (žádná nová závislost)
@@ -128,6 +136,8 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `WindowMode` — přepnutí okno / celá obrazovka (GLFW), výběr monitoru **bez GL**
 - `FrameLimiter` — strop FPS, když je vsync vypnutý; plánování **bez GL**
 - `SafeFiles` — atomický zápis textového souboru se zálohou `.bak`; **bez GL**
+- `SelectWorldScreen` — seznam světů s náhledy, mazání s potvrzením; hit-testy **bez GL**
+- `CreateWorldScreen` — jméno a seed nového světa; hit-testy **bez GL**
 
 **2D vrstva**
 - `Gui` — celočíselné měřítko UI (i volba GUI Scale) a zarovnání na GUI pixel
@@ -417,6 +427,111 @@ ne pádem. `SaveTest` na to střílí useknutým i cizím souborem.
 
 **Ukládá se při odchodu do menu i při zavření okna.** Zavřít okno uprostřed hry je běžný
 způsob, jak skončit, takže spoléhat jen na tlačítko v pauze by znamenalo tichou ztrátu.
+
+### Světy na disku
+
+**Každý svět má vlastní složku.** `saves/<složka>/world.dat` (formát `WorldStorage` se
+nezměnil ani o bajt), vedle něj `world.json` s metadaty a `icon.png` s náhledem. Název
+složky je jen odvozený od jména světa — skutečné jméno je v `world.json`, takže dva světy
+se klidně smí jmenovat stejně. `WorldSaves.folderFor()` řeší tři pasti najednou: zakázané
+znaky Windows `<>:"/\|?*`, jména zařízení (`CON`, `NUL`, `COM1`… jsou zakázaná i s příponou,
+takže `con.txt` → `con_.txt`) a tečky nebo mezery na konci, které Windows tiše zahodí.
+K tomu tečka na začátku → `_`, protože skrytou složku seznam světů přeskakuje. Unikátnost
+se hledá bez ohledu na velikost písmen (`World (2)`), jinak by se na Windows druhý svět
+nasypal do složky prvního.
+
+```json
+{
+  "format": 1,
+  "name": "Cave Base",
+  "seed": "99162322",
+  "seedText": "hello",
+  "created": 1790000000000,
+  "lastPlayed": 1790000100000
+}
+```
+
+**⚠️ Seed je ve `world.json` jako ŘETĚZEC.** `Json` čte čísla jako `double` a ten má
+53bitovou mantisu — seed nad 2^53 by se načetl jako jiné číslo, tedy jako úplně jiný svět.
+Zápis jde přes `SafeFiles.writeAtomically`, takže platí i `.bak` pro soubor, který nejde
+celý načíst. **Poškozená metadata nesmí svět schovat:** `world.dat` je to jediné, co nejde
+dopočítat, takže když `world.json` nejde přečíst, zkusí se `world.json.bak` a pak se jméno
+odvodí ze složky, seed z `World.DEFAULT_SEED` a časy z `mtime` souboru — svět je pořád
+v seznamu a pořád se dá hrát, jen se o tom napíše na stderr.
+
+**Migrace starého `saves/world.dat` je stavěná tak, aby se nedalo přijít o data.** Postup je
+kopie do `saves/.migrating` → ověření bajt po bajtu (`Files.mismatch`) → metadata →
+přejmenování dočasné složky na světovou → **teprve nakonec** přejmenování starého souboru na
+`world.dat.migrated` (nikdy se nepřepíše, druhý dostane `-2`). Starý soubor se **nemaže** —
+smaže ho uživatel sám, až si svět ověří. Pád kdekoliv uprostřed nechá starý soubor tam, kde
+byl: zbytek `.migrating` se příště smaže a přenos se zopakuje, a když už světová složka
+existuje (pád mezi oběma přejmenováními), pozná se podle `migratedFrom` a podle velikosti
+a CRC32 zdroje v metadatech a jen se dokončí přejmenování (`FINISHED_EARLIER`) — duplikát
+nevznikne ani tehdy, když se v přeneseném světě mezitím hrálo. Přenesený svět se jmenuje
+**„Old World"** a dostává `World.DEFAULT_SEED`, protože starý svět vznikl s pevným seedem
+12345 a terén pod stavbami musí zůstat tentýž.
+
+**Svět, který nejde načíst, se NEPŘEPISUJE novým.** Dřív byl svět jeden, takže poškozený
+soubor prostě znamenal „založ nový". Teď by to znamenalo přepsat konkrétní uložený svět,
+a tak `Main.playWorld()` jen napíše důvod na konzoli a nechá hráče v seznamu.
+
+### Seed
+
+**Pravidlo pro políčko Seed je stejné jako v Minecraftu:** prázdné → náhodné číslo, text,
+který je číslo → to číslo, cokoliv jiného → `String.hashCode()`. Ten hash není implementační
+detail — Java ho má předepsaný specifikací, takže stejný text dá stejný svět napořád i po
+upgradu JDK. **`SimplexNoise` je instance se seedem** (statické `noise()` zůstalo pro
+`ChunkTest` a jede na výchozím seedu); ⚠️ `Random` si ze seedu bere jen dolních 48 bitů,
+takže se horní bity přimíchají, jinak by dva seedy lišící se jen nahoře daly identický svět.
+Generování se přestěhovalo z `World` do neměnné třídy `TerrainGenerator` (výšky, jeskyně,
+rudy, stromy, spawn) — neměnnost je podmínka, ne ozdoba: worker vlákno na ní volá
+`generateColumn()` bez zámku a oddělení od `World` konstrukčně zaručuje, že generátor nevidí
+na mapu sloupců ani na změny hráče. Změřeno A/B na témže stroji: horká cesta (výšky + jeskynní
+šum přes 160×160 sloupců) vyšla po refaktoru na **29 ms proti 34 ms** předtím a `World.update()`
+při letu má tentýž medián — instanční pole generátor nezpomalila.
+
+**⚠️ S `World.DEFAULT_SEED` musí vyjít bit po bitu tentýž terén jako před zavedením seedů**,
+jinak by se všem uloženým světům posunul terén pod stavbami (a `GENERATOR_VERSION` se kvůli
+seedům nezvyšoval). Seed se proto do hashů stromů a rud míchá XORem hodnoty
+`fmix64(seed ^ DEFAULT_SEED)`, která je pro výchozí seed nula — XOR nulou se nepozná. XOR,
+a ne přičtení: lineární část hashe je v `x` invertovatelná, takže přičtená konstanta by
+znamenala jen posun světa v ose x a dva seedy by daly tentýž vzor stromů a žil, jen jinde.
+`SeedTest` shodu hlídá kontrolními součty změřenými na kódu před refaktorem (tři oblasti
+bloků včetně záporných souřadnic, výšky na ploše 6000×6000, spawn a výška u něj).
+
+### Náhled světa
+
+`Thumbnails` dělá z obsahu obrazovky obrázek 128×72 a zpátky. ⚠️ `glReadPixels` má řádek 0
+**dole**, obrázek **nahoře**, takže se řádky překlápí. ⚠️ Zmenšuje se **průměrováním** (box
+filtr přes zdrojové pixely každého cílového), ne vynecháváním — okno je řádově 10× větší,
+takže brát každý desátý pixel znamená, že z celého stromu rozhodne jeden texel a náhled šumí.
+Nejdřív se ale vystřihne střed se správným poměrem stran, jinak by se krajina natáhla. Zápis
+PNG jde přes dočasný soubor a `SafeFiles.moveReplacing`, čtení kontroluje rozměr z hlavičky
+ještě před dekódováním — do složky světa může kdokoliv podstrčit fotku 8000×6000 a seznam
+světů čte náhledy všech najednou. Celé je to bez GL (dostane hotový buffer), takže to jde
+testovat headless.
+
+**Náhled vzniká přesně tam, kde se svět ukládá:** při „Save and Quit to Title" a při zavření
+okna uprostřed hry. Svět se pro něj překreslí ZNOVU, bez HUD a bez menu pauzy (`renderWorld()`
+a hned `glReadPixels` ze zadního bufferu), takže v seznamu je čistý záběr místa, kde hráč
+skončil — ne obrazovka s tlačítky přes půlku.
+
+### Obrazovky světů
+
+**Menu vede přes Singleplayer do seznamu světů**, ne rovnou do hry: hlavní menu má
+Singleplayer / Options / Texture Lab / Quit, pauza Resume / Options / Save and Quit to Title.
+Seznam je seřazený od naposledy hraného (to je taky ten předvybraný), u každého světa náhled,
+jméno, datum a seed; klik vybírá, dvojklik i Enter hrají, šipky přebírají výběr a kolečko
+roluje. **Mazání se ptá**, protože je to jediná nevratná věc v celém menu — a maže jen složku
+uvnitř `saves/`.
+
+⚠️ **Při potvrzovacím dialogu se texty seznamu vůbec nekreslí.** Text jde na obrazovku až po
+všech tvarech (dva průchody, jako v labu), takže by jinak prosvítal skrz panel dialogu —
+ztmavení pod ním zakryje jen tvary.
+
+**Zakládání světa je jméno a seed.** Pod jménem je vidět, do jaké složky svět půjde, včetně
+`(2)`, když stejná složka existuje. Prázdný seed znamená náhodný svět; hint pod polem to
+říká. Ctrl+V vloží do pole, ve kterém je fokus — seedy se obvykle odněkud kopírují.
 
 ### Voda
 
@@ -1398,6 +1513,7 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 
 | | |
 |---|---|
+| Singleplayer → seznam světů | hrát (dvojklik / Enter), založit, smazat (s potvrzením) |
 | E | inventář (znovu E nebo Esc zavře) |
 | Shift+LMB v inventáři | přesun hromádky hotbar ↔ batoh; z crafting mřížky zpět do inventáře |
 | LMB / PMB táhnout v inventáři | rozdělit drženou hromádku rovnoměrně / po jednom kusu |
@@ -1459,10 +1575,9 @@ projevilo by se to tak, že svět nestíhá dosypávat — ne zádrhelem.
 **Perzistence světa — hotovo.** Ukládá se rozdíl proti generátoru do `saves/world.dat`;
 v hlavním menu přibude „Load World", jakmile nějaký uložený svět existuje.
 
-**Zatím jeden slot světa.** Víc světů by chtělo výběr v menu (seznam souborů, název,
-mazání) — `WorldStorage` bere cestu jako parametr, takže samotné ukládání je na to
-připravené. Chybí i seed jako součást uloženého světa: teď je pevný v `SimplexNoise`,
-takže všechny světy vypadají stejně.
+**Víc světů — hotovo.** `saves/<složka>/` s metadaty, náhledem a vlastním seedem, obrazovky
+na výběr i zakládání světa a migrace starého jednoho slotu. Zbývá: přejmenování světa,
+kopie světa, víc typů světa (superflat), záloha při poškození `world.dat`.
 
 **Voda — hotovo.** Jezera po hladinu `SEA_LEVEL` s písečnými plážemi, průhledné kreslení
 druhým průchodem, plavání. Změřeno: vodu má 7 % sloupců.
@@ -1514,10 +1629,10 @@ je napsaný pro hráče, ale nic v něm na hráče vázané není kromě vstupn�
 a hvězdami. Co by šlo přidat později: měsíční fáze, barevný nádech při východu a západu,
 a mraky.
 
-**Potom správa světů, na kterou zatím není postavené nic:** výběr z víc uložených světů
-(`WorldStorage` už bere cestu jako parametr), nastavení, volby při zakládání světa včetně
-**seedu** (teď je pevný v `SimplexNoise`, takže všechny světy vypadají stejně), náhledové
-obrázky u uložených světů a jejich mazání.
+**Správa světů a nastavení — hotovo.** Výběr z víc světů s náhledy, zakládání se jménem
+a seedem, mazání s potvrzením, obrazovka Options s okamžitým účinkem a `options.json`.
+Zbývá: přejmenování světa, volby při zakládání nad rámec seedu (typ světa, bonusová truhla),
+přebindování kláves a hlasitost.
 
 **Známé zjednodušení u vody:** neteče a nešíří se — je to jen statická výplň pod hladinou.
 Jezero se dá zasypat, ale ne vypustit ani přelít. Chybí i utopení a bubliny.
