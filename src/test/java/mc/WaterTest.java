@@ -22,6 +22,7 @@ public class WaterTest {
 
     public static void main(String[] args) {
         World w = new World();
+        TerrainGenerator gen = w.generator();
         w.loadRadius = RADIUS;
         w.unloadRadius = RADIUS + 2;
         w.updateBlocking(8f, 8f);
@@ -37,7 +38,7 @@ public class WaterTest {
             for (int z = lo; z <= hi; z++) {
                 columns++;
                 boolean any = false;
-                int height = World.terrainHeight(x, z);
+                int height = gen.terrainHeight(x, z);
 
                 for (int y = 0; y < World.WORLD_HEIGHT; y++) {
                     if (w.getBlock(x, y, z) != World.WATER) continue;
@@ -72,7 +73,7 @@ public class WaterTest {
         int waterUnderground = 0;
         for (int x = lo; x <= hi; x++)
             for (int z = lo; z <= hi; z++) {
-                int height = World.terrainHeight(x, z);
+                int height = gen.terrainHeight(x, z);
                 for (int y = 0; y < height; y++)
                     if (w.getBlock(x, y, z) == World.WATER) waterUnderground++;
             }
@@ -132,14 +133,14 @@ public class WaterTest {
         check("do pevneho bloku se polozit neda", !w.placeBlock(cx, cy, cz, World.PLANKS), "");
 
         // ---------- 6) spawn je na sousi ----------
-        int[] spawn = World.findLandSpawn(8, 8, 64);
+        int[] spawn = gen.findLandSpawn(8, 8, 64);
         check("spawn je nad hladinou",
-                World.terrainHeight(spawn[0], spawn[1]) >= World.SEA_LEVEL,
-                "vyska " + World.terrainHeight(spawn[0], spawn[1])
+                gen.terrainHeight(spawn[0], spawn[1]) >= World.SEA_LEVEL,
+                "vyska " + gen.terrainHeight(spawn[0], spawn[1])
                         + " na " + spawn[0] + "," + spawn[1]);
         System.out.printf("Spawn posunut z 8,8 (vyska %d) na %d,%d (vyska %d)%n",
-                World.terrainHeight(8, 8), spawn[0], spawn[1],
-                World.terrainHeight(spawn[0], spawn[1]));
+                gen.terrainHeight(8, 8), spawn[0], spawn[1],
+                gen.terrainHeight(spawn[0], spawn[1]));
 
         // ---------- 7) plavani ----------
         // Nadrz vysoko nad terenem: podlaha a nad ni 8 vrstev vody.

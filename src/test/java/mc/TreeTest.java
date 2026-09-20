@@ -22,6 +22,7 @@ public class TreeTest {
 
     public static void main(String[] args) {
         World w = new World();
+        TerrainGenerator gen = w.generator();
         w.loadRadius = RADIUS;
         w.unloadRadius = RADIUS + 2;
         w.updateBlocking(8f, 8f);
@@ -33,7 +34,7 @@ public class TreeTest {
         int trees = 0, logs = 0, leaves = 0;
         for (int x = lo; x <= hi; x++)
             for (int z = lo; z <= hi; z++) {
-                if (World.hasTree(x, z)) trees++;
+                if (gen.hasTree(x, z)) trees++;
                 for (int y = 0; y < World.WORLD_HEIGHT; y++) {
                     byte b = w.getBlock(x, y, z);
                     if (b == World.LOG) logs++;
@@ -59,7 +60,7 @@ public class TreeTest {
 
         for (int x = lo + 4; x <= hi - 4; x++) {
             for (int z = lo + 4; z <= hi - 4; z++) {
-                if (!World.hasTree(x, z)) continue;
+                if (!gen.hasTree(x, z)) continue;
 
                 checkedTrees++;
 
@@ -68,7 +69,7 @@ public class TreeTest {
                         || (z - 2 >> Chunk.BITS) != (z + 2 >> Chunk.BITS);
                 if (spans) acrossBoundary++;
 
-                int ground = World.terrainHeight(x, z);
+                int ground = gen.terrainHeight(x, z);
 
                 // kmen
                 if (w.getBlock(x, ground, z) != World.LOG) incomplete++;
@@ -104,8 +105,8 @@ public class TreeTest {
         int inWater = 0, onSand = 0;
         for (int x = lo; x <= hi; x++)
             for (int z = lo; z <= hi; z++) {
-                if (!World.hasTree(x, z)) continue;
-                int ground = World.terrainHeight(x, z);
+                if (!gen.hasTree(x, z)) continue;
+                int ground = gen.terrainHeight(x, z);
                 if (ground < World.SEA_LEVEL) inWater++;
                 if (w.getBlock(x, ground - 1, z) == World.SAND) onSand++;
             }
@@ -117,8 +118,8 @@ public class TreeTest {
         int floating = 0, buried = 0;
         for (int x = lo + 4; x <= hi - 4; x++)
             for (int z = lo + 4; z <= hi - 4; z++) {
-                if (!World.hasTree(x, z)) continue;
-                int ground = World.terrainHeight(x, z);
+                if (!gen.hasTree(x, z)) continue;
+                int ground = gen.terrainHeight(x, z);
 
                 // pod kmenem musi byt pevna zem
                 if (!w.isSolid(x, ground - 1, z)) floating++;

@@ -113,6 +113,18 @@ public class AllTests {
         LabBlockTest.main(args);
         failures += LabBlockTest.failures;
 
+        System.out.println(NEWLINE + "========== WorldSavesTest ==========");
+        WorldSavesTest.main(args);
+        failures += WorldSavesTest.failures;
+
+        System.out.println(NEWLINE + "========== SeedTest ==========");
+        SeedTest.main(args);
+        failures += SeedTest.failures;
+
+        System.out.println(NEWLINE + "========== ThumbnailTest ==========");
+        ThumbnailTest.main(args);
+        failures += ThumbnailTest.failures;
+
         System.out.println(NEWLINE + "========== OptionsTest ==========");
         OptionsTest.main(args);
         failures += OptionsTest.failures;
