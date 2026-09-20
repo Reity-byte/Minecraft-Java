@@ -30,9 +30,25 @@ export JAVA_HOME="/c/Users/Lukášek/.jdks/openjdk-26.0.2.1"
 
 V Git Bashi je nutné classpath převádět `cygpath -w` a spojovat středníkem.
 
+**Jeden spustitelný jar pro poslání ven:** `mvn -B package` vyrobí
+`target/minecraft-base-1.0.jar` (maven-shade-plugin, `Main-Class: mc.Main`) se
+všemi závislostmi i nativy uvnitř — Windows x64, Linux x64, macOS x64
+i macOS arm64, tedy 18 knihoven; LWJGL si za běhu rozbalí tu svou. Vedle zůstává
+`target/original-minecraft-base-1.0.jar`, což je ten tenký bez závislostí.
+
+```bash
+java -jar minecraft-base-1.0.jar                    # Windows, Linux
+java -XstartOnFirstThread -jar minecraft-base-1.0.jar   # ⚠️ macOS, jinak GLFW okno neotevře
+```
+
+Potřebná Java je **17** (`maven.compiler.source/target`); ověřeno překladem
+s `--release 17`, že v kódu není novější API. Hra si data (`saves/`, `textures/`,
+`options.json`) zakládá v PRACOVNÍM ADRESÁŘI, takže se jar spouští z té složky,
+kde mají data být.
+
 ## Testy
 
-`src/test/java/mc/` — **1312 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **1346 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -64,6 +80,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
 | `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
 | `TextureLabTest` | Index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře** |
+| `MouseScaleTest` | Přepočet myši z bodů okna na pixely framebufferu: poměr pro 1,0 / 1,5 / 2,0 / 3,0, každá osa zvlášť, ochrana proti dělení nulou — a **simulovaná Retina přes všechny klikací obrazovky** (menu, deset položek Options i konec posuvníku, řádek seznamu světů, pole seedu, dlaždice a pixel plátna v labu, slot hotbaru): co je nakreslené na daném místě, to tam po přepočtu i reaguje. Jedna kontrola schválně hlídá, že bez přepočtu by klik trefil jiné tlačítko |
 | `WorldSavesTest` | Světy na disku: **migrace starého `saves/world.dat`** (bajtová shoda, metadata, `world.dat.migrated`, druhý běh bez duplicity, pád uprostřed, obsazené jméno, poškozený zdroj), očištění jména na složku (zakázané znaky, `CON`/`com1`/`aux.txt`, tečky a mezery na konci), unikátní složka bez ohledu na velikost písmen, metadata tam a zpět (i `Long.MIN_VALUE`), **poškozený `world.json` svět neschová**, řazení podle posledního hraní, mazání jen vlastní složky |
 | `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu změřené před refaktorem** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) |
 | `ThumbnailTest` | Náhled: orientace (horní řádek obrazovky = horní řádek obrázku), výřez středu podle poměru stran, zmenšení průměrováním, PNG tam a zpět, odmítnutí příliš velkého obrázku |
@@ -141,6 +158,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 
 **2D vrstva**
 - `Gui` — celočíselné měřítko UI (i volba GUI Scale) a zarovnání na GUI pixel
+- `MouseScale` — poloha kurzoru z bodů okna na pixely framebufferu (Retina); **bez GL**
 - `Palette` — ploché barvy UI na jednom místě, aby HUD a menu vypadaly jako jedna věc
 - `Renderer2D` — obdélníky, rámečky, bevel, libovolné čtyřúhelníky; sdílí HUD i menu
 - `Texture` — RGBA textura, `GL_NEAREST`; `update()` přepíše obsah té samé textury
@@ -252,6 +270,19 @@ proto vždycky projde `Gui.snap()`; `(šířka − prvek) / 2` skoro nikdy nevyj
 kolem černý obrys — přesně to, co je v `widgets.png` Minecraftu. Jde to nakreslit obdélníky,
 takže to **nepotřebuje texturu**. Přechod přes celou plochu dělá pravý opak a zbyl jen na
 ztmavení scény za menu pauzy.
+
+**⚠️ MYŠ CHODÍ V JINÝCH JEDNOTKÁCH, NEŽ V JAKÝCH SE KRESLÍ.** GLFW vrací polohu
+kurzoru v souřadnicích OKNA („points"), ale celé UI se kreslí i hit-testuje
+v pixelech FRAMEBUFFERU (`glfwGetFramebufferSize` → `glViewport` → `Renderer2D`).
+Na běžném monitoru jsou obě čísla stejná a není to poznat; na Retině je
+framebuffer dvakrát větší, takže klik trefil místo dvakrát blíž k levému hornímu
+rohu — tlačítka se kreslila správně, ale reagovala „vedle". `Main` proto myš
+přepočítá hned v cursor callbacku (`MouseScale`) a obrazovky dostávají všude
+tytéž jednotky. Poměr se bere z velikosti okna proti velikosti framebufferu,
+**ne z `glfwGetWindowContentScale`**: na Windows se 150 % je content scale 1,5,
+ale okno i framebuffer jsou ve stejných pixelech, takže by přepočet podle něj
+rozbil to, co funguje. ⚠️ Rozhlížení kamerou zůstává na NEPŘEPOČÍTANÝCH bodech
+okna — citlivost myši je v nich a jinak by se na Retině zdvojnásobila.
 
 **⚠️ Rámečky nejsou obrysy.** `glLineWidth > 1` není v core profilu zaručeně podporovaný
 a ovladače se v tom liší, takže tloušťka by byla loterie. Rámeček je proto čtveřice plných
