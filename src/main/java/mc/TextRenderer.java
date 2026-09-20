@@ -24,12 +24,21 @@ import static org.lwjgl.opengl.GL33.*;
  * Metriky (advance, lineHeight) jsou proto v GUI pixelech a při kreslení
  * se násobí měřítkem. Kdo si počítá rozvržení dopředu, musí násobit taky -
  * viz Hud a Menu.
+ *
+ * ⚠️ VŠECHNO MEZI begin() A end() JE JEDEN DRAW CALL, stejně jako u tvarů
+ * v Renderer2D. Kvůli tomu je barva ve VRCHOLU, ne v uniformu: uniform se
+ * mezi draw cally mění, takže každý řádek - a každý jeho stín zvlášť - byl
+ * dřív vlastní draw call. Texture lab jich tak měl přes třicet jen za texty,
+ * a na macOS je jeden draw call řádově dražší než na Windows. Cena za to
+ * jsou čtyři floaty navíc na vrchol, tedy 96 B na glyf.
  * ---------------------------------------------------------------------------
  */
 public class TextRenderer {
 
-    private static final int MAX_CHARS = 512;
-    private static final int FLOATS_PER_VERTEX = 4;    // pozice (2) + uv (2)
+    /** Kolik glyfů se vejde do jedné dávky. Nejdelší obrazovka je ladicí výpis. */
+    private static final int MAX_CHARS = 2048;
+
+    private static final int FLOATS_PER_VERTEX = 8;    // pozice (2) + uv (2) + barva (4)
     private static final int VERTICES_PER_GLYPH = 6;   // dva trojúhelníky
 
     private final ShaderProgram shader = new ShaderProgram(Shaders.TEXT_VERTEX, Shaders.TEXT_FRAGMENT);
@@ -45,6 +54,10 @@ public class TextRenderer {
     private final FloatBuffer upload = BufferUtils.createFloatBuffer(buffer.length);
 
     private int screenHeight;
+
+    /** Kolik floatů a glyfů v dávce čeká na nahrání. */
+    private int pending = 0;
+    private int glyphs = 0;
 
     /** Měřítko navázané posledním begin(). Celé číslo, viz Gui. */
     private int scale = 1;
@@ -65,6 +78,8 @@ public class TextRenderer {
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(1, 2, GL_FLOAT, false, stride, 2L * Float.BYTES);
         glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 4, GL_FLOAT, false, stride, 4L * Float.BYTES);
+        glEnableVertexAttribArray(2);
 
         glBindVertexArray(0);
     }
@@ -100,6 +115,34 @@ public class TextRenderer {
         shader.setInt("uFont", 0);
 
         glBindVertexArray(vao);
+
+        pending = 0;
+        glyphs = 0;
+    }
+
+    /**
+     * Pošle nasbírané glyfy na grafiku. Volá se z end() a při plné dávce -
+     * pořadí kreslení se tím nesmí změnit.
+     */
+    private void flush()
+    {
+        if(glyphs == 0)
+        {
+            return;
+        }
+
+        upload.clear();
+        upload.put(buffer, 0, pending);
+        upload.flip();
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, upload);
+
+        glDrawArrays(GL_TRIANGLES, 0, glyphs * VERTICES_PER_GLYPH);
+        GlStats.countDraw();
+
+        pending = 0;
+        glyphs = 0;
     }
 
     /** Šířka textu na obrazovce, tedy už včetně měřítka z begin(). */
@@ -122,13 +165,10 @@ public class TextRenderer {
             return;
         }
 
-        int floats = 0;
-        int glyphs = 0;
         float penX = x;
-
         float scaledLineHeight = font.lineHeight() * (float) scale;
 
-        for(int i = 0; i < text.length() && glyphs < MAX_CHARS; i++)
+        for(int i = 0; i < text.length(); i++)
         {
             char c = text.charAt(i);
             float advance = font.advance(c) * (float) scale;
@@ -136,6 +176,11 @@ public class TextRenderer {
             // Mezera nemá co kreslit, jen posouvá pero.
             if(c != ' ')
             {
+                if(glyphs >= MAX_CHARS)
+                {
+                    flush();
+                }
+
                 float x0 = penX;
                 float x1 = penX + font.glyphWidth(c) * (float) scale;
 
@@ -148,32 +193,17 @@ public class TextRenderer {
 
                 // Horní hrana kvádru odpovídá hornímu okraji glyfu v atlasu,
                 // proto se u horních vrcholů použije v0 a u spodních v1.
-                floats = quad(floats,
-                        x0, yBottom, u0, v1,
-                        x1, yBottom, u1, v1,
-                        x1, yTopGl,  u1, v0,
-                        x0, yTopGl,  u0, v0);
+                quad(x0, yBottom, u0, v1,
+                     x1, yBottom, u1, v1,
+                     x1, yTopGl,  u1, v0,
+                     x0, yTopGl,  u0, v0,
+                     r, g, b, a);
 
                 glyphs++;
             }
 
             penX += advance;
         }
-
-        if(floats == 0)
-        {
-            return;
-        }
-
-        upload.clear();
-        upload.put(buffer, 0, floats);
-        upload.flip();
-
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, upload);
-
-        shader.setVector4("uColor", r, g, b, a);
-        glDrawArrays(GL_TRIANGLES, 0, glyphs * VERTICES_PER_GLYPH);
     }
 
     public void draw(String text, float x, float yTop, float[] color)
@@ -212,34 +242,38 @@ public class TextRenderer {
     }
 
     /** Vrcholy proti směru hodinových ručiček - kvůli zapnutému backface cullingu. */
-    private int quad(int offset,
-                     float x0, float y0, float u0, float v0,
-                     float x1, float y1, float u1, float v1,
-                     float x2, float y2, float u2, float v2,
-                     float x3, float y3, float u3, float v3)
+    private void quad(float x0, float y0, float u0, float v0,
+                      float x1, float y1, float u1, float v1,
+                      float x2, float y2, float u2, float v2,
+                      float x3, float y3, float u3, float v3,
+                      float r, float g, float b, float a)
     {
-        offset = vertex(offset, x0, y0, u0, v0);
-        offset = vertex(offset, x1, y1, u1, v1);
-        offset = vertex(offset, x2, y2, u2, v2);
+        vertex(x0, y0, u0, v0, r, g, b, a);
+        vertex(x1, y1, u1, v1, r, g, b, a);
+        vertex(x2, y2, u2, v2, r, g, b, a);
 
-        offset = vertex(offset, x0, y0, u0, v0);
-        offset = vertex(offset, x2, y2, u2, v2);
-        offset = vertex(offset, x3, y3, u3, v3);
-
-        return offset;
+        vertex(x0, y0, u0, v0, r, g, b, a);
+        vertex(x2, y2, u2, v2, r, g, b, a);
+        vertex(x3, y3, u3, v3, r, g, b, a);
     }
 
-    private int vertex(int offset, float x, float y, float u, float v)
+    private void vertex(float x, float y, float u, float v,
+                        float r, float g, float b, float a)
     {
-        buffer[offset++] = x;
-        buffer[offset++] = y;
-        buffer[offset++] = u;
-        buffer[offset++] = v;
-        return offset;
+        buffer[pending++] = x;
+        buffer[pending++] = y;
+        buffer[pending++] = u;
+        buffer[pending++] = v;
+        buffer[pending++] = r;
+        buffer[pending++] = g;
+        buffer[pending++] = b;
+        buffer[pending++] = a;
     }
 
     public void end()
     {
+        flush();
+
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_BLEND);

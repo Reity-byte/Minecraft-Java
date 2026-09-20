@@ -359,16 +359,19 @@ public class Shaders {
     public static final String TEXT_VERTEX = """
             #version 330 core
 
-            layout (location = 0) in vec2 aPos;   // v pixelech, (0,0) vlevo dole
+            layout (location = 0) in vec2 aPos;    // v pixelech, (0,0) vlevo dole
             layout (location = 1) in vec2 aUv;
+            layout (location = 2) in vec4 aColor;  // barva je ve VRCHOLU, ne v uniformu
 
             uniform vec2 uScreenSize;
 
             out vec2 vUv;
+            out vec4 vColor;
 
             void main()
             {
                 vUv = aUv;
+                vColor = aColor;
                 vec2 ndc = (aPos / uScreenSize) * 2.0 - 1.0;
                 gl_Position = vec4(ndc, 0.0, 1.0);
             }
@@ -376,22 +379,27 @@ public class Shaders {
 
     /**
      * Atlas fontu drží jen průhlednost glyfu v jediném kanálu (GL_RED), ne barvu.
-     * Barva se dodá uniformem, takže jeden atlas obslouží text jakékoliv barvy.
+     * Barva se dodá ve vrcholu, takže jeden atlas obslouží text jakékoliv barvy.
+     *
+     * ⚠️ Dřív to byl UNIFORM. Uniform se ale mění mezi draw cally, takže každý
+     * řádek textu - a každý jeho stín - musel být vlastní draw call. Lab jich
+     * tak měl přes třicet jen na texty. Barva ve vrcholu dovolí sesypat celou
+     * obrazovku textu do jedné dávky; viz TextRenderer.
      */
     public static final String TEXT_FRAGMENT = """
             #version 330 core
 
             in vec2 vUv;
+            in vec4 vColor;
 
             uniform sampler2D uFont;
-            uniform vec4 uColor;
 
             out vec4 fragColor;
 
             void main()
             {
                 float alpha = texture(uFont, vUv).r;
-                fragColor = vec4(uColor.rgb, uColor.a * alpha);
+                fragColor = vec4(vColor.rgb, vColor.a * alpha);
             }
             """;
 

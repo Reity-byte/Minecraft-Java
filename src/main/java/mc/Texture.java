@@ -28,6 +28,9 @@ public class Texture {
     private final int width;
     private final int height;
 
+    /** Buffer na výřez v updateRegion() - drží se, ať se při malování nealokuje. */
+    private ByteBuffer region;
+
     /** pixels je RGBA po bajtech, řádek po řádku odspodu (jako u GL). */
     public Texture(ByteBuffer pixels, int width, int height, int wrap)
     {
@@ -71,6 +74,59 @@ public class Texture {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
+    /**
+     * Přepíše jen OBDÉLNÍK textury, ne celou. Pixely se berou ze stejného
+     * pole celého obrázku (řádek po řádku odspodu), jen se z něj vyřízne
+     * daný výřez.
+     *
+     * ⚠️ Kvůli tomuhle existuje DirtyRect. Lab maluje po jednom pixelu;
+     * nahrát kvůli němu celých 128x128 je 64 KB místo 4 bajtů. Jedna
+     * dlaždice 16x16 je 1 KB, tedy 64x míň dat a 64x míň práce pro ovladač.
+     *
+     * Rychlý buffer se drží mezi voláními, ať se každý tah štětcem
+     * nealokuje nové pole.
+     */
+    public void updateRegion(int[] argb, int x, int y, int regionWidth, int regionHeight)
+    {
+        if(regionWidth <= 0 || regionHeight <= 0)
+        {
+            return;
+        }
+
+        if(x == 0 && y == 0 && regionWidth == width && regionHeight == height)
+        {
+            update(argb);
+            return;
+        }
+
+        int needed = regionWidth * regionHeight * 4;
+
+        if(region == null || region.capacity() < needed)
+        {
+            region = BufferUtils.createByteBuffer(needed);
+        }
+
+        region.clear();
+
+        for(int row = 0; row < regionHeight; row++)
+        {
+            int start = (y + row) * width + x;
+
+            for(int column = 0; column < regionWidth; column++)
+            {
+                putRgba(region, argb[start + column]);
+            }
+        }
+
+        region.flip();
+
+        glBindTexture(GL_TEXTURE_2D, id);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, x, y, regionWidth, regionHeight,
+                GL_RGBA, GL_UNSIGNED_BYTE, region);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
     /** 0xAARRGGBB → bajty R, G, B, A, jak je chce glTexImage2D. */
     private static ByteBuffer toRgba(int[] argb)
     {
@@ -78,14 +134,19 @@ public class Texture {
 
         for(int value : argb)
         {
-            pixels.put((byte) ((value >> 16) & 0xFF));   // R
-            pixels.put((byte) ((value >> 8) & 0xFF));    // G
-            pixels.put((byte) (value & 0xFF));           // B
-            pixels.put((byte) ((value >> 24) & 0xFF));   // A
+            putRgba(pixels, value);
         }
 
         pixels.flip();
         return pixels;
+    }
+
+    private static void putRgba(ByteBuffer target, int value)
+    {
+        target.put((byte) ((value >> 16) & 0xFF));   // R
+        target.put((byte) ((value >> 8) & 0xFF));    // G
+        target.put((byte) (value & 0xFF));           // B
+        target.put((byte) ((value >>> 24) & 0xFF));  // A
     }
 
     public int id()     { return id; }

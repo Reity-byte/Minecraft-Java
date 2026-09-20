@@ -434,6 +434,7 @@ public class PlayerModelMesh {
 
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, skinVertices);
+        GlStats.countDraw();
         glBindVertexArray(0);
     }
 
@@ -447,6 +448,7 @@ public class PlayerModelMesh {
 
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, skinVertices, itemVertices);
+        GlStats.countDraw();
         glBindVertexArray(0);
     }
 

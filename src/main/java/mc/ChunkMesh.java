@@ -511,6 +511,7 @@ public class ChunkMesh {
 
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, opaqueVertices);
+        GlStats.countDraw();
     }
 
     public void drawTransparent()
@@ -522,6 +523,7 @@ public class ChunkMesh {
 
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, opaqueVertices, transparentVertices);
+        GlStats.countDraw();
     }
 
     public boolean hasTransparent()

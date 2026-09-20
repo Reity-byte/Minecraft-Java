@@ -46,8 +46,14 @@ public final class AtlasEditor {
     private int tile = 0;
     private int color = 0xFF000000;
 
-    /** Pixely se změnily a ještě se nenahrály na grafiku. */
-    private boolean dirty = false;
+    /**
+     * Které pixely se změnily a ještě se nenahrály na grafiku.
+     *
+     * ⚠️ Obdélník, ne příznak. Lab nahrával při KAŽDÉM namalovaném pixelu
+     * celý atlas (64 KB); obdélník z toho udělá typicky jednu dlaždici
+     * (1 KB). Viz DirtyRect a Texture.updateRegion().
+     */
+    private final DirtyRect dirty = new DirtyRect();
 
     /** Změny od posledního uložení nebo načtení. */
     private boolean unsaved = false;
@@ -133,11 +139,23 @@ public final class AtlasEditor {
         return pixels[pixelIndex(tile, x, y)];
     }
 
+    /** Obdélník změněných pixelů - co se musí nahrát na grafiku. */
+    public DirtyRect dirty()
+    {
+        return dirty;
+    }
+
+    /** Po nahrání na grafiku: od teď se zase počítá od nuly. */
+    public void clearDirty()
+    {
+        dirty.clear();
+    }
+
     /** Vrátí true jednou po každé změně - pak se má atlas nahrát na grafiku. */
     public boolean takeDirty()
     {
-        boolean was = dirty;
-        dirty = false;
+        boolean was = !dirty.isEmpty();
+        dirty.clear();
         return was;
     }
 
@@ -156,7 +174,7 @@ public final class AtlasEditor {
         endStroke();
         System.arraycopy(newPixels, 0, pixels, 0, pixels.length);
         undo.clear();
-        changed();
+        changedAll();
         unsaved = false;
     }
 
@@ -175,7 +193,7 @@ public final class AtlasEditor {
         endStroke();
         pushUndo(new Snapshot(WHOLE_ATLAS, pixels.clone()));
         System.arraycopy(newPixels, 0, pixels, 0, pixels.length);
-        changed();
+        changedAll();
     }
 
     /**
@@ -194,7 +212,7 @@ public final class AtlasEditor {
             System.arraycopy(content, y * TILE, pixels, pixelIndex(target, 0, y), TILE);
         }
 
-        changed();
+        changedTile(target);
     }
 
     private void pushUndo(Snapshot snapshot)
@@ -207,9 +225,29 @@ public final class AtlasEditor {
         }
     }
 
-    private void changed()
+    /** Změnil se celý atlas (import, revert, undo importu). */
+    private void changedAll()
     {
-        dirty = true;
+        dirty.addAll(SIZE, SIZE);
+        touched();
+    }
+
+    /** Změnila se jedna dlaždice (tah, kopie, undo tahu). */
+    private void changedTile(int tile)
+    {
+        dirty.add(tileX0(tile), tileY0(tile), TILE, TILE);
+        touched();
+    }
+
+    /** Změnil se jeden pixel dlaždice - nejčastější případ při malování. */
+    private void changedPixel(int tile, int x, int y)
+    {
+        dirty.add(tileX0(tile) + x, tileY0(tile) + y);
+        touched();
+    }
+
+    private void touched()
+    {
         unsaved = true;
         revision++;
     }
@@ -281,6 +319,7 @@ public final class AtlasEditor {
         if(snapshot.tile() == WHOLE_ATLAS)
         {
             System.arraycopy(snapshot.pixels(), 0, pixels, 0, pixels.length);
+            changedAll();
         }
         else
         {
@@ -290,9 +329,9 @@ public final class AtlasEditor {
             {
                 System.arraycopy(snapshot.pixels(), y * TILE, pixels, pixelIndex(tile, 0, y), TILE);
             }
-        }
 
-        changed();
+            changedTile(tile);
+        }
         return true;
     }
 
@@ -320,7 +359,7 @@ public final class AtlasEditor {
         if(pixels[index] != color)
         {
             pixels[index] = color;
-            changed();
+            changedPixel(tile, x, y);
         }
     }
 
@@ -385,21 +424,45 @@ public final class AtlasEditor {
      */
     public int[] tileColors(int max)
     {
-        Map<Integer, Integer> counts = new LinkedHashMap<>();
+        int[] tilePixels = new int[TILE * TILE];
 
         for(int y = 0; y < TILE; y++)
         {
             for(int x = 0; x < TILE; x++)
             {
-                counts.merge(get(x, y), 1, Integer::sum);
+                tilePixels[y * TILE + x] = get(x, y);
             }
         }
 
-        return counts.entrySet().stream()
-                .sorted((a, b) -> b.getValue() - a.getValue())
-                .limit(max)
-                .mapToInt(Map.Entry::getKey)
-                .toArray();
+        return tileColorsOf(tilePixels, max);
+    }
+
+    /**
+     * Nejčastější barvy z pole pixelů - na rozdíl od atlasColors() POČÍTÁ
+     * i plně průhledné: v dlaždici je průhledná pixelem jako každý jiný
+     * (praskliny, sklo) a paleta dlaždice ji má nabídnout.
+     */
+    static int[] tileColorsOf(int[] source, int max)
+    {
+        Map<Integer, Integer> counts = new LinkedHashMap<>();
+
+        for(int argb : source)
+        {
+            counts.merge(argb, 1, Integer::sum);
+        }
+
+        int[] values = new int[counts.size()];
+        int[] howMany = new int[counts.size()];
+        int i = 0;
+
+        for(Map.Entry<Integer, Integer> entry : counts.entrySet())
+        {
+            values[i] = entry.getKey();
+            howMany[i] = entry.getValue();
+            i++;
+        }
+
+        return new Colors(values, howMany).top(max);
     }
 
     // ------------------------------------------------------------------
@@ -424,6 +487,52 @@ public final class AtlasEditor {
      */
     public static int[] atlasColors(int[] atlasPixels, int max)
     {
+        return countColors(atlasPixels).top(max);
+    }
+
+    /**
+     * Barvy s četnostmi: KOLIK jich celkem je a kterých je nejvíc.
+     *
+     * ⚠️ Lab potřeboval obojí a volal proto atlasColors() DVAKRÁT - jednou
+     * na prvních 86 barev a jednou na všechny, jen aby zjistil, kolik jich
+     * je. To je dvakrát průchod 16 384 pixelů a dvakrát seřazení, při každém
+     * namalovaném pixelu. Jeden průchod dá obojí.
+     */
+    public record Colors(int[] values, int[] counts) {
+
+        /** Kolik různých barev atlas má. */
+        public int total()
+        {
+            return values.length;
+        }
+
+        /** Nejčastější první, nejvýš max. Řazení je stabilní - shody v pořadí výskytu. */
+        public int[] top(int max)
+        {
+            Integer[] order = new Integer[values.length];
+
+            for(int i = 0; i < order.length; i++)
+            {
+                order[i] = i;
+            }
+
+            Arrays.sort(order, (a, b) -> counts[b] - counts[a]);
+
+            int taken = Math.min(max, order.length);
+            int[] result = new int[taken];
+
+            for(int i = 0; i < taken; i++)
+            {
+                result[i] = values[order[i]];
+            }
+
+            return result;
+        }
+    }
+
+    /** Jeden průchod pixely: každá barva a kolikrát je. Plně průhledné se nepočítají. */
+    public static Colors countColors(int[] atlasPixels)
+    {
         Map<Integer, Integer> counts = new LinkedHashMap<>();
 
         for(int argb : atlasPixels)
@@ -434,12 +543,18 @@ public final class AtlasEditor {
             }
         }
 
-        // Řazení ve streamu je stabilní - shody zůstanou v pořadí výskytu.
-        return counts.entrySet().stream()
-                .sorted((a, b) -> b.getValue() - a.getValue())
-                .limit(max)
-                .mapToInt(Map.Entry::getKey)
-                .toArray();
+        int[] values = new int[counts.size()];
+        int[] howMany = new int[counts.size()];
+        int i = 0;
+
+        for(Map.Entry<Integer, Integer> entry : counts.entrySet())
+        {
+            values[i] = entry.getKey();
+            howMany[i] = entry.getValue();
+            i++;
+        }
+
+        return new Colors(values, howMany);
     }
 
     /**
@@ -451,12 +566,36 @@ public final class AtlasEditor {
      */
     public static int[] byHue(int[] colors)
     {
-        return Arrays.stream(colors).boxed()
-                .sorted(Comparator.comparingInt(AtlasEditor::hueGroup)
-                        .thenComparingDouble(argb -> toHsv(argb)[2])
-                        .thenComparingDouble(argb -> toHsv(argb)[1]))
-                .mapToInt(Integer::intValue)
-                .toArray();
+        // ⚠️ HSV se počítá JEDNOU pro každou barvu, ne uvnitř porovnávače.
+        // Tam by se pro n barev volalo toHsv() řádově n*log(n) krát a každé
+        // volání navíc alokuje pole tří floatů.
+        int n = colors.length;
+        int[] group = new int[n];
+        float[] value = new float[n];
+        float[] saturation = new float[n];
+        Integer[] order = new Integer[n];
+
+        for(int i = 0; i < n; i++)
+        {
+            float[] hsv = toHsv(colors[i]);
+            group[i] = hsv[1] < GRAY_SATURATION ? -1 : Math.min(11, (int) (hsv[0] / 30f));
+            saturation[i] = hsv[1];
+            value[i] = hsv[2];
+            order[i] = i;
+        }
+
+        Arrays.sort(order, (a, b) -> group[a] != group[b] ? Integer.compare(group[a], group[b])
+                : value[a] != value[b] ? Float.compare(value[a], value[b])
+                : Float.compare(saturation[a], saturation[b]));
+
+        int[] result = new int[n];
+
+        for(int i = 0; i < n; i++)
+        {
+            result[i] = colors[order[i]];
+        }
+
+        return result;
     }
 
     /** -1 pro šedé, jinak výseč odstínu 0 až 11. */

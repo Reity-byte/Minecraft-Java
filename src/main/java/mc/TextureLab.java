@@ -75,6 +75,9 @@ public class TextureLab {
     private final Texture checker;
     private final BlockPreview preview = new BlockPreview();
 
+    /** Měření času vykreslení labu po fázích - zapíná se v labu klávesou F3. */
+    private final LabProfiler profiler = new LabProfiler();
+
     /** Odkud atlas pochází: true = textures/atlas.png, false = procedurální. */
     private boolean fromFile;
 
@@ -110,6 +113,20 @@ public class TextureLab {
     private int globalTotal = 0;
     private int globalRevision = -1;
 
+    /** Pro kterou dlaždici a revizi platí paleta dlaždice. */
+    private int paletteRevision = -1;
+    private int paletteTile = -1;
+
+    /** Poslední zvýraznění "kde ta barva je" - pro kterou barvu a revizi platí. */
+    private boolean[] usesColor = null;
+    private int usesArgb = 0;
+    private int usesRevision = -1;
+
+    /** Poslední seznam bloků používajících vybranou dlaždici. */
+    private List<Byte> usingBlocks = List.of();
+    private int usingTile = -1;
+    private BlockRegistry usingRegistry = null;
+
     /** Odkud se importuje: textures/import.png, nebo poslední soubor přetažený do okna. */
     private Path importFile = Textures.IMPORT_FILE;
 
@@ -140,6 +157,12 @@ public class TextureLab {
 
         selectTile(0);
         setColor(editor.get(0, 0));
+    }
+
+    /** Měřič fází vykreslení - pro sondy, které lab kreslí mimo hru. */
+    LabProfiler profiler()
+    {
+        return profiler;
     }
 
     /** Pochází atlas teď ze souboru? Main to ukazuje v ladicím výpisu. */
@@ -177,7 +200,7 @@ public class TextureLab {
 
     private void refreshPreview()
     {
-        List<Byte> blocks = AtlasEditor.blocksUsing(editor.tile());
+        List<Byte> blocks = blocksUsingSelected();
         preview.show(blocks.isEmpty() ? World.AIR : blocks.get(previewChoice % blocks.size()));
     }
 
@@ -666,6 +689,14 @@ public class TextureLab {
             return false;
         }
 
+        // F3 jako ladicí výpis ve hře: čas fází vykreslení labu a draw cally.
+        if(key == GLFW_KEY_F3)
+        {
+            profiler.toggle();
+            say(profiler.enabled() ? "Frame timing on" : "Frame timing off");
+            return false;
+        }
+
         if(ctrl && key == GLFW_KEY_Z)
         {
             say(editor.undo() ? "Undo" : "Nothing to undo");
@@ -750,23 +781,39 @@ public class TextureLab {
 
     public void render(int screenWidth, int screenHeight, double mouseX, double mouseY)
     {
-        // Jedno nahrání za frame, ať se maluje jakkoliv rychle.
-        if(editor.takeDirty())
+        profiler.beginFrame();
+
+        // Jedno nahrání za frame, ať se maluje jakkoliv rychle - a jen
+        // OBDÉLNÍK, který se změnil (při malování jedna dlaždice, 1 KB
+        // místo celých 64 KB atlasu). Viz DirtyRect.
+        profiler.start(LabProfiler.UPLOAD);
+        DirtyRect changed = editor.dirty();
+
+        if(!changed.isEmpty())
         {
-            atlas.update(editor.pixels());
+            atlas.updateRegion(editor.pixels(), changed.x(), changed.y(),
+                    changed.width(), changed.height());
+            editor.clearDirty();
         }
+        profiler.stop(LabProfiler.UPLOAD);
 
         TextureLabLayout layout = new TextureLabLayout(screenWidth, screenHeight);
         int scale = layout.scale();
 
-        System.arraycopy(BASIC_COLORS, 0, palette, 0, BASIC_COLORS.length);
-        int[] tileColors = editor.tileColors(palette.length - BASIC_COLORS.length);
-        System.arraycopy(tileColors, 0, palette, BASIC_COLORS.length, tileColors.length);
-        paletteCount = BASIC_COLORS.length + tileColors.length;
-
+        profiler.start(LabProfiler.PALETTE);
+        refreshTilePalette();
         refreshGlobalPalette();
 
+        // Najetí na vzorek ukáže, ve kterých dlaždicích ta barva je. Hledání
+        // je nad CELÝM atlasem, takže patří k počítání barev, ne ke kreslení -
+        // a pamatuje si poslední výsledek, dokud se nezmění barva ani pixely.
+        boolean[] uses = isSwatchHovered(layout, mouseX, mouseY)
+                ? tilesWithColor(hoveredSwatchColor(layout, mouseX, mouseY))
+                : null;
+        profiler.stop(LabProfiler.PALETTE);
+
         // --- podklady ---
+        profiler.start(LabProfiler.SHAPES);
         shapes.begin(screenWidth, screenHeight);
 
         shapes.bevelRect(layout.left(), screenHeight - layout.top() - TextureLabLayout.HEIGHT * scale,
@@ -788,8 +835,10 @@ public class TextureLab {
         }
 
         shapes.end();
+        profiler.stop(LabProfiler.SHAPES);
 
         // --- atlas a plátno přímo z textury ---
+        profiler.start(LabProfiler.IMAGES);
         image(layout, screenWidth, screenHeight, checker, TextureLabLayout.ATLAS, 0f, 0f, 32f, 32f);
         image(layout, screenWidth, screenHeight, atlas, TextureLabLayout.ATLAS, 0f, 0f, 1f, 1f);
 
@@ -808,18 +857,17 @@ public class TextureLab {
             }
         }
 
+        profiler.stop(LabProfiler.IMAGES);
+
         // --- mřížky, výběr, paleta, posuvníky, tlačítka ---
+        profiler.start(LabProfiler.SHAPES);
         shapes.begin(screenWidth, screenHeight);
 
         drawGrid(layout, screenHeight, TextureLabLayout.CANVAS, AtlasEditor.TILE, GRID_LINE);
         drawGrid(layout, screenHeight, TextureLabLayout.ATLAS, AtlasEditor.TILES_PER_ROW, TILE_LINE);
 
-        // Najetí na vzorek ukáže, ve kterých dlaždicích ta barva je.
-        if(isSwatchHovered(layout, mouseX, mouseY))
+        if(uses != null)
         {
-            boolean[] uses = AtlasEditor.tilesWithColor(editor.pixels(),
-                    hoveredSwatchColor(layout, mouseX, mouseY));
-
             for(int t = 0; t < uses.length; t++)
             {
                 if(uses[t])
@@ -875,26 +923,100 @@ public class TextureLab {
         }
 
         shapes.end();
+        profiler.stop(LabProfiler.SHAPES);
 
         // --- živý náhled přes světový shader ---
+        profiler.start(LabProfiler.PREVIEW);
         TextureLabLayout.Rect p = TextureLabLayout.PREVIEW;
         preview.draw(atlas, (int) layout.screenX(p), (int) layout.screenBottom(p, screenHeight),
                 p.w() * scale, p.h() * scale, screenWidth, screenHeight);
+        profiler.stop(LabProfiler.PREVIEW);
 
+        profiler.start(LabProfiler.TEXT);
         drawTexts(layout, screenWidth, screenHeight, mouseX, mouseY);
+        profiler.stop(LabProfiler.TEXT);
+
+        profiler.endFrame();
     }
 
+    /**
+     * Paleta vybrané dlaždice. Přepočítává se jen při změně dlaždice nebo
+     * pixelů - 256 pixelů do mapy a seřadit se každý frame dělat nemusí.
+     *
+     * ⚠️ BĚHEM TAHU ŠTĚTCEM NE. Tah mění pixely každý frame, takže by se
+     * palety počítaly znovu desetkrát za vteřinu - a navíc by se vzorky pod
+     * kurzorem přerovnávaly, takže by uživatel klikal na barvu, která se mu
+     * pod myší zrovna odstěhovala. Přepočet přijde, až tah skončí; to je
+     * okamžik, kdy se atlas SKUTEČNĚ změnil z pohledu uživatele.
+     */
+    private void refreshTilePalette()
+    {
+        if((paletteRevision == editor.revision() && paletteTile == editor.tile())
+                || editor.isStroking())
+        {
+            return;
+        }
+
+        System.arraycopy(BASIC_COLORS, 0, palette, 0, BASIC_COLORS.length);
+        int[] tileColors = editor.tileColors(palette.length - BASIC_COLORS.length);
+        System.arraycopy(tileColors, 0, palette, BASIC_COLORS.length, tileColors.length);
+        paletteCount = BASIC_COLORS.length + tileColors.length;
+
+        paletteRevision = editor.revision();
+        paletteTile = editor.tile();
+    }
+
+    /**
+     * ⚠️ JEDEN průchod atlasem, ne dva. Dřív se atlasColors() volalo dvakrát -
+     * jednou na zobrazených 86 barev a jednou na všechny, jen aby se zjistil
+     * jejich počet - a při malování se to dělo při každém namalovaném pixelu.
+     */
     private void refreshGlobalPalette()
     {
-        if(globalRevision == editor.revision())
+        if(globalRevision == editor.revision() || editor.isStroking())
         {
             return;
         }
 
         int shown = TextureLabLayout.GLOBAL_COLUMNS * TextureLabLayout.GLOBAL_ROWS;
-        globalColors = AtlasEditor.byHue(AtlasEditor.atlasColors(editor.pixels(), shown));
-        globalTotal = AtlasEditor.atlasColors(editor.pixels(), Integer.MAX_VALUE).length;
+        AtlasEditor.Colors colors = AtlasEditor.countColors(editor.pixels());
+
+        globalColors = AtlasEditor.byHue(colors.top(shown));
+        globalTotal = colors.total();
         globalRevision = editor.revision();
+    }
+
+    /**
+     * Dlaždice obsahující barvu. Myš nad vzorkem stojí desítky framů v kuse,
+     * takže se výsledek drží, dokud se nezmění barva ani pixely - jinak by
+     * se 16 384 pixelů procházelo pořád dokola.
+     */
+    private boolean[] tilesWithColor(int argb)
+    {
+        if(usesColor == null || usesArgb != argb || usesRevision != editor.revision())
+        {
+            usesColor = AtlasEditor.tilesWithColor(editor.pixels(), argb);
+            usesArgb = argb;
+            usesRevision = editor.revision();
+        }
+
+        return usesColor;
+    }
+
+    /**
+     * Bloky, které vybranou dlaždici používají. Projít 127 id se v kreslení
+     * textů dělalo každý frame; mění se to jen s dlaždicí a s registrem.
+     */
+    private List<Byte> blocksUsingSelected()
+    {
+        if(usingTile != editor.tile() || usingRegistry != BlockRegistry.active())
+        {
+            usingBlocks = AtlasEditor.blocksUsing(editor.tile());
+            usingTile = editor.tile();
+            usingRegistry = BlockRegistry.active();
+        }
+
+        return usingBlocks;
     }
 
     private boolean isSwatchHovered(TextureLabLayout layout, double mouseX, double mouseY)
@@ -1002,6 +1124,18 @@ public class TextureLab {
         label(layout, 8, TextureLabLayout.GLOBAL_LABEL_Y,
                 "Atlas colors: " + shown + ", by hue - hover shows where they are");
 
+        // Zapnuté měření mluví na týchž dvou řádcích jako stav a nápověda -
+        // je to dočasný ladicí režim, ne trvalá část rozhraní.
+        if(profiler.enabled())
+        {
+            String[] lines = profiler.lines();
+            label(layout, 8, TextureLabLayout.STATUS_Y, fit(lines[0], TextureLabLayout.WIDTH - 16, scale));
+            text.draw(fit(lines[1], TextureLabLayout.WIDTH - 16, scale),
+                    layout.textLeft(8), layout.textTop(TextureLabLayout.HELP_Y), Palette.TEXT_MUTED);
+            text.end();
+            return;
+        }
+
         if(statusLeft > 0f)
         {
             label(layout, 8, TextureLabLayout.STATUS_Y, fit(status, TextureLabLayout.WIDTH - 16, scale));
@@ -1016,7 +1150,7 @@ public class TextureLab {
     private void drawTileInfo(TextureLabLayout layout)
     {
         int tile = editor.tile();
-        List<Byte> blocks = AtlasEditor.blocksUsing(tile);
+        List<Byte> blocks = blocksUsingSelected();
 
         label(layout, 8, TextureLabLayout.INFO_Y, "Tile " + tile + "  ("
                 + BlockAtlas.column(tile) + ", " + BlockAtlas.row(tile) + ")");
