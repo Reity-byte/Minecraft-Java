@@ -119,6 +119,13 @@ public class Main {
     private int[] atlasPixels;
     private boolean atlasFromFile;
 
+    /**
+     * Pixely kůže postavy - stejný vzor jako atlasPixels: pole, ze kterého je
+     * nahraná textura, a texture lab ho upravuje na místě a přenahrává.
+     */
+    private int[] skinPixels;
+    private boolean skinFromFile;
+
     /** Obrazovky mimo lab: nastavení, výběr a založení světa. */
     private Widgets widgets;
     private ImageRenderer images;
@@ -715,8 +722,13 @@ public class Main {
         blockAtlas = Textures.blockAtlas(atlasPixels);
         icons = new BlockIcon(blockAtlas);
 
-        // Skin se nahrazuje v jediném místě - v Textures.playerSkin().
-        playerSkin = Textures.playerSkin();
+        // textures/skin.png z texture labu, když existuje; jinak vygenerovaná.
+        Textures.SkinPixels skinSource = Textures.skinPixels(Textures.SKIN_FILE);
+        skinPixels = skinSource.pixels();
+        skinFromFile = skinSource.fromFile();
+        System.out.println("Kuze postavy: " + (skinFromFile
+                ? Textures.SKIN_FILE.toAbsolutePath() : "vestavena (" + Textures.SKIN_FILE + " neni)"));
+        playerSkin = Textures.playerSkin(skinPixels);
         worldRenderer = new WorldRenderer(blockAtlas, playerSkin);
         sky = new SkyRenderer();
         heldItem = new HeldItemRenderer(blockAtlas, playerSkin);
@@ -1047,13 +1059,15 @@ public class Main {
      * se hra neukončí.
      */
     private void openTextureLab() {
-        lab = new TextureLab(atlasPixels, blockAtlas, atlasFromFile, shapes, text);
+        lab = new TextureLab(atlasPixels, blockAtlas, atlasFromFile,
+                skinPixels, playerSkin, skinFromFile, shapes, text);
         labReturnState = state;
         setState(GameState.TEXTURE_LAB);
     }
 
     private void closeTextureLab() {
         atlasFromFile = lab.fromFile();
+        skinFromFile = lab.skinFromFile();
         createdBlocks.addAll(lab.takeCreatedBlocks());
         lab.delete();
         lab = null;
@@ -1530,9 +1544,10 @@ public class Main {
                         worldRenderer.pendingBuilds()),
                 String.format("E inventory   held %d/%d slots   on ground %d",
                         usedSlots(), Inventory.SIZE, drops.size()),
-                String.format("sound %s   atlas %s   lab blocks %d",
+                String.format("sound %s   atlas %s   skin %s   lab blocks %d",
                         sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off",
                         atlasFromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural",
+                        skinFromFile ? Textures.SKIN_FILE.toString().replace('\\', '/') : "built-in",
                         BlockRegistry.active().size()),
                 mining.isActive()
                         ? String.format("mining %.0f%%   stage %d",

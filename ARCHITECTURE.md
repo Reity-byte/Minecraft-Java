@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **1458 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **1499 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -79,7 +79,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `PlayerModelTest` | Animace: rozmach podle rychlosti, **opačná fáze nohou**, ruka proti noze, délka kroku, strop při letu, **nezávislost na FPS**, pohupování, máchnutí z `HandSwing`, držení. Model: rozměry jako hitbox, **pravá ruka vpravo, obličej vepředu**, končetiny v póze, držený blok u pěsti, odstín podle směru ve světě. Skin: každá stěna míří do vybarvené části. **Holá ruka v první osobě:** tytéž UV jako pravá ruka postavy, 4×12×4 px, v klidu vpravo dole před kamerou, při máchnutí u zaměřovače, **zpátky jde níž než tam (oblouk)**, po doběhnutí přesně klid; s blokem v ruce dál blok |
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
 | `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
-| `TextureLabTest` | Index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře** |
+| `TextureLabTest` | Index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře**, **sledování změněných pixelů** (`DirtyRect` sám o sobě; tah zůstane uvnitř jedné dlaždice a obsahuje všechny změněné pixely; undo hlásí svou dlaždici, import celý atlas), **mapování pixelu na stěnu dílu těla** (obdélníky sedí na UV, která vydává `PlayerModelMesh.unfold()`; round-trip pixel → index → stěna; 1632 pokrytých pixelů; plátno má řádek 0 dole), **editace kůže** (tah jen ve své stěně, kapátko, undo i s návratem výběru), **PNG kůže bez překlápění** a **přesné znění hlášky o rozměru** |
 | `MouseScaleTest` | Přepočet myši z bodů okna na pixely framebufferu: poměr pro 1,0 / 1,5 / 2,0 / 3,0, každá osa zvlášť, ochrana proti dělení nulou — a **simulovaná Retina přes všechny klikací obrazovky** (menu, deset položek Options i konec posuvníku, řádek seznamu světů, pole seedu, dlaždice a pixel plátna v labu, slot hotbaru): co je nakreslené na daném místě, to tam po přepočtu i reaguje. Jedna kontrola schválně hlídá, že bez přepočtu by klik trefil jiné tlačítko |
 | `WorldSavesTest` | Světy na disku: **migrace starého `saves/world.dat`** (bajtová shoda, metadata, `world.dat.migrated`, druhý běh bez duplicity, pád uprostřed, obsazené jméno, poškozený zdroj), očištění jména na složku (zakázané znaky, `CON`/`com1`/`aux.txt`, tečky a mezery na konci), unikátní složka bez ohledu na velikost písmen, metadata tam a zpět (i `Long.MIN_VALUE`), **poškozený `world.json` svět neschová**, řazení podle posledního hraní, mazání jen vlastní složky |
 | `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu změřené před refaktorem** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) |
@@ -96,8 +96,9 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 `Textures.playerSkinPixels()`, `Camera.follow()`, `HeldItemRenderer.build()` / `matrix()` ani `BlockRegistry` a `BlockDraft` nesahají na GL. Myš v `ContainerScreen`
 (klik, shift-klik, tažení) taky ne — na GL sahá jen jeho kreslení. Ze zvuku potřebuje OpenAL
 jen `SoundEngine`; výběr zvuku, cooldown, kroky, syntéza i čtení WAV jdou bez něj. Z texture labu
-jdou bez GL `AtlasEditor`, `AtlasImage`, `TextureLabLayout` i stavba meshe náhledu
-(`BlockPreview.build()`).
+jdou bez GL `PixelEditor`, `AtlasEditor`, `SkinEditor`, `SkinLayout`, `DirtyRect`,
+`AtlasImage`, `TextureLabLayout` i stavba meshů obou náhledů (`BlockPreview.build()`,
+`SkinPreview.build()`).
 
 ⚠️ **Testy volají `world.updateBlocking()`, ne `update()`** — ta je od zavedení worker vlákna
 asynchronní a po návratu ještě žádný sloupec existovat nemusí. Blokující varianta si chybějící
@@ -163,25 +164,35 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `Gui` — celočíselné měřítko UI (i volba GUI Scale) a zarovnání na GUI pixel
 - `MouseScale` — poloha kurzoru z bodů okna na pixely framebufferu (Retina); **bez GL**
 - `Palette` — ploché barvy UI na jednom místě, aby HUD a menu vypadaly jako jedna věc
-- `Renderer2D` — obdélníky, rámečky, bevel, libovolné čtyřúhelníky; sdílí HUD i menu
-- `Texture` — RGBA textura, `GL_NEAREST`; `update()` přepíše obsah té samé textury
-- `Textures` — procedurální dlaždice, atlas bloků a placeholder skin postavy (jediné místo výměny skinu);
-  přepínač atlasu `textures/atlas.png` / procedurální
+- `Renderer2D` — obdélníky, rámečky, bevel, libovolné čtyřúhelníky; sdílí HUD i menu.
+  **Všechno mezi `begin()` a `end()` je JEDEN draw call** (dávka vrcholů)
+- `Texture` — RGBA textura, `GL_NEAREST`; `update()` přepíše celou, `updateRegion()` jen obdélník
+- `DirtyRect` — obdélník "co se od minule změnilo" v poli pixelů; **bez GL**
+- `GlStats` — počítadlo draw callů za frame (jediné číslo o výkonu nezávislé na stroji)
+- `Textures` — procedurální dlaždice, atlas bloků a vygenerovaná kůže postavy;
+  přepínače `textures/atlas.png` a `textures/skin.png` / procedurální
 - `BackgroundRenderer` — dlaždicované pozadí hlavního menu, vlastní texturovaný shader
 - `FontAtlas` — ASCII 32–126 → jednokanálová textura (`GL_RED`), bez antialiasingu
-- `TextRenderer` — sazba textu, počátek vlevo nahoře, kreslí v celočíselném měřítku
+- `TextRenderer` — sazba textu, počátek vlevo nahoře, kreslí v celočíselném měřítku;
+  barva je ve vrcholu, takže celá obrazovka textu je **jeden draw call**
 - `Hud` — zaměřovač, hotbar s izometrickými kostkami, ladicí výpis, loading screen
 - `Menu` — tlačítka s bevelem, animované zvýraznění, hit-testing
 - `ContainerScreen` — kreslení a myš (klik, shift-klik, tažení) nad **seznamem mřížek**; jedna třída pro inventář, crafting table i creative přehled (mřížka s příznakem `infinite` a rolováním)
 - `BlockIcon` — izometrická kostka bloku, sdílená hotbarem i sloty
 
 **Texture lab (F6)**
-- `TextureLab` — obrazovka: přehled atlasu, plátno, paleta, HSV, hex, tlačítka; kreslení a vstup
-- `TextureLabLayout` — rozvržení v GUI pixelech a hit-testy; **bez GL**
-- `AtlasEditor` — pixely atlasu: souřadnice, malování tahem, undo, kapátko, barvy, globální paleta; **bez GL**
-- `AtlasImage` — atlas jako PNG (ImageIO), řádky překlopené, alfa zachovaná, import s kontrolou rozměru; **bez GL**
+- `TextureLab` — obrazovka: přehled, plátno, paleta, HSV, hex, tlačítka, **záložky Blocks / Skin**;
+  kreslení a vstup
+- `TextureLabLayout` — rozvržení v GUI pixelech a hit-testy obou režimů; **bez GL**
+- `PixelEditor` — společný základ obou editorů: barva, tah štětcem, undo, `DirtyRect`, palety; **bez GL**
+- `AtlasEditor` — nad ním mřížka dlaždic atlasu, mapování dlaždice na bloky, barvy atlasu; **bez GL**
+- `SkinEditor` — nad ním stěny dílů těla místo dlaždic; **bez GL**
+- `SkinLayout` — kde která stěna dílu leží v kůži 64×64, počítané **týmž vzorcem jako UV modelu**; **bez GL**
+- `AtlasImage` — atlas i kůže jako PNG (ImageIO), alfa zachovaná, import s kontrolou rozměru; **bez GL**
 - `BlockDraft` — rozepsaný nový blok: vlastnosti, dlaždice stěn, přidělení volné buňky; **bez GL**
 - `BlockPreview` — živá kostka: malý skutečný svět → `ChunkMesh` → světový shader, kamera obíhá
+- `SkinPreview` — živá postava: `PlayerModelMesh` → světový shader s texturou kůže, kamera obíhá
+- `LabProfiler` — čas fází vykreslení labu a draw cally, zapíná se v labu na F3
 - `ImageRenderer` — libovolný výřez textury jako obdélník (shader `UI_TEXTURED`)
 
 **Hra**
@@ -1092,12 +1103,13 @@ a 0,8, spodek 0,5). Kdyby se vázaly ke stěnám modelu, tmavý bok by se otáč
 se proto otočí maticí dílu a odstíny os se smíchají podle druhých mocnin jejích složek (dávají
 součet 1): stěna podél osy dostane přesně odstín té osy, šikmá plynulý mezistupeň.
 
-**⚠️ Placeholder skin je v šabloně Minecraftu 64×64 a vyměňuje se na JEDNOM místě.**
+**⚠️ Vygenerovaný skin je v šabloně Minecraftu 64×64 a vyměňuje se na JEDNOM místě.**
 `Textures.playerSkinPixels()` kreslí barvy dílů (kůže, vlasy, tričko, kalhoty, boty, oči) přímo
 do rozložení šablony a UV v `PlayerModelMesh` jsou souřadnice té šablony (rozbalení kvádru
-jako `ModelBox`). Skutečný skin = v `Textures.playerSkin()` načíst PNG přes `ImageIO`
-a `getRGB(0, 0, 64, 64, null, 0, 64)` místo `playerSkinPixels()`; model ani UV se nemění.
-Stejný princip jako „ruční textury místo procedurálních" u atlasu bloků.
+jako `ModelBox`). Přepínač na skutečný skin je `Textures.skinPixels()`: když existuje
+`textures/skin.png` a má 64×64, použije se on, jinak se kůže vygeneruje. Model ani UV se
+nemění — stejný princip jako „ruční textury místo procedurálních" u atlasu bloků.
+Malovat ho jde rovnou v labu, viz „Editace kůže postavy v labu".
 
 **⚠️ Skin jde do GL v pořadí OBRÁZKU (horní řádek první), ne odspodu jako atlas.** GL pak má
 t = 0 u horního okraje a UV modelu jsou rovnou souřadnice ve skinu dělené 64, bez překlápění.
@@ -1353,7 +1365,8 @@ reagují na volbu GUI Scale ve stejném framu.
 **Vývojářská obrazovka na úpravy dlaždic atlasu, na F6 nebo z hlavního menu („Texture Lab").**
 Vlevo přehled atlasu (klik vybere dlaždici), uprostřed dlaždice jako plátno 16×16 (levé
 tlačítko maluje, tažením čára, pravé bere barvu), vpravo živý 3D náhled bloku, pod tím paleta,
-HSV posuvníky, hex a tlačítka Save / Revert / Close. F6 je volná — Minecraft ji nepoužívá,
+HSV posuvníky, hex a tlačítka Save / Revert / Close. **Vpravo dole jsou záložky Blocks a Skin
+— druhá maluje kůži postavy, viz „Editace kůže postavy v labu".** F6 je volná — Minecraft ji nepoužívá,
 F3 je ladicí výpis a F5 pohled. Otevřený ze hry nechává za sebou kreslit svět.
 
 **⚠️ Proč živý náhled přes SKUTEČNÝ shader, ne malování naslepo.** Dlaždice na plátně vypadá
@@ -1381,7 +1394,8 @@ chodí. Světlo je poledne bez mlhy.
 
 **⚠️ Lab maluje PŘÍMO DO ATLASU HRY, ne do kopie.** `AtlasEditor` upravuje totéž pole pixelů,
 ze kterého je nahraná textura atlasu, a lab ho jednou za frame (když se něco změnilo) nahraje
-do TÉŽE textury přes `Texture.update()` (`glTexSubImage2D`). Změnu tak ve stejném framu vidí
+do TÉŽE textury přes `Texture.updateRegion()` (`glTexSubImage2D` jen na změněný obdélník,
+viz „Výkon labu"). Změnu tak ve stejném framu vidí
 náhledová kostka, ikony v hotbaru i svět za labem. Ověřeno sondou s GL oknem: po přemalování
 dlaždice kamene načerveno měla kostka hned v dalším framu barvu přesně červená × 0,8 (bok Z).
 Neuložené úpravy zůstanou ve hře do jejího ukončení; na disk je dostane až Save.
@@ -1419,7 +1433,8 @@ to jsou prázdné buňky), nejvýš 86. **Zobrazují se seřazené podle odstín
 šedé napřed, pak výseče po 30° a v každé od tmavé ke světlé. Dvě skoro stejné hnědé
 z různých bloků tak leží hned vedle sebe a je vidět, že jsou dvě. **Najetí myší na vzorek
 (i v paletě dlaždice) orámuje v přehledu atlasu dlaždice, které tu barvu obsahují.**
-Přepočítává se jen po změně pixelů (`AtlasEditor.revision()`), ne každý frame.
+Přepočítává se jen po změně pixelů (`PixelEditor.revision()`) a **ne během tahu štětcem**,
+ne každý frame — viz „Výkon labu".
 
 **Import hotového PNG** (z Aseprite, GIMPu…) jde **do editoru, ne na disk**: `AtlasImage.importInto()`
 obrázek přečte, zkontroluje a teprve pak ho celý najednou vloží do pole atlasu. Jde vrátit
@@ -1428,8 +1443,29 @@ jedním Ctrl+Z (snímek celého atlasu, 64 KB) a na disk ho dostane až Save. Zd
 (GLFW drop callback). Okno výběru souboru to není schválně: AWT běží headless (kvůli
 macOS, viz `Main`) a tinyfiledialogs by byl nový modul LWJGL. **⚠️ Rozměr se čte
 z hlavičky dřív, než se obrázek dekóduje** — fotka 8000×6000 se odmítne bez stovek megabajtů
-v paměti. Jiný rozměr než 128×128, poškozený soubor i ne-obrázek skončí hláškou
-(„Not imported: image is 64x64, needs 128x128 - atlas unchanged") a atlas zůstane, jak byl.
+v paměti. Poškozený soubor i ne-obrázek skončí hláškou a atlas zůstane, jak byl.
+
+**⚠️ ROZMĚR IMPORTU JE PEVNÝ: atlas přesně 128×128, kůže přesně 64×64.** Cokoliv jiného se
+odmítne hláškou, která **říká obě čísla a v tomhle pořadí — co se čekalo a co přišlo**:
+
+```
+Not imported: expected 128x128, got 64x64 - atlas unchanged
+Not imported: expected 64x64, got 128x128 - skin unchanged
+```
+
+Dřívější znění („image is 64x64, needs 128x128") mělo obě čísla taky, ale v opačném pořadí,
+takže se četlo jako popis chyby místo pokynu. `TextureLabTest` hlídá celou větu, ne jen
+výskyt čísel.
+
+**⚠️ PŘEŠKÁLOVÁNÍ SE SCHVÁLNĚ NEDĚLÁ.** Nabízelo by se obrázek jiného rozměru zmenšit na
+128×128 a import tím „vždycky nějak" projde. U pixel-artu je to ale ta nejhorší možná
+služba: zmenšení 256×256 nejbližším sousedem zahodí každý druhý pixel (z jednopixelové
+linky v textuře zbyde přerušovaná čára), zmenšení průměrováním rozmaže ostré hrany, kvůli
+kterým je filtrování nastavené na `GL_NEAREST`, a u rozměru, který není násobek 128, nesedí
+ani jedno. Lab existuje proto, aby bylo vidět, co se s texturou na bloku doopravdy stane;
+tiché přeškálování by do něj vpustilo data, která si uživatel neschválil. Správný rozměr
+navíc umí nastavit každý editor, ve kterém takový obrázek vznikl — hláška teď říká přesně,
+jaký.
 
 **Undo (Ctrl+Z) je snímek dlaždice před tahem**, 1 KB na krok, nejvýš 100 kroků. Celý tah
 tažením je jeden krok. Revert undo zahazuje — vracel by tahy na jiný obsah.
@@ -1455,6 +1491,139 @@ malovat, jen bez náhledu.
 **Známá zjednodušení:** jeden atlas, žádné resource packy; mapování VESTAVĚNÝCH bloků lab
 jen čte (nové bloky a jejich dlaždice viz „Bloky z labu"); bez animovaných textur; praskliny
 nemají náhled přes blok; náhled je vždycky poledne; import neumí jiný rozměr mřížky.
+
+### Editace kůže postavy v labu
+
+**Druhá záložka labu vedle bloků: malování `textures/skin.png`.** Vpravo dole jsou dvě
+viditelná tlačítka **Blocks** a **Skin** — přepínač NENÍ klávesová zkratka schválně: režim,
+o kterém se nedá dozvědět jinak než z kódu, je skoro totéž jako žádný. Aktivní záložka je
+zapuštěná a orámovaná, neaktivní vystouplá jako běžné tlačítko.
+
+**⚠️ Plátno, paleta, kapátko, HSV, hex, undo i import PNG jsou TYTÉŽ.** Společný základ
+obou editorů je `PixelEditor` (barva, tah Bresenhamem, undo jako snímek oblasti,
+`DirtyRect`, počítání barev); `AtlasEditor` k němu přidává mřížku dlaždic, `SkinEditor`
+stěny dílů těla. Kopie téhož kódu by znamenala, že se každá oprava malování — a hlavně
+zrychlení popsané níž — musí udělat dvakrát a jednou na to někdo zapomene. **Barva je
+společná pro obě záložky**: odstín vytažený kapátkem z kamene jde rovnou použít na kalhoty,
+což je přesně to, proč je editace kůže v labu, a ne zvlášť.
+
+**⚠️ OBLAST NA PLÁTNĚ NENÍ DLAŽDICE, ALE STĚNA DÍLU TĚLA.** U atlasu je to vždycky čtverec
+16×16; u kůže obličej 8×8, bok ruky 4×12, vršek hlavy 8×8, vršek nohy 4×4. Plátno proto
+dostane největší CELÉ zvětšení, při kterém se stěna vejde, a vycentruje se — půlpixelové
+zvětšení by u pixel-artu rozmazalo mřížku. Vlevo místo přehledu atlasu leží **celá kůže
+64×64 po dvou GUI pixelech**, což vyjde přesně na 128×128 obdélníku přehledu atlasu; každá
+stěna má tenký rámeček (v šabloně leží obličej a týl vedle sebe bez mezery, jinak by nebylo
+poznat, kde jeden končí) a klik do ní ji otevře na plátně.
+
+**⚠️ SOUŘADNICE SE NEOPISUJÍ, POČÍTAJÍ SE TÝMŽ VZORCEM JAKO UV MODELU.** `SkinLayout` bere
+rozměry dílů z `PlayerModelMesh.PARTS` a rozbalení kvádru
+
+```
+         [ vršek ][ spodek ]
+  [ pravá ][ před ][ levá  ][ zadní ]
+```
+
+dopočítává stejnými výrazy, jaké skládají UV vrcholů v `PlayerModelMesh.unfold()`. Kdyby si
+`SkinLayout` držel vlastní tabulku souřadnic, daly by se obě rozejít a malovalo by se vedle
+— obličej by přistál na týlu. `TextureLabTest` proto porovnává obdélník každé stěny s UV,
+která `unfold()` SKUTEČNĚ vydá, a k tomu dělá round-trip pixel → index ve skinu → zpátky
+tatáž stěna. Stěny pokryjí 1632 ze 4096 pixelů šablony; zbytek je druhá vrstva (klobouk,
+bunda), kterou model nekreslí, takže na ni klik hlásí „nothing here" místo malování naslepo.
+
+**⚠️ ŘÁDEK 0 JE U KŮŽE NAHOŘE, na rozdíl od atlasu.** Pole kůže jde do GL v pořadí OBRÁZKU,
+protože UV modelu jsou rovnou souřadnice šablony dělené 64 (viz „Postava a pohledy").
+Plátno v labu má ale řádek 0 dole jako všude jinde, takže se překlápí na jednom místě,
+v `SkinLayout.index()`. Ze stejného důvodu se **PNG kůže při zápisu ani čtení nepřeklápí**,
+kdežto atlas ano — je to jediný rozdíl mezi nimi a `AtlasImage` ho bere parametrem.
+
+**⚠️ Živý náhled je SKUTEČNÝ MODEL, ne panáček.** `SkinPreview` staví mesh tímtéž
+`PlayerModelMesh.build()`, jaký kreslí postavu ve třetí osobě, kreslí ho světový shader
+a textura je TÁŽ textura kůže, do které lab maluje. Malovat kůži naslepo je ještě horší než
+malovat dlaždice: na plátně jsou stěny vedle sebe jako rozstřižená krabice, kdežto na
+postavě se stýkají v hranách, a rukáv, který na plátně navazuje, může být na modelu o pixel
+vedle. Póza je jedna, klidová (`PlayerPose.REST`). **Otáčí se kamera, ne postava** — ztmavení
+stěn je vázané na osy SVĚTA, takže otáčením postavy by se točily i odstíny a náhled by
+ukazoval něco, co ve hře nikdy neuvidíš.
+
+**⚠️ Mesh náhledu se staví JEDNOU.** Vrcholy jsou stavěné s kamerou v počátku a kamera
+obíhá jen uniformem `uChunkOffset` — kdyby byly relativní k oku jako ve hře, musel by se
+mesh přestavět při každém otočení. Malování mění PIXELY textury, ne vrcholy ani UV, takže
+tah štětcem je stejně levný jako u kostky: nahraje se změněný obdélník textury a model se
+překreslí beze změny.
+
+**Kam se ukládá: `textures/skin.png`**, PNG 64×64 s alfou, stejným vzorem jako `atlas.png`.
+**Nepovinný soubor:** `Textures.skinPixels()` ho při startu zkusí, a když neexistuje nebo
+nemá 64×64, vygeneruje kůži jako dřív. Smazání souboru tedy vrací hru k vestavěné kůži.
+Který skin běží, píše konzole při startu (`Kuze postavy: …`), ladicí výpis (`skin …`)
+i titulek labu. **Formátu ani chování atlasu bloků se to nedotýká.**
+
+**⚠️ Lab maluje PŘÍMO DO TEXTURY HRY**, úplně stejně jako u atlasu: `SkinEditor` upravuje
+totéž pole, ze kterého je nahraná textura kůže, a lab do ní nahraje změněný obdélník. Tah
+štětcem je proto vidět v náhledu, na postavě za labem (třetí osoba) i na ruce v první osobě
+ve stejném framu. Neuložené úpravy zůstanou ve hře do jejího ukončení; na disk je dostane
+až Save.
+
+**Známá zjednodušení:** jedna pevná póza náhledu (žádná chůze ani máchnutí); jedna kůže,
+žádný výběr nebo přepínání ve hře; druhá vrstva šablony (klobouk, bunda) se dá namalovat,
+ale model ji nekreslí, takže ji lab ani nenabízí; starší skiny 64×32 se nenačtou (hláška
+řekne, že se čeká 64×64).
+
+### Výkon labu
+
+**⚠️ POTVRZENÁ PŘÍČINA SEKÁNÍ: POČET DRAW CALLŮ, ne množství práce.** Lab na MacBooku
+znatelně sekal, zatímco hra na téže mašině běžela plynule. Měření ukázalo proč: lab kreslil
+**přes 400 draw callů na frame**, hra jich má v HUD řádově desítky. Každý obdélník
+`Renderer2D` i každý řádek textu měl vlastní `glBufferSubData` + `glDrawArrays` — paleta
+86 barev je 172 z nich, tři HSV posuvníky po 32 dílcích dalších 102, mřížky 44, tlačítka
+a rámečky zbytek. Na Windows s NVIDIÍ to stojí desetiny milisekundy a není to poznat; na
+integrované grafice v MacBooku, kde je ovladač OpenGL na jeden draw call řádově dražší,
+se právě tohle projeví jako sekání. **Proto to bylo vidět jen v labu a jen tam.**
+
+| | před | po |
+|---|---|---|
+| draw cally labu | 422 | **8** |
+| frame labu (medián, RTX 2050, 1600×1000, 600 framů) | 2,2 ms | **1,0 ms** |
+| nahrání atlasu při jednom namalovaném pixelu | 64 KB (celý atlas) | **1 KB** (jedna dlaždice) |
+| počítání barev atlasu při tahu štětcem | 2× průchod 16 384 pixelů každý frame | **žádné** (až po tahu) |
+
+**Co se změnilo:**
+
+1. **`Renderer2D` a `TextRenderer` dávkují.** Všechno mezi `begin()` a `end()` se sype do
+   jednoho pole a jde na grafiku jedním draw callem. Kvůli tomu se **barva textu přesunula
+   z uniformu do vrcholu** — uniform se mezi draw cally mění, takže by každý řádek (a každý
+   jeho stín zvlášť) musel zůstat samostatný. Cena jsou čtyři floaty navíc na vrchol.
+   Dávka se vyprázdní na `end()`, při zaplnění a **před každou změnou stavu GL**
+   (`beginInvertBlend()` u zaměřovače), jinak by se nasbírané tvary nakreslily až s novým
+   mícháním.
+2. **Nahrává se jen změněný obdélník** (`DirtyRect` → `Texture.updateRegion()`). Malování
+   po jednom pixelu posílalo celých 64 KB atlasu kvůli čtyřem bajtům. Je to JEDEN obdélník,
+   ne seznam: dva vzdálené pixely spojí i s tím mezi nimi, takže se nahraje víc, než se
+   změnilo, ale **nikdy míň** — to je celá správnost a `TextureLabTest` ji ověřuje.
+3. **Barvy se počítají jednou a jen když je proč.** `atlasColors()` se volalo dvakrát
+   (jednou na zobrazených 86 barev, jednou na všechny, jen aby se zjistil jejich počet) —
+   teď je to jeden průchod. `byHue()` počítá HSV jednou pro barvu místo uvnitř porovnávače.
+   Paleta dlaždice, zvýraznění „kde ta barva je" a seznam bloků dlaždice se pamatují do
+   změny pixelů. **A během tahu štětcem se palety nepřepočítávají vůbec** — tah mění pixely
+   každý frame, takže by se počítaly desetkrát za vteřinu, a navíc by se vzorky pod kurzorem
+   přerovnávaly a uživatel by klikal na barvu, která se mu mezitím odstěhovala. Přepočet
+   přijde, až tah skončí; to je okamžik, kdy se obrázek z pohledu uživatele opravdu změnil.
+
+**⚠️ Obraz labu je po změně BAJT PO BAJTU stejný jako před ní.** Ověřeno sondou s GL oknem:
+`glReadPixels` z obou verzí dá identický PNG. Dávkování tedy nezměnilo pořadí kreslení ani
+barvy — jen počet příkazů, kterými se to samé nakreslí.
+
+**Jak se to měří: F3 v labu.** Zapne dva řádky místo stavu a nápovědy:
+
+```
+lab frame 1,04 ms   draw calls 8   (F3 hides)
+upload 0.00  palette 0.01  shapes 0.05  images 0.01  preview 0.05  text 0.16
+```
+
+Čas je CPU čas po fázích, průměr přes posledních 30 framů. U 2D UI je to přesně to, co má
+být vidět: náklad jednoho draw callu (sestavit příkaz, nahrát vrcholy, ověřit stav) platí
+ovladač na CPU, a na macOS je několikanásobný oproti Windows. **Počet draw callů
+(`GlStats`) je jediné číslo o výkonu nezávislé na stroji** — když se z 422 stane 8, zlepší
+se to všude, jen na různých strojích různě moc.
 
 ### Bloky z labu (datově řízené)
 
@@ -1675,6 +1844,9 @@ se tlačítko na hraně samo chytalo a pouštělo dokola.
 | Paměť sekce | 4 KB bloky + 4 KB světlo, oboje líně |
 | Paměť | ~32 KB na sloupec |
 | Výšky terénu | min 48, max 79, průměr 63 (24 000 vzorků přes 6000×6000 bloků) |
+| Frame texture labu | **1,0 ms** (před dávkováním 2,2 ms; RTX 2050, okno 1600×1000, medián z 600 framů) |
+| Draw cally labu | **8** na frame (před dávkováním 422) |
+| Nahrání atlasu při tahu štětcem | 1 KB (dlaždice 16×16) místo 64 KB celého atlasu |
 
 **Frustum culling ani async generace nejsou implementované — po měření vyhodnoceny jako
 předčasné.** Vrátit se k nim, až render distance nebo počet chunků naroste natolik, že se to projeví.
@@ -1696,7 +1868,9 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | F3 | ladicí výpis vlevo nahoře — schovat / ukázat (výchozí: ukázaný) |
 | F11 | okno / celá obrazovka (uloží se do `options.json`) |
 | F6 | texture lab (znovu F6 nebo Esc zavře); taky z hlavního menu „Texture Lab" |
-| v labu: New block / Import PNG | nový blok z labu (Esc zruší) / načíst `textures/import.png`; PNG přetažené do okna se naimportuje hned |
+| v labu: Blocks / Skin | záložky vpravo dole — dlaždice atlasu / kůže postavy (`textures/skin.png`) |
+| v labu: New block / Import PNG | nový blok z labu (Esc zruší) / načíst `textures/import.png` (atlas 128×128, kůže 64×64); PNG přetažené do okna se naimportuje hned |
+| v labu: F3 | měření vykreslení labu — čas fází a počet draw callů |
 | PMB na crafting table | otevře mřížku 3×3 |
 | LMB (držet) | kopat — doba podle tvrdosti bloku |
 | T | posun času o desetinu cyklu (ladění) |
@@ -1728,6 +1902,9 @@ její kresba v `Textures` a case ve switchích. Plná kostka jde přidat i bez k
 
 **Ruční textury místo procedurálních — hotovo, přes texture lab.** Upravený atlas se uloží
 do `textures/atlas.png` a hra ho při startu načte místo procedurálního; viz sekce Texture lab.
+
+**Editace kůže postavy — hotovo.** Záložka Skin v labu maluje `textures/skin.png` s živým
+náhledem skutečného modelu; viz sekce „Editace kůže postavy v labu".
 
 **Texture lab — hotovo.** F6 nebo „Texture Lab" v hlavním menu: úpravy dlaždic s živou 3D
 kostkou přes skutečný mesher a shader, export do PNG, import hotového PNG, paleta celého

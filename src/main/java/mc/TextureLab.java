@@ -27,16 +27,24 @@ import static org.lwjgl.opengl.GL33.GL_REPEAT;
  * které kreslí svět, a kostka v náhledu (BlockPreview) se změní ve stejném
  * framu - viz AtlasEditor a Texture.update().
  *
- * Dva režimy. V ATLASU se malují dlaždice. V NOVÉM BLOKU nahradí informace
- * o dlaždici formulář (jméno, tvrdost, pevný, neprůhledný, dlaždice stěn)
- * a klik do atlasu přiřadí dlaždici vybrané stěně. Malování, paleta
- * i náhled fungují dál - náhled ukazuje rozepsaný blok, protože lab po
- * každé změně aktivuje dočasný registr s návrhem (BlockDraft) a postaví
- * náhled znovu. Cancel i zavření labu vrátí původní registr.
+ * ⚠️ DVĚ ZÁLOŽKY: BLOCKS A SKIN. Záložka Blocks maluje dlaždice atlasu
+ * bloků, záložka Skin kůži postavy (textures/skin.png). Plátno, paleta,
+ * kapátko, HSV, hex, undo i import PNG jsou pro obě TYTÉŽ - liší se jen
+ * to, do čeho míří: mřížka dlaždic proti rozbalení kvádrů těla (SkinLayout).
+ * Společný základ obou editorů je PixelEditor. Přepíná se VIDITELNÝM
+ * tlačítkem, ne zkratkou: druhý režim, o kterém se nedá dozvědět jinak než
+ * z kódu, je skoro totéž jako žádný.
+ *
+ * V záložce Blocks je navíc NOVÝ BLOK: informace o dlaždici nahradí formulář
+ * (jméno, tvrdost, pevný, neprůhledný, dlaždice stěn) a klik do atlasu
+ * přiřadí dlaždici vybrané stěně. Malování, paleta i náhled fungují dál -
+ * náhled ukazuje rozepsaný blok, protože lab po každé změně aktivuje dočasný
+ * registr s návrhem (BlockDraft) a postaví náhled znovu. Cancel i zavření
+ * labu vrátí původní registr.
  *
  * Všechno bez GL (souřadnice, malování, barvy, soubory, návrh bloku) je
- * v AtlasEditor, TextureLabLayout, AtlasImage, BlockDraft a BlockRegistry;
- * tady je jen kreslení a vstup.
+ * v PixelEditor, AtlasEditor, SkinEditor, SkinLayout, TextureLabLayout,
+ * AtlasImage, BlockDraft a BlockRegistry; tady je jen kreslení a vstup.
  * ---------------------------------------------------------------------------
  */
 public class TextureLab {
@@ -65,21 +73,32 @@ public class TextureLab {
     private static final float[] GUM_CHECK   = {0.75f, 0.75f, 0.75f, 1f};
     private static final float[] SKY = {WorldRenderer.SKY_R, WorldRenderer.SKY_G, WorldRenderer.SKY_B, 1f};
 
+    /** Co se maluje. Přepíná se záložkami v pravém sloupci. */
+    public enum Mode { BLOCKS, SKIN }
+
     private final AtlasEditor editor;
+    private final SkinEditor skin;
     private final Texture atlas;
+    private final Texture skinTexture;
     private final Renderer2D shapes;
     private final TextRenderer text;
+
+    private Mode mode = Mode.BLOCKS;
 
     // Vlastní GL prostředky labu - vznikají s ním a s ním se mažou.
     private final ImageRenderer images = new ImageRenderer();
     private final Texture checker;
     private final BlockPreview preview = new BlockPreview();
+    private final SkinPreview skinPreview = new SkinPreview();
 
     /** Měření času vykreslení labu po fázích - zapíná se v labu klávesou F3. */
     private final LabProfiler profiler = new LabProfiler();
 
     /** Odkud atlas pochází: true = textures/atlas.png, false = procedurální. */
     private boolean fromFile;
+
+    /** Odkud kůže pochází: true = textures/skin.png, false = procedurální. */
+    private boolean skinFromFile;
 
     /** Kolikátý z bloků, které dlaždici používají, je v náhledu. */
     private int previewChoice = 0;
@@ -112,15 +131,18 @@ public class TextureLab {
     private int[] globalColors = new int[0];
     private int globalTotal = 0;
     private int globalRevision = -1;
+    private Mode globalMode = null;
 
-    /** Pro kterou dlaždici a revizi platí paleta dlaždice. */
+    /** Pro kterou oblast, revizi a režim platí paleta oblasti. */
     private int paletteRevision = -1;
-    private int paletteTile = -1;
+    private int paletteRegion = -1;
+    private Mode paletteMode = null;
 
-    /** Poslední zvýraznění "kde ta barva je" - pro kterou barvu a revizi platí. */
+    /** Poslední zvýraznění "kde ta barva je" - pro kterou barvu, revizi a režim platí. */
     private boolean[] usesColor = null;
     private int usesArgb = 0;
     private int usesRevision = -1;
+    private Mode usesMode = null;
 
     /** Poslední seznam bloků používajících vybranou dlaždici. */
     private List<Byte> usingBlocks = List.of();
@@ -129,6 +151,9 @@ public class TextureLab {
 
     /** Odkud se importuje: textures/import.png, nebo poslední soubor přetažený do okna. */
     private Path importFile = Textures.IMPORT_FILE;
+
+    /** Poslední kliknutá stěna kůže - jen pro hlášku, výběr drží SkinEditor. */
+    private int hoveredFace = -1;
 
     // --- nový blok ---
 
@@ -143,12 +168,22 @@ public class TextureLab {
     /** Založené bloky, které si ještě nevyzvedl Main (dá je hráči). */
     private final List<Byte> createdBlocks = new ArrayList<>();
 
+    /**
+     * ⚠️ Pole pixelů jsou TA SAMÁ, ze kterých jsou nahrané textury hry -
+     * atlas bloků i kůže postavy. Lab do nich maluje přímo a změněný
+     * obdélník nahraje do téže textury, takže náhled, hotbar i svět
+     * (a postava ve třetí osobě) změnu vidí v tom samém framu.
+     */
     public TextureLab(int[] atlasPixels, Texture atlas, boolean fromFile,
+                      int[] skinPixels, Texture skinTexture, boolean skinFromFile,
                       Renderer2D shapes, TextRenderer text)
     {
         this.editor = new AtlasEditor(atlasPixels);
+        this.skin = new SkinEditor(skinPixels);
         this.atlas = atlas;
+        this.skinTexture = skinTexture;
         this.fromFile = fromFile;
+        this.skinFromFile = skinFromFile;
         this.shapes = shapes;
         this.text = text;
 
@@ -169,6 +204,60 @@ public class TextureLab {
     public boolean fromFile()
     {
         return fromFile;
+    }
+
+    /** Pochází kůže teď ze souboru? */
+    public boolean skinFromFile()
+    {
+        return skinFromFile;
+    }
+
+    public Mode mode()
+    {
+        return mode;
+    }
+
+    /**
+     * Přepnutí záložky. Rozepsaný blok se zruší - formulář patří k atlasu
+     * a nechat ho viset v jiném režimu by znamenalo, že v něm lab drží
+     * aktivní dočasný registr, o kterém není nic vidět.
+     */
+    private void setMode(Mode newMode)
+    {
+        if(mode == newMode)
+        {
+            return;
+        }
+
+        cancelBlock();
+        release();
+        mode = newMode;
+
+        if(mode == Mode.BLOCKS)
+        {
+            refreshPreview();
+        }
+
+        say(mode == Mode.SKIN
+                ? "Skin: pick a body face on the left, paint it in the middle"
+                : "Blocks: pick an atlas tile on the left, paint it in the middle");
+    }
+
+    private boolean skinMode()
+    {
+        return mode == Mode.SKIN;
+    }
+
+    /** Editor, do kterého se právě maluje. */
+    private PixelEditor active()
+    {
+        return skinMode() ? skin : editor;
+    }
+
+    /** Textura, kterou právě editor upravuje. */
+    private Texture activeTexture()
+    {
+        return skinMode() ? skinTexture : atlas;
     }
 
     /**
@@ -204,9 +293,15 @@ public class TextureLab {
         preview.show(blocks.isEmpty() ? World.AIR : blocks.get(previewChoice % blocks.size()));
     }
 
+    /**
+     * ⚠️ Barva je SPOLEČNÁ pro oba režimy - obě záložky ji dostanou. Odstín
+     * vytažený kapátkem z kamene tak jde rovnou použít na kalhoty, což je
+     * přesně to, proč je editace kůže v labu a ne zvlášť.
+     */
     private void setColor(int argb)
     {
         editor.setColor(argb);
+        skin.setColor(argb);
 
         float[] hsv = AtlasEditor.toHsv(argb);
 
@@ -237,6 +332,12 @@ public class TextureLab {
 
     private void save()
     {
+        if(skinMode())
+        {
+            saveSkin();
+            return;
+        }
+
         if(AtlasImage.save(editor.pixels(), Textures.ATLAS_FILE))
         {
             editor.markSaved();
@@ -249,18 +350,52 @@ public class TextureLab {
         }
     }
 
-    /** Zpátky k tomu, co je na disku: uložený PNG, jinak procedurální atlas. */
+    /**
+     * ⚠️ Kůže jde do VLASTNÍHO souboru a bez překlápění řádků. Atlas se
+     * překlápí (jeho řádek 0 je dole), kůže ne - její pole je rovnou
+     * v pořadí obrázku, viz SkinLayout. Formátu atlasu se nesahá.
+     */
+    private void saveSkin()
+    {
+        if(AtlasImage.save(skin.pixels(), Textures.SKIN_FILE, SkinEditor.SIZE, false))
+        {
+            skin.markSaved();
+            skinFromFile = true;
+            say("Saved " + Textures.SKIN_FILE.toString().replace('\\', '/'));
+        }
+        else
+        {
+            say("Save failed - see console");
+        }
+    }
+
+    /** Zpátky k tomu, co je na disku: uložený PNG, jinak procedurální obrázek. */
     private void revert()
     {
+        if(skinMode())
+        {
+            Textures.SkinPixels source = Textures.skinPixels(Textures.SKIN_FILE);
+            skin.replaceAll(source.pixels());
+            skinFromFile = source.fromFile();
+            say(skinFromFile ? "Reverted to saved skin.png" : "Reverted to the built-in skin");
+            return;
+        }
+
         Textures.AtlasPixels source = Textures.atlasPixels(Textures.ATLAS_FILE);
         editor.replaceAll(source.pixels());
         fromFile = source.fromFile();
         say(fromFile ? "Reverted to saved PNG" : "Reverted to procedural");
     }
 
-    /** Import hotového PNG do editoru. Při chybě zůstane atlas, jak byl. */
-    private void importAtlas()
+    /** Import hotového PNG do editoru. Při chybě zůstane obrázek, jak byl. */
+    private void importImage()
     {
+        if(skinMode())
+        {
+            say(AtlasImage.importInto(skin, importFile, SkinEditor.SIZE, false, "skin"));
+            return;
+        }
+
         say(AtlasImage.importInto(editor, importFile));
 
         if(draft == null)
@@ -285,12 +420,13 @@ public class TextureLab {
             return;
         }
 
-        importAtlas();
+        importImage();
     }
 
     public void update(float dt)
     {
         preview.update(dt);
+        skinPreview.update(dt);
         statusLeft -= dt;
     }
 
@@ -430,19 +566,19 @@ public class TextureLab {
             editingName = false;
         }
 
-        int[] pixel = layout.canvasPixelAt(mouseX, mouseY);
+        int[] pixel = canvasPixelAt(layout, mouseX, mouseY);
 
         if(pixel != null)
         {
             if(left)
             {
                 painting = true;
-                editor.beginStroke(pixel[0], pixel[1]);
+                active().beginStroke(pixel[0], pixel[1]);
             }
             else
             {
-                setColor(editor.pick(pixel[0], pixel[1]));
-                say("Picked " + AtlasEditor.toHex(editor.color()));
+                setColor(active().pick(pixel[0], pixel[1]));
+                say("Picked " + AtlasEditor.toHex(active().color()));
             }
             return false;
         }
@@ -452,19 +588,45 @@ public class TextureLab {
             return false;
         }
 
-        int tile = layout.tileAt(mouseX, mouseY);
-
-        if(tile >= 0)
+        // Vlevo: mřížka dlaždic, nebo celá kůže s díly těla.
+        if(skinMode())
         {
-            selectTile(tile);
+            int[] skinPixel = layout.skinPixelAt(mouseX, mouseY);
 
-            // V novém bloku klik do atlasu zároveň přiřadí dlaždici stěně.
-            if(draft != null)
+            if(skinPixel != null)
             {
-                draft.tiles[draft.activeFace] = tile;
-                showDraft();
+                int face = SkinLayout.faceAt(skinPixel[0], skinPixel[1]);
+
+                if(face >= 0)
+                {
+                    skin.select(face);
+                    say(SkinLayout.name(face) + "  "
+                            + SkinLayout.width(face) + "x" + SkinLayout.height(face));
+                }
+                else
+                {
+                    // Nepokryté místo šablony (druhá vrstva) model nekreslí.
+                    say("Nothing here - the model does not draw this part of the sheet");
+                }
+                return false;
             }
-            return false;
+        }
+        else
+        {
+            int tile = layout.tileAt(mouseX, mouseY);
+
+            if(tile >= 0)
+            {
+                selectTile(tile);
+
+                // V novém bloku klik do atlasu zároveň přiřadí dlaždici stěně.
+                if(draft != null)
+                {
+                    draft.tiles[draft.activeFace] = tile;
+                    showDraft();
+                }
+                return false;
+            }
         }
 
         int swatch = layout.swatchAt(mouseX, mouseY);
@@ -506,18 +668,34 @@ public class TextureLab {
             return false;
         }
 
+        // Záložky jsou vidět a fungují v obou režimech, i v rozepsaném bloku.
+        if(layout.hit(TextureLabLayout.MODE_BLOCKS, mouseX, mouseY))
+        {
+            setMode(Mode.BLOCKS);
+            return false;
+        }
+
+        if(layout.hit(TextureLabLayout.MODE_SKIN, mouseX, mouseY))
+        {
+            setMode(Mode.SKIN);
+            return false;
+        }
+
         return draft != null
                 ? pressBlockForm(layout, mouseX, mouseY)
-                : pressAtlasButtons(layout, mouseX, mouseY);
+                : pressMainButtons(layout, mouseX, mouseY);
     }
 
-    private boolean pressAtlasButtons(TextureLabLayout layout, double mouseX, double mouseY)
+    private boolean pressMainButtons(TextureLabLayout layout, double mouseX, double mouseY)
     {
         if(layout.hit(TextureLabLayout.PREVIEW, mouseX, mouseY))
         {
             // Dlaždici může používat víc bloků (hlína: hlína a spodek trávy).
-            previewChoice++;
-            refreshPreview();
+            if(!skinMode())
+            {
+                previewChoice++;
+                refreshPreview();
+            }
         }
         else if(layout.hit(TextureLabLayout.SAVE, mouseX, mouseY))
         {
@@ -529,9 +707,9 @@ public class TextureLab {
         }
         else if(layout.hit(TextureLabLayout.IMPORT, mouseX, mouseY))
         {
-            importAtlas();
+            importImage();
         }
-        else if(layout.hit(TextureLabLayout.NEW_BLOCK, mouseX, mouseY))
+        else if(!skinMode() && layout.hit(TextureLabLayout.NEW_BLOCK, mouseX, mouseY))
         {
             startBlock();
         }
@@ -596,13 +774,19 @@ public class TextureLab {
         if(painting)
         {
             // Mimo plátno se tah přitiskne k okraji, ať se čára u kraje neutrhne.
-            float gx = layout.guiX(mouseX) - TextureLabLayout.CANVAS.x();
-            float gy = layout.guiY(mouseY) - TextureLabLayout.CANVAS.y();
+            TextureLabLayout.Rect canvas = skinMode()
+                    ? TextureLabLayout.skinCanvas(skin.face()) : TextureLabLayout.CANVAS;
+            int zoom = skinMode()
+                    ? TextureLabLayout.skinCanvasZoom(skin.face()) : TextureLabLayout.CANVAS_PIXEL;
 
-            int x = clamp((int) Math.floor(gx / TextureLabLayout.CANVAS_PIXEL));
-            int y = AtlasEditor.TILE - 1 - clamp((int) Math.floor(gy / TextureLabLayout.CANVAS_PIXEL));
+            float gx = layout.guiX(mouseX) - canvas.x();
+            float gy = layout.guiY(mouseY) - canvas.y();
 
-            editor.strokeTo(x, y);
+            int width = active().regionWidth(), height = active().regionHeight();
+            int x = clamp((int) Math.floor(gx / zoom), width);
+            int y = height - 1 - clamp((int) Math.floor(gy / zoom), height);
+
+            active().strokeTo(x, y);
         }
         else if(draggedSlider != null)
         {
@@ -614,7 +798,7 @@ public class TextureLab {
     {
         if(painting)
         {
-            editor.endStroke();
+            active().endStroke();
             painting = false;
         }
 
@@ -699,9 +883,9 @@ public class TextureLab {
 
         if(ctrl && key == GLFW_KEY_Z)
         {
-            say(editor.undo() ? "Undo" : "Nothing to undo");
+            say(active().undo() ? "Undo" : "Nothing to undo");
 
-            if(draft == null)
+            if(draft == null && !skinMode())
             {
                 refreshPreview();
             }
@@ -770,9 +954,16 @@ public class TextureLab {
         return 0;
     }
 
-    private static int clamp(int pixel)
+    private static int clamp(int pixel, int limit)
     {
-        return Math.max(0, Math.min(AtlasEditor.TILE - 1, pixel));
+        return Math.max(0, Math.min(limit - 1, pixel));
+    }
+
+    /** Pixel plátna pod myší - dlaždice, nebo stěna dílu těla. */
+    private int[] canvasPixelAt(TextureLabLayout layout, double mouseX, double mouseY)
+    {
+        return skinMode() ? layout.skinCanvasPixelAt(skin.face(), mouseX, mouseY)
+                : layout.canvasPixelAt(mouseX, mouseY);
     }
 
     // ------------------------------------------------------------------
@@ -787,14 +978,8 @@ public class TextureLab {
         // OBDÉLNÍK, který se změnil (při malování jedna dlaždice, 1 KB
         // místo celých 64 KB atlasu). Viz DirtyRect.
         profiler.start(LabProfiler.UPLOAD);
-        DirtyRect changed = editor.dirty();
-
-        if(!changed.isEmpty())
-        {
-            atlas.updateRegion(editor.pixels(), changed.x(), changed.y(),
-                    changed.width(), changed.height());
-            editor.clearDirty();
-        }
+        upload(editor, atlas);
+        upload(skin, skinTexture);
         profiler.stop(LabProfiler.UPLOAD);
 
         TextureLabLayout layout = new TextureLabLayout(screenWidth, screenHeight);
@@ -837,15 +1022,22 @@ public class TextureLab {
         shapes.end();
         profiler.stop(LabProfiler.SHAPES);
 
-        // --- atlas a plátno přímo z textury ---
+        // --- přehled a plátno přímo z textury ---
         profiler.start(LabProfiler.IMAGES);
-        image(layout, screenWidth, screenHeight, checker, TextureLabLayout.ATLAS, 0f, 0f, 32f, 32f);
-        image(layout, screenWidth, screenHeight, atlas, TextureLabLayout.ATLAS, 0f, 0f, 1f, 1f);
-
         int tile = editor.tile();
 
-        image(layout, screenWidth, screenHeight, checker, TextureLabLayout.CANVAS, 0f, 0f, 8f, 8f);
-        tileImage(layout, screenWidth, screenHeight, TextureLabLayout.CANVAS, tile);
+        if(skinMode())
+        {
+            drawSkinImages(layout, screenWidth, screenHeight);
+        }
+        else
+        {
+            image(layout, screenWidth, screenHeight, checker, TextureLabLayout.ATLAS, 0f, 0f, 32f, 32f);
+            image(layout, screenWidth, screenHeight, atlas, TextureLabLayout.ATLAS, 0f, 0f, 1f, 1f);
+
+            image(layout, screenWidth, screenHeight, checker, TextureLabLayout.CANVAS, 0f, 0f, 8f, 8f);
+            tileImage(layout, screenWidth, screenHeight, TextureLabLayout.CANVAS, tile);
+        }
 
         if(draft != null)
         {
@@ -863,33 +1055,40 @@ public class TextureLab {
         profiler.start(LabProfiler.SHAPES);
         shapes.begin(screenWidth, screenHeight);
 
-        drawGrid(layout, screenHeight, TextureLabLayout.CANVAS, AtlasEditor.TILE, GRID_LINE);
-        drawGrid(layout, screenHeight, TextureLabLayout.ATLAS, AtlasEditor.TILES_PER_ROW, TILE_LINE);
-
-        if(uses != null)
+        if(skinMode())
         {
-            for(int t = 0; t < uses.length; t++)
+            drawSkinSelection(layout, screenHeight, scale, mouseX, mouseY, uses);
+        }
+        else
+        {
+            drawGrid(layout, screenHeight, TextureLabLayout.CANVAS, AtlasEditor.TILE, GRID_LINE);
+            drawGrid(layout, screenHeight, TextureLabLayout.ATLAS, AtlasEditor.TILES_PER_ROW, TILE_LINE);
+
+            if(uses != null)
             {
-                if(uses[t])
+                for(int t = 0; t < uses.length; t++)
                 {
-                    outline(layout, screenHeight, TextureLabLayout.tileRect(t), scale, USES_COLOR);
+                    if(uses[t])
+                    {
+                        outline(layout, screenHeight, TextureLabLayout.tileRect(t), scale, USES_COLOR);
+                    }
                 }
             }
-        }
 
-        outline(layout, screenHeight, TextureLabLayout.tileRect(tile), scale, Palette.SELECTOR);
+            outline(layout, screenHeight, TextureLabLayout.tileRect(tile), scale, Palette.SELECTOR);
 
-        int hoveredTile = layout.tileAt(mouseX, mouseY);
-        if(hoveredTile >= 0 && hoveredTile != tile)
-        {
-            outline(layout, screenHeight, TextureLabLayout.tileRect(hoveredTile), 1, HOVER);
-        }
+            int hoveredTile = layout.tileAt(mouseX, mouseY);
+            if(hoveredTile >= 0 && hoveredTile != tile)
+            {
+                outline(layout, screenHeight, TextureLabLayout.tileRect(hoveredTile), 1, HOVER);
+            }
 
-        int[] hoveredPixel = layout.canvasPixelAt(mouseX, mouseY);
-        if(hoveredPixel != null)
-        {
-            outline(layout, screenHeight,
-                    TextureLabLayout.canvasPixelRect(hoveredPixel[0], hoveredPixel[1]), 1, HOVER);
+            int[] hoveredPixel = layout.canvasPixelAt(mouseX, mouseY);
+            if(hoveredPixel != null)
+            {
+                outline(layout, screenHeight,
+                        TextureLabLayout.canvasPixelRect(hoveredPixel[0], hoveredPixel[1]), 1, HOVER);
+            }
         }
 
         for(int i = 0; i < paletteCount; i++)
@@ -902,7 +1101,7 @@ public class TextureLab {
             drawSwatch(layout, screenHeight, TextureLabLayout.globalSwatchRect(i), globalColors[i]);
         }
 
-        swatch(layout, screenHeight, TextureLabLayout.CURRENT, editor.color());
+        swatch(layout, screenHeight, TextureLabLayout.CURRENT, active().color());
         sunken(layout, screenHeight, TextureLabLayout.HEX);
 
         drawSlider(layout, screenHeight, TextureLabLayout.HUE, hue / 360f);
@@ -914,7 +1113,12 @@ public class TextureLab {
             button(layout, screenHeight, TextureLabLayout.SAVE, mouseX, mouseY);
             button(layout, screenHeight, TextureLabLayout.REVERT, mouseX, mouseY);
             button(layout, screenHeight, TextureLabLayout.IMPORT, mouseX, mouseY);
-            button(layout, screenHeight, TextureLabLayout.NEW_BLOCK, mouseX, mouseY);
+
+            if(!skinMode())
+            {
+                button(layout, screenHeight, TextureLabLayout.NEW_BLOCK, mouseX, mouseY);
+            }
+
             button(layout, screenHeight, TextureLabLayout.CLOSE, mouseX, mouseY);
         }
         else
@@ -922,14 +1126,25 @@ public class TextureLab {
             drawBlockForm(layout, screenHeight, mouseX, mouseY);
         }
 
+        drawModeTabs(layout, screenHeight, mouseX, mouseY);
+
         shapes.end();
         profiler.stop(LabProfiler.SHAPES);
 
         // --- živý náhled přes světový shader ---
         profiler.start(LabProfiler.PREVIEW);
         TextureLabLayout.Rect p = TextureLabLayout.PREVIEW;
-        preview.draw(atlas, (int) layout.screenX(p), (int) layout.screenBottom(p, screenHeight),
-                p.w() * scale, p.h() * scale, screenWidth, screenHeight);
+        int px = (int) layout.screenX(p), py = (int) layout.screenBottom(p, screenHeight);
+
+        if(skinMode())
+        {
+            skinPreview.draw(skinTexture, px, py, p.w() * scale, p.h() * scale,
+                    screenWidth, screenHeight);
+        }
+        else
+        {
+            preview.draw(atlas, px, py, p.w() * scale, p.h() * scale, screenWidth, screenHeight);
+        }
         profiler.stop(LabProfiler.PREVIEW);
 
         profiler.start(LabProfiler.TEXT);
@@ -937,6 +1152,21 @@ public class TextureLab {
         profiler.stop(LabProfiler.TEXT);
 
         profiler.endFrame();
+    }
+
+    /** Nahraje na grafiku obdélník, který se v editoru změnil - nic víc. */
+    private static void upload(PixelEditor source, Texture target)
+    {
+        DirtyRect changed = source.dirty();
+
+        if(changed.isEmpty())
+        {
+            return;
+        }
+
+        target.updateRegion(source.pixels(), changed.x(), changed.y(),
+                changed.width(), changed.height());
+        source.clearDirty();
     }
 
     /**
@@ -951,19 +1181,28 @@ public class TextureLab {
      */
     private void refreshTilePalette()
     {
-        if((paletteRevision == editor.revision() && paletteTile == editor.tile())
-                || editor.isStroking())
+        PixelEditor source = active();
+
+        if((paletteRevision == source.revision() && paletteRegion == regionKey()
+                && paletteMode == mode) || source.isStroking())
         {
             return;
         }
 
         System.arraycopy(BASIC_COLORS, 0, palette, 0, BASIC_COLORS.length);
-        int[] tileColors = editor.tileColors(palette.length - BASIC_COLORS.length);
-        System.arraycopy(tileColors, 0, palette, BASIC_COLORS.length, tileColors.length);
-        paletteCount = BASIC_COLORS.length + tileColors.length;
+        int[] regionColors = source.regionColors(palette.length - BASIC_COLORS.length);
+        System.arraycopy(regionColors, 0, palette, BASIC_COLORS.length, regionColors.length);
+        paletteCount = BASIC_COLORS.length + regionColors.length;
 
-        paletteRevision = editor.revision();
-        paletteTile = editor.tile();
+        paletteRevision = source.revision();
+        paletteRegion = regionKey();
+        paletteMode = mode;
+    }
+
+    /** Která dlaždice / stěna je na plátně - klíč do keší palet. */
+    private int regionKey()
+    {
+        return skinMode() ? skin.face() : editor.tile();
     }
 
     /**
@@ -973,17 +1212,20 @@ public class TextureLab {
      */
     private void refreshGlobalPalette()
     {
-        if(globalRevision == editor.revision() || editor.isStroking())
+        PixelEditor source = active();
+
+        if((globalRevision == source.revision() && globalMode == mode) || source.isStroking())
         {
             return;
         }
 
         int shown = TextureLabLayout.GLOBAL_COLUMNS * TextureLabLayout.GLOBAL_ROWS;
-        AtlasEditor.Colors colors = AtlasEditor.countColors(editor.pixels());
+        PixelEditor.Colors colors = PixelEditor.countColors(source.pixels(), false);
 
         globalColors = AtlasEditor.byHue(colors.top(shown));
         globalTotal = colors.total();
-        globalRevision = editor.revision();
+        globalRevision = source.revision();
+        globalMode = mode;
     }
 
     /**
@@ -993,14 +1235,44 @@ public class TextureLab {
      */
     private boolean[] tilesWithColor(int argb)
     {
-        if(usesColor == null || usesArgb != argb || usesRevision != editor.revision())
+        PixelEditor source = active();
+
+        if(usesColor == null || usesArgb != argb || usesRevision != source.revision()
+                || usesMode != mode)
         {
-            usesColor = AtlasEditor.tilesWithColor(editor.pixels(), argb);
+            usesColor = skinMode() ? facesWithColor(skin.pixels(), argb)
+                    : AtlasEditor.tilesWithColor(editor.pixels(), argb);
             usesArgb = argb;
-            usesRevision = editor.revision();
+            usesRevision = source.revision();
+            usesMode = mode;
         }
 
         return usesColor;
+    }
+
+    /** Které stěny těla barvu obsahují - obdoba tilesWithColor() pro kůži. */
+    static boolean[] facesWithColor(int[] skinPixels, int argb)
+    {
+        boolean[] found = new boolean[SkinLayout.FACE_COUNT];
+
+        for(int face = 0; face < found.length; face++)
+        {
+            SkinLayout.Rect r = SkinLayout.rect(face);
+
+            for(int y = 0; y < r.height() && !found[face]; y++)
+            {
+                for(int x = 0; x < r.width(); x++)
+                {
+                    if(skinPixels[(r.v() + y) * SkinLayout.SIZE + r.u() + x] == argb)
+                    {
+                        found[face] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return found;
     }
 
     /**
@@ -1017,6 +1289,101 @@ public class TextureLab {
         }
 
         return usingBlocks;
+    }
+
+    /**
+     * Přehled celé kůže vlevo a vybraná stěna na plátně.
+     *
+     * ⚠️ v0 = 1, v1 = 0. Pole kůže jde do GL v pořadí OBRÁZKU (horní řádek
+     * první), takže GL má t = 0 nahoře - a ImageRenderer kreslí v0 u DOLNÍHO
+     * okraje. Bez prohození by kůže i stěna stály vzhůru nohama.
+     */
+    private void drawSkinImages(TextureLabLayout layout, int screenWidth, int screenHeight)
+    {
+        TextureLabLayout.Rect sheet = TextureLabLayout.SKIN_SHEET;
+        image(layout, screenWidth, screenHeight, checker, sheet, 0f, 0f, 32f, 32f);
+        image(layout, screenWidth, screenHeight, skinTexture, sheet, 0f, 1f, 1f, 0f);
+
+        int face = skin.face();
+        TextureLabLayout.Rect canvas = TextureLabLayout.skinCanvas(face);
+        SkinLayout.Rect r = SkinLayout.rect(face);
+        float unit = 1f / SkinLayout.SIZE;
+
+        image(layout, screenWidth, screenHeight, checker, canvas, 0f, 0f, 8f, 8f);
+        image(layout, screenWidth, screenHeight, skinTexture, canvas,
+                r.u() * unit, (r.v() + r.height()) * unit,
+                (r.u() + r.width()) * unit, r.v() * unit);
+    }
+
+    /** Rámečky dílů v přehledu kůže, výběr a pixel pod myší. */
+    private void drawSkinSelection(TextureLabLayout layout, int screenHeight, int scale,
+                                   double mouseX, double mouseY, boolean[] uses)
+    {
+        int face = skin.face();
+
+        drawGridXY(layout, screenHeight, TextureLabLayout.skinCanvas(face),
+                SkinLayout.width(face), SkinLayout.height(face), GRID_LINE);
+
+        // Tenké rámečky VŠECH stěn: jinak by na kůži nebylo vidět, kde končí
+        // obličej a začíná týl - v šabloně jsou vedle sebe bez mezery.
+        for(int f = 0; f < SkinLayout.FACE_COUNT; f++)
+        {
+            outline(layout, screenHeight, TextureLabLayout.skinFaceRect(f), 1, TILE_LINE);
+        }
+
+        if(uses != null)
+        {
+            for(int f = 0; f < uses.length; f++)
+            {
+                if(uses[f])
+                {
+                    outline(layout, screenHeight, TextureLabLayout.skinFaceRect(f), scale, USES_COLOR);
+                }
+            }
+        }
+
+        outline(layout, screenHeight, TextureLabLayout.skinFaceRect(face), scale, Palette.SELECTOR);
+
+        int[] sheetPixel = layout.skinPixelAt(mouseX, mouseY);
+        hoveredFace = sheetPixel == null ? -1 : SkinLayout.faceAt(sheetPixel[0], sheetPixel[1]);
+
+        if(hoveredFace >= 0 && hoveredFace != face)
+        {
+            outline(layout, screenHeight, TextureLabLayout.skinFaceRect(hoveredFace), 1, HOVER);
+        }
+
+        int[] hoveredPixel = layout.skinCanvasPixelAt(face, mouseX, mouseY);
+
+        if(hoveredPixel != null)
+        {
+            outline(layout, screenHeight,
+                    TextureLabLayout.skinCanvasPixelRect(face, hoveredPixel[0], hoveredPixel[1]),
+                    1, HOVER);
+        }
+    }
+
+    /** Záložky Blocks / Skin. Aktivní je zapuštěná a orámovaná, ne vystouplá. */
+    private void drawModeTabs(TextureLabLayout layout, int screenHeight,
+                              double mouseX, double mouseY)
+    {
+        drawTab(layout, screenHeight, TextureLabLayout.MODE_BLOCKS, mode == Mode.BLOCKS,
+                mouseX, mouseY);
+        drawTab(layout, screenHeight, TextureLabLayout.MODE_SKIN, mode == Mode.SKIN,
+                mouseX, mouseY);
+    }
+
+    private void drawTab(TextureLabLayout layout, int screenHeight, TextureLabLayout.Rect r,
+                         boolean active, double mouseX, double mouseY)
+    {
+        if(active)
+        {
+            sunken(layout, screenHeight, r);
+            outline(layout, screenHeight, r, layout.scale(), Palette.SELECTOR);
+        }
+        else
+        {
+            button(layout, screenHeight, r, mouseX, mouseY);
+        }
     }
 
     private boolean isSwatchHovered(TextureLabLayout layout, double mouseX, double mouseY)
@@ -1044,7 +1411,7 @@ public class TextureLab {
     {
         swatch(layout, screenHeight, r, argb);
 
-        if(argb == editor.color())
+        if(argb == active().color())
         {
             outline(layout, screenHeight, grow(r), layout.scale(), Palette.SELECTOR);
         }
@@ -1093,10 +1460,18 @@ public class TextureLab {
         int scale = layout.scale();
         text.begin(screenWidth, screenHeight, scale);
 
-        String source = fromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural";
-        String unsaved = editor.isUnsaved() ? "  (unsaved)" : "";
+        String source = skinMode()
+                ? (skinFromFile ? Textures.SKIN_FILE.toString().replace('\\', '/') : "built-in")
+                : (fromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural");
+        String unsaved = active().isUnsaved() ? "  (unsaved)" : "";
 
-        if(draft == null)
+        if(skinMode())
+        {
+            label(layout, 8, TextureLabLayout.TITLE_Y,
+                    fit("Texture Lab   skin: " + source + unsaved, TextureLabLayout.WIDTH - 16, scale));
+            drawSkinInfo(layout);
+        }
+        else if(draft == null)
         {
             label(layout, 8, TextureLabLayout.TITLE_Y,
                     fit("Texture Lab   atlas: " + source + unsaved, TextureLabLayout.WIDTH - 16, scale));
@@ -1109,8 +1484,11 @@ public class TextureLab {
             drawFormTexts(layout);
         }
 
-        String hex = hexInput != null ? "#" + hexInput + "_" : AtlasEditor.toHex(editor.color());
+        String hex = hexInput != null ? "#" + hexInput + "_" : AtlasEditor.toHex(active().color());
         label(layout, TextureLabLayout.HEX.x() + 3, TextureLabLayout.HEX.y() + 2, hex);
+
+        centered(layout, TextureLabLayout.MODE_BLOCKS, "Blocks");
+        centered(layout, TextureLabLayout.MODE_SKIN, "Skin");
 
         label(layout, TextureLabLayout.HUE.x() + TextureLabLayout.HUE.w() + 4, TextureLabLayout.HUE.y() - 2, "H");
         label(layout, TextureLabLayout.SATURATION.x() + TextureLabLayout.SATURATION.w() + 4,
@@ -1122,7 +1500,8 @@ public class TextureLab {
                 ? globalColors.length + " of " + globalTotal
                 : "all " + globalTotal;
         label(layout, 8, TextureLabLayout.GLOBAL_LABEL_Y,
-                "Atlas colors: " + shown + ", by hue - hover shows where they are");
+                (skinMode() ? "Skin colors: " : "Atlas colors: ") + shown
+                        + ", by hue - hover shows where they are");
 
         // Zapnuté měření mluví na týchž dvou řádcích jako stav a nápověda -
         // je to dočasný ladicí režim, ne trvalá část rozhraní.
@@ -1180,6 +1559,30 @@ public class TextureLab {
         centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / F6)");
     }
 
+    /** Informace o vybrané stěně kůže - nalevo místo informací o dlaždici. */
+    private void drawSkinInfo(TextureLabLayout layout)
+    {
+        int face = skin.face();
+        SkinLayout.Rect r = SkinLayout.rect(face);
+
+        label(layout, 8, TextureLabLayout.INFO_Y, SkinLayout.name(face)
+                + "   " + r.width() + "x" + r.height());
+        label(layout, 8, TextureLabLayout.INFO_Y + 12,
+                "skin u " + r.u() + "-" + (r.u() + r.width())
+                        + "  v " + r.v() + "-" + (r.v() + r.height()));
+
+        label(layout, 8, TextureLabLayout.INFO_Y + 26, hoveredFace >= 0
+                ? SkinLayout.name(hoveredFace) : "Click a body face on the sheet");
+
+        TextureLabLayout.Rect p = TextureLabLayout.PREVIEW;
+        label(layout, p.x() + 3, p.y() + 3, "Player");
+
+        centered(layout, TextureLabLayout.SAVE, "Save");
+        centered(layout, TextureLabLayout.REVERT, "Revert");
+        centered(layout, TextureLabLayout.IMPORT, "Import PNG");
+        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / F6)");
+    }
+
     private void drawFormTexts(TextureLabLayout layout)
     {
         TextureLabLayout.Rect name = TextureLabLayout.NAME;
@@ -1226,6 +1629,25 @@ public class TextureLab {
     /** Nápověda dole podle toho, na čem je myš. */
     private String help(TextureLabLayout l, double mouseX, double mouseY)
     {
+        if(l.hit(TextureLabLayout.MODE_BLOCKS, mouseX, mouseY)
+                || l.hit(TextureLabLayout.MODE_SKIN, mouseX, mouseY))
+            return "Blocks paints the block atlas, Skin paints the player's skin";
+
+        if(skinMode())
+        {
+            if(l.skinPixelAt(mouseX, mouseY) != null)
+                return "The whole skin sheet - click a body face to open it on the canvas";
+            if(l.hit(TextureLabLayout.PREVIEW, mouseX, mouseY))
+                return "The real player model with the skin you are painting right now";
+            if(l.hit(TextureLabLayout.IMPORT, mouseX, mouseY))
+                return "Loads textures/import.png, or drop a PNG on the window ("
+                        + SkinEditor.SIZE + "x" + SkinEditor.SIZE + ")";
+            if(l.hit(TextureLabLayout.SAVE, mouseX, mouseY))
+                return "Saves " + Textures.SKIN_FILE.toString().replace('\\', '/')
+                        + " - delete it to get the built-in skin back";
+            return "LMB paint  RMB pick  Ctrl+Z undo  Ctrl+S save  click hex to type";
+        }
+
         if(draft != null)
         {
             if(l.hit(TextureLabLayout.NAME, mouseX, mouseY))
@@ -1318,14 +1740,25 @@ public class TextureLab {
     private void drawGrid(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r,
                           int cells, float[] color)
     {
+        drawGridXY(l, screenHeight, r, cells, cells, color);
+    }
+
+    /** Mřížka s různým počtem sloupců a řádků - stěny těla nejsou čtvercové. */
+    private void drawGridXY(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r,
+                            int columns, int rows, float[] color)
+    {
         int s = l.scale();
         float x = l.screenX(r), y = l.screenBottom(r, screenHeight);
         float width = r.w() * s, height = r.h() * s;
 
-        for(int i = 1; i < cells; i++)
+        for(int i = 1; i < columns; i++)
         {
-            shapes.fillRect(x + i * width / cells, y, 1, height, color);
-            shapes.fillRect(x, y + i * height / cells, width, 1, color);
+            shapes.fillRect(x + i * width / columns, y, 1, height, color);
+        }
+
+        for(int i = 1; i < rows; i++)
+        {
+            shapes.fillRect(x, y + i * height / rows, width, 1, color);
         }
     }
 
@@ -1466,5 +1899,6 @@ public class TextureLab {
         images.delete();
         checker.delete();
         preview.delete();
+        skinPreview.delete();
     }
 }

@@ -86,6 +86,13 @@ public final class Textures {
     public static final Path ATLAS_FILE = Path.of("textures", "atlas.png");
 
     /**
+     * Kam texture lab ukládá upravenou kůži postavy a odkud se při startu
+     * hry načte. Stejný vzor jako atlas.png: NEPOVINNÝ soubor, bez něj se
+     * kůže vygeneruje jako dřív.
+     */
+    public static final Path SKIN_FILE = Path.of("textures", "skin.png");
+
+    /**
      * Odkud lab importuje hotový atlas, když se mu žádný soubor nepřetáhne
      * do okna. Okno souborů nabídnout nejde: AWT běží headless (viz Main)
      * a tinyfd by byl nový modul LWJGL, tedy další závislost.
@@ -442,29 +449,44 @@ public final class Textures {
     private static final int EYE_IRIS  = 0xFF4A3A9C;
     private static final int MOUTH     = 0xFF8A5A48;
 
+    /** Pixely kůže a odkud přišly - ladicí výpis i lab to ukazují. */
+    public record SkinPixels(int[] pixels, boolean fromFile) {}
+
     /**
-     * Skin postavy jako textura.
+     * Pixely kůže postavy pro hru.
      *
-     * ⚠️ TOHLE JE JEDINÉ MÍSTO, KDE SE SKIN VYMĚNÍ. Skutečný skin znamená
-     * nahradit playerSkinPixels() načtením PNG 64x64:
+     * ⚠️ TOHLE JE PŘEPÍNAČ mezi vygenerovanou a nahranou kůží, přesně jako
+     * atlasPixels() u bloků: když textures/skin.png existuje a má 64x64,
+     * použije se on, jinak se kůže nakreslí jako dřív. Smazání souboru tedy
+     * vrací hru k původní kůži. PlayerModelMesh o tom neví - jeho UV jsou
+     * souřadnice šablony z Minecraftu a je mu jedno, odkud pixely jsou.
      *
-     *   BufferedImage image = ImageIO.read(...);
-     *   int[] pixels = image.getRGB(0, 0, 64, 64, null, 0, 64);
-     *
-     * getRGB vrací 0xAARRGGBB po řádcích SHORA, tedy přesně v pořadí, ve kterém
-     * je tahle metoda chce. PlayerModelMesh o původu pixelů neví - jeho UV jsou
-     * souřadnice šablony skinu z Minecraftu.
-     *
-     * ⚠️ Pixely jdou do GL v pořadí OBRÁZKU (horní řádek první), ne odspodu
-     * jako atlas. GL pak má t = 0 u horního okraje a UV modelu jsou rovnou
-     * souřadnice ve skinu dělené 64 - bez překlápění, které by se u načteného
-     * PNG snadno zapomnělo.
+     * ⚠️ NEPŘEKLÁPÍ SE, na rozdíl od atlasu. Pole kůže jde do GL v pořadí
+     * OBRÁZKU (horní řádek první), protože UV modelu jsou rovnou souřadnice
+     * ve skinu dělené 64; getRGB() vrací řádky shora, takže načtený PNG sedí
+     * beze změny.
      */
-    public static Texture playerSkin()
+    public static SkinPixels skinPixels(Path file)
     {
-        return Texture.fromArgb(playerSkinPixels(),
+        int[] fromFile = AtlasImage.load(file, PlayerModelMesh.SKIN_SIZE, false);
+
+        return fromFile != null ? new SkinPixels(fromFile, true)
+                : new SkinPixels(playerSkinPixels(), false);
+    }
+
+    /**
+     * Kůže postavy jako textura z daných pixelů.
+     *
+     * ⚠️ Texture si pole NEKOPÍRUJE do sebe natrvalo - lab pak do téhož pole
+     * maluje a nahrává změněné obdélníky do téhle textury (Texture.updateRegion),
+     * takže postava ve hře i v náhledu labu se mění ve stejném framu.
+     */
+    public static Texture playerSkin(int[] pixels)
+    {
+        return Texture.fromArgb(pixels,
                 PlayerModelMesh.SKIN_SIZE, PlayerModelMesh.SKIN_SIZE, GL_CLAMP_TO_EDGE);
     }
+
 
     /**
      * Placeholder skin: každý díl těla má svou barvu (kůže, vlasy, tričko,

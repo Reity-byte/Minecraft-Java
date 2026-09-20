@@ -15,6 +15,17 @@ package mc;
  * ⚠️ Plátno i přehled atlasu mají řádek 0 DOLE, jako atlas a GL. Myš chodí
  * z GLFW s počátkem nahoře, takže se řádek při hit-testu překlápí - na jednom
  * místě, tady.
+ *
+ * ⚠️ REŽIM SKIN POUŽÍVÁ TYTÉŽ TŘI OBDÉLNÍKY. Vlevo místo přehledu atlasu
+ * leží celá kůže 64x64 (dva GUI pixely na pixel kůže - vyjde přesně na
+ * 128x128, které má přehled atlasu), uprostřed místo dlaždice vybraná stěna
+ * dílu těla a vpravo místo kostky postava. Druhé rozvržení by znamenalo
+ * druhý hit-test na každý prvek a dvě místa, kde se to může rozejít.
+ *
+ * ⚠️ Kůže má ale řádek 0 NAHOŘE (viz SkinLayout) a stěny nejsou čtvercové
+ * (obličej 8x8, bok ruky 4x12). Plátno proto dostane největší CELÉ zvětšení,
+ * při kterém se stěna vejde, a vycentruje se - půlpixelové zvětšení by
+ * u pixel-artu rozmazalo mřížku.
  * ---------------------------------------------------------------------------
  */
 public final class TextureLabLayout {
@@ -63,6 +74,16 @@ public final class TextureLabLayout {
     public static final Rect IMPORT = new Rect(284, 176, 76, 18);
     public static final Rect NEW_BLOCK = new Rect(364, 176, 76, 18);
     public static final Rect CLOSE = new Rect(284, 198, 156, 18);
+
+    /**
+     * Záložky režimu - viditelná tlačítka, ne skrytá zkratka.
+     *
+     * Pravá je zarovnaná s Revert a New block (x = 364), levá o kus dál
+     * doprava než ostatní tlačítka (288 místo 284): v tom řádku leží vlevo
+     * písmeno "V" u posuvníku jasu a při 284 se ho okraj tlačítka dotýkal.
+     */
+    public static final Rect MODE_BLOCKS = new Rect(288, 220, 72, 16);
+    public static final Rect MODE_SKIN = new Rect(364, 220, 76, 16);
 
     /**
      * Barvy celého atlasu - široký pruh pod vším ostatním. Stejný krok
@@ -287,6 +308,88 @@ public final class TextureLabLayout {
         }
 
         return -1;
+    }
+
+    // ------------------------------------------------------------------
+    // režim skin: celá kůže vlevo, vybraná stěna na plátně
+    // ------------------------------------------------------------------
+
+    /** Kolik GUI pixelů zabere jeden pixel kůže v přehledu vlevo. 64 * 2 = 128. */
+    public static final int SKIN_ZOOM = ATLAS.w() / SkinLayout.SIZE;
+
+    /** Přehled celé kůže - tentýž obdélník jako přehled atlasu. */
+    public static final Rect SKIN_SHEET = ATLAS;
+
+    /**
+     * Pixel kůže pod myší jako {u, v} s počátkem VLEVO NAHOŘE (tak leží
+     * kůže v poli i v obrázku), nebo null mimo přehled.
+     */
+    public int[] skinPixelAt(double mouseX, double mouseY)
+    {
+        float gx = guiX(mouseX), gy = guiY(mouseY);
+
+        if(!SKIN_SHEET.contains(gx, gy))
+        {
+            return null;
+        }
+
+        return new int[]{(int) ((gx - SKIN_SHEET.x()) / SKIN_ZOOM),
+                (int) ((gy - SKIN_SHEET.y()) / SKIN_ZOOM)};
+    }
+
+    /** Obdélník stěny v přehledu kůže - pro orámování dílů. */
+    public static Rect skinFaceRect(int face)
+    {
+        SkinLayout.Rect r = SkinLayout.rect(face);
+
+        return new Rect(SKIN_SHEET.x() + r.u() * SKIN_ZOOM,
+                SKIN_SHEET.y() + r.v() * SKIN_ZOOM,
+                r.width() * SKIN_ZOOM, r.height() * SKIN_ZOOM);
+    }
+
+    /** Kolik GUI pixelů zabere jeden pixel stěny na plátně. Největší celé, co se vejde. */
+    public static int skinCanvasZoom(int face)
+    {
+        SkinLayout.Rect r = SkinLayout.rect(face);
+        return Math.max(1, Math.min(CANVAS.w() / r.width(), CANVAS.h() / r.height()));
+    }
+
+    /** Plátno pro vybranou stěnu - vycentrované uvnitř CANVAS. */
+    public static Rect skinCanvas(int face)
+    {
+        SkinLayout.Rect r = SkinLayout.rect(face);
+        int zoom = skinCanvasZoom(face);
+        int w = r.width() * zoom, h = r.height() * zoom;
+
+        return new Rect(CANVAS.x() + (CANVAS.w() - w) / 2, CANVAS.y() + (CANVAS.h() - h) / 2, w, h);
+    }
+
+    /** Pixel stěny pod myší jako {x, y} (y = 0 DOLE, jako u dlaždice), nebo null. */
+    public int[] skinCanvasPixelAt(int face, double mouseX, double mouseY)
+    {
+        Rect canvas = skinCanvas(face);
+        float gx = guiX(mouseX), gy = guiY(mouseY);
+
+        if(!canvas.contains(gx, gy))
+        {
+            return null;
+        }
+
+        int zoom = skinCanvasZoom(face);
+        int x = (int) ((gx - canvas.x()) / zoom);
+        int rowFromTop = (int) ((gy - canvas.y()) / zoom);
+
+        return new int[]{x, SkinLayout.height(face) - 1 - rowFromTop};
+    }
+
+    /** Obdélník pixelu (x, y) stěny na plátně - pro zvýraznění pod myší. */
+    public static Rect skinCanvasPixelRect(int face, int x, int y)
+    {
+        Rect canvas = skinCanvas(face);
+        int zoom = skinCanvasZoom(face);
+
+        return new Rect(canvas.x() + x * zoom,
+                canvas.y() + (SkinLayout.height(face) - 1 - y) * zoom, zoom, zoom);
     }
 
     /** Poloha myši na posuvníku jako 0 až 1 (mimo se ořízne - kvůli tažení přes okraj). */

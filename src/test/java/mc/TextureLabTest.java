@@ -11,8 +11,9 @@ import java.util.List;
 /**
  * Overuje texture lab bez GL: souradnice pixelu a dlazdic, shodu s INSET
  * v BlockAtlas, malovani a undo, barvy, zapis a cteni PNG, globalni paletu,
- * import hotoveho PNG, navrh noveho bloku, hit-testy rozvrzeni - a ze zivy
- * nahled stavi TYZ mesh, jaky postavi hra.
+ * import hotoveho PNG, navrh noveho bloku, hit-testy rozvrzeni, mapovani
+ * pixelu na stenu dilu tela, sledovani zmenenych pixelu - a ze zivy nahled
+ * stavi TYZ mesh, jaky postavi hra.
  */
 public class TextureLabTest {
 
@@ -33,6 +34,10 @@ public class TextureLabTest {
         importPng();
         blockDraft();
         layout();
+        dirtyTracking();
+        skinMapping();
+        skinEditing();
+        skinPng();
         preview();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
@@ -620,12 +625,50 @@ public class TextureLabTest {
                 TextureLabLayout.SWATCHES, TextureLabLayout.CURRENT, TextureLabLayout.HEX, TextureLabLayout.HUE,
                 TextureLabLayout.SATURATION, TextureLabLayout.VALUE, TextureLabLayout.GLOBAL};
         TextureLabLayout.Rect[] atlasMode = {TextureLabLayout.SAVE, TextureLabLayout.REVERT, TextureLabLayout.IMPORT,
-                TextureLabLayout.NEW_BLOCK, TextureLabLayout.CLOSE};
+                TextureLabLayout.NEW_BLOCK, TextureLabLayout.CLOSE,
+                TextureLabLayout.MODE_BLOCKS, TextureLabLayout.MODE_SKIN};
         TextureLabLayout.Rect[] blockMode = {TextureLabLayout.NAME, TextureLabLayout.SOFTER, TextureLabLayout.HARDER,
                 TextureLabLayout.SOLID, TextureLabLayout.OPAQUE, TextureLabLayout.faceSlot(0),
                 TextureLabLayout.faceSlot(1), TextureLabLayout.faceSlot(2), TextureLabLayout.NEW_TILE,
-                TextureLabLayout.CREATE, TextureLabLayout.CANCEL};
+                TextureLabLayout.CREATE, TextureLabLayout.CANCEL,
+                TextureLabLayout.MODE_BLOCKS, TextureLabLayout.MODE_SKIN};
         check("rezim atlasu: prvky se neprekryvaji a jsou v panelu", separate(shared, atlasMode), "");
+
+        // Rezim skin: misto mrizky dlazdic cela kuze, misto dlazdice stena.
+        check("zalozky Blocks a Skin jsou vedle sebe a stejne vysoko",
+                TextureLabLayout.MODE_BLOCKS.y() == TextureLabLayout.MODE_SKIN.y()
+                        && TextureLabLayout.MODE_BLOCKS.x() + TextureLabLayout.MODE_BLOCKS.w()
+                            <= TextureLabLayout.MODE_SKIN.x(), "");
+
+        check("prehled kuze je presne cela kuze: 64 pixelu po " + TextureLabLayout.SKIN_ZOOM,
+                TextureLabLayout.SKIN_ZOOM * SkinLayout.SIZE == TextureLabLayout.SKIN_SHEET.w()
+                        && TextureLabLayout.SKIN_ZOOM * SkinLayout.SIZE == TextureLabLayout.SKIN_SHEET.h(), "");
+
+        boolean sheet = true, everyPixel = true, fits = true;
+
+        for (int f = 0; f < SkinLayout.FACE_COUNT; f++) {
+            // Klik doprostred steny v prehledu trefi tu stenu.
+            double[] c = centre(l, TextureLabLayout.skinFaceRect(f));
+            int[] pixel = l.skinPixelAt(c[0], c[1]);
+            sheet &= pixel != null && SkinLayout.faceAt(pixel[0], pixel[1]) == f;
+
+            // Platno se vejde do CANVAS a kazdy jeho pixel jde trefit.
+            TextureLabLayout.Rect cv = TextureLabLayout.skinCanvas(f);
+            fits &= cv.x() >= TextureLabLayout.CANVAS.x() && cv.y() >= TextureLabLayout.CANVAS.y()
+                    && cv.x() + cv.w() <= TextureLabLayout.CANVAS.x() + TextureLabLayout.CANVAS.w()
+                    && cv.y() + cv.h() <= TextureLabLayout.CANVAS.y() + TextureLabLayout.CANVAS.h();
+
+            for (int y = 0; y < SkinLayout.height(f); y++)
+                for (int x = 0; x < SkinLayout.width(f); x++) {
+                    double[] pc = centre(l, TextureLabLayout.skinCanvasPixelRect(f, x, y));
+                    int[] hit = l.skinCanvasPixelAt(f, pc[0], pc[1]);
+                    everyPixel &= hit != null && hit[0] == x && hit[1] == y;
+                }
+        }
+
+        check("klik do prehledu kuze trefi spravnou stenu", sheet, "");
+        check("platno steny se vejde do CANVAS", fits, "");
+        check("kazdy pixel steny na platne jde trefit mysi (round-trip)", everyPixel, "");
         check("rezim noveho bloku: prvky se neprekryvaji a jsou v panelu", separate(shared, blockMode), "");
         check("meritko labu: 1280 x 720 -> 2, Full HD -> 3",
                 TextureLabLayout.scaleFor(1280, 720) == 2 && TextureLabLayout.scaleFor(1920, 1080) == 3, "");
@@ -651,6 +694,301 @@ public class TextureLabTest {
             }
         }
         return true;
+    }
+
+    // ==================================================================
+
+    /**
+     * Co se zmenilo, to se musi nahrat - a nic vic. DirtyRect je cista
+     * logika bez GL, takze jde otestovat presne: obdelnik musi VZDYCKY
+     * obsahovat vsechny zmenene pixely (jinak by na obrazovce zustala stara
+     * barva) a u tahu uvnitr jedne dlazdice nesmi byt vetsi nez ta dlazdice
+     * (jinak by se nahravalo zbytecne).
+     */
+    static void dirtyTracking() {
+        DirtyRect r = new DirtyRect();
+        check("cerstvy obdelnik je prazdny", r.isEmpty() && r.area() == 0, "");
+
+        r.add(5, 7);
+        check("jeden pixel = obdelnik 1x1 na nem",
+                !r.isEmpty() && r.x() == 5 && r.y() == 7 && r.width() == 1 && r.height() == 1, r.toString());
+
+        r.add(2, 9);
+        check("druhy pixel obdelnik roztahne na oba",
+                r.x() == 2 && r.y() == 7 && r.width() == 4 && r.height() == 3, r.toString());
+
+        r.add(3, 8, 0, 5);
+        check("prazdny obdelnik se ignoruje", r.width() == 4 && r.height() == 3, r.toString());
+
+        r.clear();
+        check("po vynulovani je zase prazdny", r.isEmpty(), "");
+
+        // --- na skutecnem editoru ---
+        int[] pixels = Textures.blockAtlasPixels();
+        AtlasEditor editor = new AtlasEditor(pixels);
+        editor.clearDirty();
+
+        int tile = 9;
+        editor.select(tile);
+        editor.setColor(0xFF123456);
+        editor.beginStroke(0, 0);
+        editor.strokeTo(15, 15);
+
+        DirtyRect d = editor.dirty();
+        boolean inside = d.x() >= AtlasEditor.tileX0(tile) && d.y() >= AtlasEditor.tileY0(tile)
+                && d.x() + d.width() <= AtlasEditor.tileX0(tile) + AtlasEditor.TILE
+                && d.y() + d.height() <= AtlasEditor.tileY0(tile) + AtlasEditor.TILE;
+        check("tah pres dlazdici hlasi obdelnik UVNITR te dlazdice (ne cely atlas)",
+                inside && d.area() <= AtlasEditor.TILE * AtlasEditor.TILE,
+                d + ", " + d.area() + " pixelu misto " + (AtlasEditor.SIZE * AtlasEditor.SIZE));
+
+        // Vsechny pixely, ktere se lisi od originalu, musi byt uvnitr obdelniku.
+        int[] original = Textures.blockAtlasPixels();
+        boolean covers = true, changedAny = false;
+
+        for (int i = 0; i < pixels.length; i++) {
+            if (pixels[i] == original[i]) continue;
+            changedAny = true;
+            int x = i % AtlasEditor.SIZE, y = i / AtlasEditor.SIZE;
+            covers &= x >= d.x() && y >= d.y() && x < d.x() + d.width() && y < d.y() + d.height();
+        }
+
+        check("obdelnik obsahuje VSECHNY zmenene pixely", covers && changedAny, d.toString());
+
+        editor.endStroke();
+        editor.clearDirty();
+        check("po nahrani na grafiku je obdelnik prazdny", editor.dirty().isEmpty(), "");
+
+        editor.select(2);
+        editor.beginStroke(1, 1);
+        editor.endStroke();
+        editor.clearDirty();
+        editor.undo();
+        check("undo hlasi dlazdici, do ktere se tah vratil",
+                !editor.dirty().isEmpty()
+                        && editor.dirty().x() == AtlasEditor.tileX0(2)
+                        && editor.dirty().y() == AtlasEditor.tileY0(2)
+                        && editor.dirty().area() == AtlasEditor.TILE * AtlasEditor.TILE,
+                editor.dirty().toString());
+
+        editor.clearDirty();
+        editor.importAtlas(original);
+        check("import hlasi cely atlas",
+                editor.dirty().area() == AtlasEditor.SIZE * AtlasEditor.SIZE, editor.dirty().toString());
+    }
+
+    // ==================================================================
+
+    /**
+     * Mapovani pixelu na stenu dilu tela - obdoba mapovani dlazdic na steny
+     * bloku o kus vys.
+     *
+     * KLICOVE: souradnice se NEPOROVNAVAJI s opsanou tabulkou, ale s UV,
+     * ktera skutecne vydava PlayerModelMesh.unfold() pro tentyz dil. Kdyby
+     * se SkinLayout a model rozesly, malovalo by se vedle a tohle je jedine
+     * misto, kde se to pozna bez spusteni hry.
+     */
+    static void skinMapping() {
+        boolean matchesUv = true;
+        String bad = "";
+
+        for (int part = 0; part < SkinLayout.PARTS; part++) {
+            PlayerModelMesh.Part p = PlayerModelMesh.PARTS[part];
+            java.util.List<float[]> uvs = new java.util.ArrayList<>();
+
+            // Sesbira ctyri rohy kazde steny tak, jak je vydava model.
+            PlayerModelMesh.unfold(p, (ax, ay, az, au, av, bx, by, bz, bu, bv,
+                                       cx, cy, cz, cu, cv, dx, dy, dz, du, dv, nx, ny, nz) ->
+                    uvs.add(new float[]{Math.min(Math.min(au, bu), Math.min(cu, du)),
+                            Math.min(Math.min(av, bv), Math.min(cv, dv)),
+                            Math.max(Math.max(au, bu), Math.max(cu, du)),
+                            Math.max(Math.max(av, bv), Math.max(cv, dv))}));
+
+            for (int side = 0; side < SkinLayout.FACES_PER_PART; side++) {
+                float[] uv = uvs.get(side);
+                SkinLayout.Rect r = SkinLayout.rect(SkinLayout.face(part, side));
+
+                boolean same = r.u() == (int) uv[0] && r.v() == (int) uv[1]
+                        && r.u() + r.width() == (int) uv[2] && r.v() + r.height() == (int) uv[3];
+
+                if (!same) {
+                    matchesUv = false;
+                    bad += SkinLayout.name(SkinLayout.face(part, side)) + " ";
+                }
+            }
+        }
+
+        check("obdelnik kazde steny sedi na UV, ktera vydava PlayerModelMesh.unfold()", matchesUv, bad);
+
+        // Round-trip: pixel steny -> index ve skinu -> zpatky stejna stena.
+        boolean roundTrip = true, unique = true, inside = true;
+        int[] owner = new int[SkinLayout.SIZE * SkinLayout.SIZE];
+        Arrays.fill(owner, -1);
+        int painted = 0;
+
+        for (int face = 0; face < SkinLayout.FACE_COUNT; face++) {
+            for (int y = 0; y < SkinLayout.height(face); y++)
+                for (int x = 0; x < SkinLayout.width(face); x++) {
+                    int i = SkinLayout.index(face, x, y);
+                    inside &= i >= 0 && i < owner.length;
+                    if (!inside) continue;
+
+                    unique &= owner[i] == -1;
+                    owner[i] = face;
+                    painted++;
+
+                    roundTrip &= SkinLayout.faceAt(i % SkinLayout.SIZE, i / SkinLayout.SIZE) == face;
+                }
+        }
+
+        check("kazdy pixel steny lezi ve skinu a zadne dve steny nesdili pixel", inside && unique, "");
+        check("z indexu ve skinu se trefi zpatky ta sama stena", roundTrip, "");
+        // 384 hlava + 352 trup + 4x224 koncetiny = 1632 ze 4096 pixelu sablony;
+        // zbytek je druha vrstva (klobouk, bunda), kterou model nekresli.
+        check("steny pokryji 1632 pixelu sablony (zbytek je druha vrstva)",
+                painted == 1632, String.valueOf(painted));
+
+        // Obliceji patri prave to misto, ktere ARCHITECTURE popisuje.
+        SkinLayout.Rect face = SkinLayout.rect(SkinLayout.face(PlayerModelMesh.PART_HEAD, SkinLayout.FRONT));
+        check("obliceji patri u 8-16, v 8-16",
+                face.u() == 8 && face.v() == 8 && face.width() == 8 && face.height() == 8, face.toString());
+
+        check("nepokryte misto sablony zadnou stenu nema", SkinLayout.faceAt(60, 5) < 0, "");
+        check("mimo skin taky ne", SkinLayout.faceAt(-1, 0) < 0 && SkinLayout.faceAt(0, 64) < 0, "");
+
+        // ⚠️ y = 0 je DOLNI radek platna, ve skinu ale v roste dolu.
+        int forehead = SkinLayout.index(SkinLayout.face(PlayerModelMesh.PART_HEAD, SkinLayout.FRONT), 0, 7);
+        int chin = SkinLayout.index(SkinLayout.face(PlayerModelMesh.PART_HEAD, SkinLayout.FRONT), 0, 0);
+        check("platno ma radek 0 DOLE: y = 7 je horni radek obliceje (v = 8), y = 0 spodni (v = 15)",
+                forehead == 8 * SkinLayout.SIZE + 8 && chin == 15 * SkinLayout.SIZE + 8,
+                forehead + " / " + chin);
+    }
+
+    // ==================================================================
+
+    /** Malovani, kapatko a undo na kuzi - tataz mechanika jako u atlasu. */
+    static void skinEditing() {
+        int[] pixels = Textures.playerSkinPixels();
+        int[] original = pixels.clone();
+        SkinEditor editor = new SkinEditor(pixels);
+
+        check("vychozi stena je oblicej - tam se pozna nejvic",
+                editor.face() == SkinLayout.face(PlayerModelMesh.PART_HEAD, SkinLayout.FRONT)
+                        && editor.faceName().equals("Head front"), editor.faceName());
+        check("platno obliceje je 8x8", editor.regionWidth() == 8 && editor.regionHeight() == 8, "");
+
+        int armSide = SkinLayout.face(PlayerModelMesh.PART_RIGHT_ARM, SkinLayout.RIGHT);
+        editor.select(armSide);
+        check("bok ruky je 4x12 - stena nemusi byt ctvercova",
+                editor.regionWidth() == 4 && editor.regionHeight() == 12, "");
+
+        editor.setColor(0xFFFF00FF);
+        editor.beginStroke(0, 0);
+        editor.strokeTo(3, 11);
+        editor.endStroke();
+
+        SkinLayout.Rect r = SkinLayout.rect(armSide);
+        boolean onlyInFace = true;
+
+        for (int i = 0; i < pixels.length; i++) {
+            if (pixels[i] == original[i]) continue;
+            onlyInFace &= r.contains(i % SkinLayout.SIZE, i / SkinLayout.SIZE);
+        }
+
+        check("tah zmenil jen pixely te jedne steny", onlyInFace, "");
+        check("levy dolni pixel platna je opravdu prebarveny",
+                pixels[SkinLayout.index(armSide, 0, 0)] == 0xFFFF00FF, "");
+
+        editor.setColor(0);
+        check("kapatko vezme barvu z platna",
+                editor.pick(0, 0) == 0xFFFF00FF && editor.color() == 0xFFFF00FF, "");
+
+        check("Ctrl+Z vrati cely tah najednou",
+                editor.undo() && Arrays.equals(pixels, original), "");
+
+        // Vyber steny se pri undo vrati tam, kde tah vznikl.
+        editor.select(SkinLayout.face(PlayerModelMesh.PART_LEFT_LEG, SkinLayout.BACK));
+        editor.setColor(0xFF010203);
+        editor.beginStroke(1, 1);
+        editor.endStroke();
+        int painted = editor.face();
+        editor.select(SkinLayout.face(PlayerModelMesh.PART_HEAD, SkinLayout.TOP));
+        editor.undo();
+        check("undo prepne zpatky na stenu, ve ktere tah byl", editor.face() == painted,
+                editor.faceName());
+
+        // Paleta steny pocita i pruhledne pixely - druha vrstva je pruhledna
+        // a maluje se do ni stejne jako do cehokoliv jineho.
+        int[] hat = new int[SkinLayout.SIZE * SkinLayout.SIZE];
+        SkinEditor empty = new SkinEditor(hat);
+        check("paleta prazdne steny nabizi pruhlednou", empty.regionColors(8).length == 1
+                && empty.regionColors(8)[0] == 0, "");
+    }
+
+    // ==================================================================
+
+    /**
+     * PNG kuze: 64x64 a BEZ preklapeni radku, na rozdil od atlasu. Kdyby se
+     * preklapelo, mel by ulozeny skin hlavu dole a zadny externi editor skinu
+     * by s nim nepracoval.
+     */
+    static void skinPng() throws IOException {
+        Path dir = Files.createTempDirectory("mc-skin");
+
+        try {
+            int[] original = Textures.playerSkinPixels();
+            Path file = dir.resolve("skin.png");
+
+            check("kuze se ulozi", AtlasImage.save(original, file, SkinLayout.SIZE, false), "");
+
+            int[] read = AtlasImage.load(file, SkinLayout.SIZE, false);
+            check("nactena kuze je pixel po pixelu stejna", Arrays.equals(read, original), "");
+
+            BufferedImage image = ImageIO.read(file.toFile());
+            SkinLayout.Rect face = SkinLayout.rect(
+                    SkinLayout.face(PlayerModelMesh.PART_HEAD, SkinLayout.FRONT));
+            check("v souboru lezi oblicej na u 8-16, v 8-16 shora (bez preklopeni)",
+                    image.getRGB(face.u() + 1, face.v() + 4) == original[(face.v() + 4) * SkinLayout.SIZE
+                            + face.u() + 1], "");
+
+            check("skinPixels() vezme soubor, kdyz existuje",
+                    Textures.skinPixels(file).fromFile()
+                            && Arrays.equals(Textures.skinPixels(file).pixels(), original), "");
+            check("bez souboru se kuze vygeneruje jako driv",
+                    !Textures.skinPixels(dir.resolve("chybi.png")).fromFile(), "");
+
+            // Import do editoru kuze - tyz mechanismus jako u atlasu.
+            int[] other = original.clone();
+            for (int i = 0; i < other.length; i += 5) other[i] = 0xFF00FFFF;
+            Path good = dir.resolve("from-editor.png");
+            AtlasImage.save(other, good, SkinLayout.SIZE, false);
+
+            int[] pixels = original.clone();
+            SkinEditor editor = new SkinEditor(pixels);
+            String message = AtlasImage.importInto(editor, good, SkinLayout.SIZE, false, "skin");
+            check("PNG 64x64 se naimportuje do editoru kuze",
+                    Arrays.equals(pixels, other), message);
+            check("Ctrl+Z vrati celou kuzi pred importem",
+                    editor.undo() && Arrays.equals(pixels, original), "");
+
+            // ⚠️ Hlaska rika, co se cekalo a co prislo - a v tomhle poradi.
+            Path wrong = dir.resolve("wrong.png");
+            ImageIO.write(new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB), "png", wrong.toFile());
+            String m = AtlasImage.importInto(new SkinEditor(original.clone()), wrong,
+                    SkinLayout.SIZE, false, "skin");
+            check("do kuze se atlas nevejde a hlaska rekne presne, co se cekalo",
+                    m.equals("Not imported: expected 64x64, got 128x128 - skin unchanged"), m);
+
+            String atlasMessage = AtlasImage.importInto(new AtlasEditor(Textures.blockAtlasPixels()), file);
+            check("a u atlasu taky - 'expected 128x128, got 64x64'",
+                    atlasMessage.equals("Not imported: expected 128x128, got 64x64 - atlas unchanged"),
+                    atlasMessage);
+        } finally {
+            try (var walk = Files.walk(dir)) {
+                for (Path q : walk.sorted((x, y) -> y.getNameCount() - x.getNameCount()).toList())
+                    Files.deleteIfExists(q);
+            }
+        }
     }
 
     // ==================================================================

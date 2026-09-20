@@ -23,25 +23,38 @@ import java.util.Iterator;
  * se píše TYPE_INT_ARGB, ne RGB.
  * ---------------------------------------------------------------------------
  *
+ * ⚠️ PŘEKLÁPĚNÍ JE VOLBA, PROTOŽE SKIN HO NEMÁ. Tatáž třída čte a píše
+ * i textury kůže postavy (textures/skin.png): pole skinu má řádek 0 NAHOŘE,
+ * protože UV modelu jsou přímo souřadnice šablony Minecraftu a v GL leží
+ * t = 0 u horního okraje. Atlas se tedy překlápí, skin ne - a je to jediný
+ * rozdíl mezi nimi. Viz PlayerModelMesh a Textures.playerSkin().
+ *
  * AWT ImageIO je součást JDK - žádná další závislost. Nesahá na GL.
  */
 public final class AtlasImage {
 
     private AtlasImage() {}
 
-    /**
-     * Zapíše atlas do PNG, adresáře případně založí. Chyba hru nepoloží:
-     * vrátí false a důvod napíše na stderr.
-     */
+    /** Zapíše atlas bloků (128x128, řádky se překlápějí). */
     public static boolean save(int[] pixels, Path file)
     {
-        int size = BlockAtlas.ATLAS_PIXELS;
+        return save(pixels, file, BlockAtlas.ATLAS_PIXELS, true);
+    }
+
+    /**
+     * Zapíše čtvercový obrázek do PNG, adresáře případně založí. Chyba hru
+     * nepoloží: vrátí false a důvod napíše na stderr.
+     *
+     * flipRows = true u atlasu (pole má řádek 0 dole, obrázek nahoře),
+     * false u skinu (pole i obrázek mají řádek 0 nahoře).
+     */
+    public static boolean save(int[] pixels, Path file, int size, boolean flipRows)
+    {
         BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
 
         for(int y = 0; y < size; y++)
         {
-            // Řádek y atlasu (odspodu) je řádek size-1-y obrázku (shora).
-            image.setRGB(0, size - 1 - y, size, 1, pixels, y * size, size);
+            image.setRGB(0, flipRows ? size - 1 - y : y, size, 1, pixels, y * size, size);
         }
 
         try
@@ -55,7 +68,7 @@ public final class AtlasImage {
 
             if(!ImageIO.write(image, "png", file.toFile()))
             {
-                System.err.println("Atlas " + file + ": zadny zapisovac PNG");
+                System.err.println("Obrazek " + file + ": zadny zapisovac PNG");
                 return false;
             }
 
@@ -63,7 +76,7 @@ public final class AtlasImage {
         }
         catch(IOException e)
         {
-            System.err.println("Atlas " + file + " nejde ulozit: " + e.getMessage());
+            System.err.println("Obrazek " + file + " nejde ulozit: " + e.getMessage());
             return false;
         }
     }
@@ -75,16 +88,22 @@ public final class AtlasImage {
      */
     public static int[] load(Path file)
     {
+        return load(file, BlockAtlas.ATLAS_PIXELS, true);
+    }
+
+    /** Přečte čtvercový obrázek daného rozměru; null = není, nebo nejde použít. */
+    public static int[] load(Path file, int size, boolean flipRows)
+    {
         if(!Files.isRegularFile(file))
         {
             return null;
         }
 
-        Loaded loaded = read(file);
+        Loaded loaded = read(file, size, flipRows);
 
         if(loaded.pixels() == null)
         {
-            System.err.println("Atlas " + file + ": " + loaded.error() + " - pouzije se proceduralni");
+            System.err.println("Obrazek " + file + ": " + loaded.error() + " - pouzije se proceduralni");
         }
 
         return loaded.pixels();
@@ -102,8 +121,12 @@ public final class AtlasImage {
      */
     public static Loaded read(Path file)
     {
-        int size = BlockAtlas.ATLAS_PIXELS;
+        return read(file, BlockAtlas.ATLAS_PIXELS, true);
+    }
 
+    /** Totéž pro libovolný čtvercový rozměr - skin je 64x64 a nepřeklápí se. */
+    public static Loaded read(Path file, int size, boolean flipRows)
+    {
         if(!Files.isRegularFile(file))
         {
             return new Loaded(null, "file not found");
@@ -127,9 +150,14 @@ public final class AtlasImage {
                 int width = reader.getWidth(0);
                 int height = reader.getHeight(0);
 
+                // ⚠️ Hláška říká OBĚ čísla a v tomhle pořadí: co se čekalo
+                // a co přišlo. "needs 128x128" samo o sobě neřekne, jak velký
+                // obrázek uživatel vlastně podstrčil, takže neví, o kolik vedle
+                // je - a ani jestli si nespletl soubor.
                 if(width != size || height != size)
                 {
-                    return new Loaded(null, "image is " + width + "x" + height + ", needs " + size + "x" + size);
+                    return new Loaded(null, "expected " + size + "x" + size
+                            + ", got " + width + "x" + height);
                 }
 
                 BufferedImage image = reader.read(0);
@@ -137,8 +165,7 @@ public final class AtlasImage {
 
                 for(int y = 0; y < size; y++)
                 {
-                    // Řádek y atlasu (odspodu) je řádek size-1-y obrázku (shora).
-                    image.getRGB(0, size - 1 - y, size, 1, pixels, y * size, size);
+                    image.getRGB(0, flipRows ? size - 1 - y : y, size, 1, pixels, y * size, size);
                 }
 
                 return new Loaded(pixels, null);
@@ -165,14 +192,25 @@ public final class AtlasImage {
      */
     public static String importInto(AtlasEditor editor, Path file)
     {
-        Loaded loaded = read(file);
+        return importInto(editor, file, BlockAtlas.ATLAS_PIXELS, true, "atlas");
+    }
+
+    /**
+     * Import do libovolného editoru pixelů - atlas bloků i kůže postavy.
+     * what je slovo do hlášky ("atlas" / "skin"), ať uživatel pozná, co
+     * zůstalo beze změny.
+     */
+    public static String importInto(PixelEditor editor, Path file,
+                                    int size, boolean flipRows, String what)
+    {
+        Loaded loaded = read(file, size, flipRows);
 
         if(loaded.pixels() == null)
         {
-            return "Not imported: " + loaded.error() + " - atlas unchanged";
+            return "Not imported: " + loaded.error() + " - " + what + " unchanged";
         }
 
-        editor.importAtlas(loaded.pixels());
+        editor.importImage(loaded.pixels());
         String name = file.getFileName() == null ? file.toString() : file.getFileName().toString();
         return "Imported " + name + " - Ctrl+Z undoes, Save keeps it";
     }
