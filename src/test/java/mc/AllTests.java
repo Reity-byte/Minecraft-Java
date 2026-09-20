@@ -137,6 +137,10 @@ public class AllTests {
         OptionsTest.main(args);
         failures += OptionsTest.failures;
 
+        System.out.println(NEWLINE + "========== CreativeTest ==========");
+        CreativeTest.main(args);
+        failures += CreativeTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

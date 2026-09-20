@@ -29,15 +29,42 @@ public class ContainerScreen {
     public static final int SLOT_PITCH = 18;
     public static final int SLOT_INNER = 16;
 
+    /** Posuvník u rolovatelné mřížky, v GUI pixelech. Jako v Minecraftu. */
+    static final int SCROLLBAR_WIDTH = 6;
+    static final int SCROLLBAR_THUMB = 15;
+
     /**
      * Jedna mřížka na obrazovce: kus kontejneru vykreslený jako sloupce x řádky
      * na dané pozici v panelu.
+     *
+     * outputOnly = dá se z ní jen brát (výsledek craftingu).
+     * infinite   = NEKONEČNÝ ZDROJ (creative přehled): bere se z ní kopie
+     *              a nikdy se z ní nic neubere. Viz pickUp a putDown.
      */
     public record SlotGrid(Container container, int firstSlot, int columns, int rows,
-                           int guiX, int guiY, boolean outputOnly) {}
+                           int guiX, int guiY, boolean outputOnly, boolean infinite) {}
 
     private final String title;
     private final List<SlotGrid> grids = new ArrayList<>();
+
+    /**
+     * Rozměry panelu v GUI pixelech. Výchozí jsou ty z Minecraftu; creative
+     * přehled je vyšší, protože nad batohem má ještě mřížku se všemi bloky.
+     */
+    private int panelWidth = PANEL_WIDTH;
+    private int panelHeight = PANEL_HEIGHT;
+
+    /**
+     * Mřížka, která se dá rolovat kolečkem, a o kolik řádků je posunutá.
+     * Je nejvýš jedna - víc rolovatelných mřížek na jedné obrazovce by
+     * znamenalo řešit, ke které kolečko patří, a k ničemu to zatím není.
+     */
+    private SlotGrid scrollable;
+    private int scrollRow = 0;
+
+    /** Nadpis druhé části panelu, nebo null. Viz section(). */
+    private String sectionLabel;
+    private int sectionLabelY;
 
     /**
      * Mřížka, ze které se craftí, a slot na výsledek. Můžou být null - truhla
@@ -83,15 +110,44 @@ public class ContainerScreen {
     public ContainerScreen add(Container container, int firstSlot, int columns, int rows,
                                int guiX, int guiY)
     {
-        grids.add(new SlotGrid(container, firstSlot, columns, rows, guiX, guiY, false));
+        grids.add(new SlotGrid(container, firstSlot, columns, rows, guiX, guiY, false, false));
         return this;
     }
 
     /** Výsledkový slot: dá se z něj jen brát, nedá se do něj nic položit. */
     public ContainerScreen addOutput(Container container, int guiX, int guiY)
     {
-        grids.add(new SlotGrid(container, 0, 1, 1, guiX, guiY, true));
+        grids.add(new SlotGrid(container, 0, 1, 1, guiX, guiY, true, false));
         resultSlot = container;
+        return this;
+    }
+
+    /**
+     * Nekonečný zdroj: mřížka, ze které se bere kopie a která se rolováním
+     * posouvá po řádcích. Kontejner může mít víc slotů, než je vidět.
+     */
+    public ContainerScreen addInfinite(Container container, int columns, int rows,
+                                       int guiX, int guiY)
+    {
+        SlotGrid grid = new SlotGrid(container, 0, columns, rows, guiX, guiY, false, true);
+        grids.add(grid);
+        scrollable = grid;
+        return this;
+    }
+
+    /** Jiná velikost panelu než ta z Minecraftu. Volat před kreslením. */
+    public ContainerScreen size(int guiWidth, int guiHeight)
+    {
+        panelWidth = guiWidth;
+        panelHeight = guiHeight;
+        return this;
+    }
+
+    /** Nadpis další části panelu (creative přehled má nad batohem "Inventory"). */
+    public ContainerScreen section(String label, int guiY)
+    {
+        sectionLabel = label;
+        sectionLabelY = guiY;
         return this;
     }
 
@@ -165,12 +221,23 @@ public class ContainerScreen {
 
     public static int panelLeft(int screenWidth, int scale)
     {
-        return (int) Gui.snap((screenWidth - PANEL_WIDTH * scale) / 2f, scale);
+        return panelLeft(screenWidth, scale, PANEL_WIDTH);
     }
 
     public static int panelBottom(int screenHeight, int scale)
     {
-        return (int) Gui.snap((screenHeight - PANEL_HEIGHT * scale) / 2f, scale);
+        return panelBottom(screenHeight, scale, PANEL_HEIGHT);
+    }
+
+    /** Totéž pro panel jiné velikosti (creative přehled je vyšší). */
+    public static int panelLeft(int screenWidth, int scale, int panelWidth)
+    {
+        return (int) Gui.snap((screenWidth - panelWidth * scale) / 2f, scale);
+    }
+
+    public static int panelBottom(int screenHeight, int scale, int panelHeight)
+    {
+        return (int) Gui.snap((screenHeight - panelHeight * scale) / 2f, scale);
     }
 
     /**
@@ -180,16 +247,63 @@ public class ContainerScreen {
      * z Minecraftu), kdežto Renderer2D kreslí od levého dolního - proto se y
      * překlápí přes výšku panelu.
      */
-    private static float slotX(SlotGrid grid, int column, int screenWidth, int scale)
+    private float slotX(SlotGrid grid, int column, int screenWidth, int scale)
     {
-        return panelLeft(screenWidth, scale) + (grid.guiX() + column * SLOT_PITCH) * scale;
+        return panelLeft(screenWidth, scale, panelWidth) + (grid.guiX() + column * SLOT_PITCH) * scale;
     }
 
-    private static float slotY(SlotGrid grid, int row, int screenHeight, int scale)
+    private float slotY(SlotGrid grid, int row, int screenHeight, int scale)
     {
         int fromTop = grid.guiY() + row * SLOT_PITCH;
-        return panelBottom(screenHeight, scale)
-                + (PANEL_HEIGHT - fromTop - SLOT_PITCH) * scale;
+        return panelBottom(screenHeight, scale, panelHeight)
+                + (panelHeight - fromTop - SLOT_PITCH) * scale;
+    }
+
+    // ------------------------------------------------------------------
+    // rolování
+    // ------------------------------------------------------------------
+
+    /**
+     * Index slotu v kontejneru pro políčko mřížky.
+     *
+     * ⚠️ Rolování posouvá jen INDEXY, ne kreslení. Mřížka zůstává, kde je,
+     * a mění se to, co je v ní vidět - stejně jako v seznamu světů. Kdyby se
+     * posouvaly souřadnice, musely by se sloty ořezávat na okraji panelu.
+     */
+    private int slotIndex(SlotGrid grid, int row, int column)
+    {
+        int offset = grid == scrollable ? scrollRow : 0;
+        return grid.firstSlot() + (row + offset) * grid.columns() + column;
+    }
+
+    /** O kolik řádků nejvýš jde rolovat. Nula, když se všechno vejde. */
+    public int maxScrollRow()
+    {
+        if(scrollable == null)
+        {
+            return 0;
+        }
+
+        int items = scrollable.container().size() - scrollable.firstSlot();
+        int rows = (Math.max(0, items) + scrollable.columns() - 1) / scrollable.columns();
+
+        return Math.max(0, rows - scrollable.rows());
+    }
+
+    public int scrollRow()
+    {
+        return scrollRow;
+    }
+
+    /** Kolečko: nahoru (kladné) roluje k prvnímu řádku, jako v seznamu světů. */
+    public void scroll(double amount)
+    {
+        setScrollRow(scrollRow - (int) Math.signum(amount));
+    }
+
+    public void setScrollRow(int row)
+    {
+        scrollRow = Math.max(0, Math.min(maxScrollRow(), row));
     }
 
     // ------------------------------------------------------------------
@@ -213,7 +327,7 @@ public class ContainerScreen {
 
                     if(mouseX >= x0 && mouseX < x0 + size && y >= y0 && y < y0 + size)
                     {
-                        return new SlotHit(grid, grid.firstSlot() + row * grid.columns() + column);
+                        return new SlotHit(grid, slotIndex(grid, row, column));
                     }
                 }
             }
@@ -401,6 +515,15 @@ public class ContainerScreen {
     {
         Container container = hit.grid().container();
 
+        // Z nekonečného zdroje shift-klik KOPÍRUJE, a to do hotbaru: tam
+        // je blok vidět a rovnou se dá položit. Do batohu by zmizel do řady,
+        // kterou hráč zrovna nemá na očích.
+        if(hit.grid().infinite())
+        {
+            playerInventory.insert(stackAt(hit), 0, Inventory.HOTBAR_SIZE);
+            return;
+        }
+
         if(container == playerInventory)
         {
             playerInventory.quickMove(hit.index());
@@ -421,7 +544,10 @@ public class ContainerScreen {
      */
     private void addDragSlot(SlotHit hit)
     {
-        if(hit.grid().outputOnly() || dragSlots.contains(hit)
+        // Nekonečný zdroj se do tažení nezařadí - rozdělovat hromádku mezi
+        // sloty, ze kterých se stejně nedá nic vzít, nedává smysl. Puštění
+        // nad ním je pak obyčejný klik, tedy zahození.
+        if(hit.grid().outputOnly() || hit.grid().infinite() || dragSlots.contains(hit)
                 || dragSlots.size() >= held.count())
         {
             return;
@@ -510,6 +636,15 @@ public class ContainerScreen {
             return;
         }
 
+        // ⚠️ Z nekonečného zdroje se bere KOPIE - ve slotu zůstává, co tam
+        // bylo. Není to přesun, je to "dej mi takový blok"; přehled má pořád
+        // ukazovat všechno, jinak by si ho hráč po chvíli vysbíral.
+        if(hit.grid().infinite())
+        {
+            held = slot;
+            return;
+        }
+
         if(leftButton)
         {
             held = slot;
@@ -526,6 +661,15 @@ public class ContainerScreen {
     private void putDown(SlotHit hit, ItemStack slot, boolean leftButton)
     {
         Container container = hit.grid().container();
+
+        // Položit něco zpátky do nekonečného zdroje znamená zahodit to -
+        // jako koš v Minecraftu. Přidat se tam nedá nic: obsah přehledu
+        // se počítá z bloků, které ve hře existují (CreativeInventory).
+        if(hit.grid().infinite())
+        {
+            held = ItemStack.EMPTY;
+            return;
+        }
 
         if(!leftButton)
         {
@@ -609,8 +753,8 @@ public class ContainerScreen {
     {
         int scale = Gui.scale(screenWidth, screenHeight);
 
-        float left = panelLeft(screenWidth, scale);
-        float bottom = panelBottom(screenHeight, scale);
+        float left = panelLeft(screenWidth, scale, panelWidth);
+        float bottom = panelBottom(screenHeight, scale, panelHeight);
 
         shapes.begin(screenWidth, screenHeight);
 
@@ -618,7 +762,7 @@ public class ContainerScreen {
         shapes.fillRectGradient(0, 0, screenWidth, screenHeight,
                 Palette.DIM_BOTTOM, Palette.DIM_TOP);
 
-        shapes.bevelRect(left, bottom, PANEL_WIDTH * scale, PANEL_HEIGHT * scale, scale,
+        shapes.bevelRect(left, bottom, panelWidth * scale, panelHeight * scale, scale,
                 Palette.PANEL_OUTLINE, Palette.CONTAINER_FILL,
                 Palette.CONTAINER_HIGHLIGHT, Palette.CONTAINER_SHADOW);
 
@@ -633,6 +777,8 @@ public class ContainerScreen {
             }
         }
 
+        drawScrollbar(shapes, screenWidth, screenHeight, scale);
+
         shapes.end();
 
         // Ikony mají vlastní texturovaný shader, takže jdou samostatným
@@ -643,10 +789,54 @@ public class ContainerScreen {
         drawHeldCount(text, mouseX, mouseY, screenWidth, screenHeight, scale);
 
         text.begin(screenWidth, screenHeight, scale);
-        text.drawShadowed(title, left + 8 * scale,
-                screenHeight - (bottom + PANEL_HEIGHT * scale) + 6 * scale,
+
+        float panelTop = screenHeight - (bottom + panelHeight * scale);
+        text.drawShadowed(title, left + 8 * scale, panelTop + 6 * scale,
                 Palette.TEXT, Palette.TEXT_SHADOW);
+
+        if(sectionLabel != null)
+        {
+            text.drawShadowed(sectionLabel, left + 8 * scale, panelTop + sectionLabelY * scale,
+                    Palette.TEXT, Palette.TEXT_SHADOW);
+        }
+
         text.end();
+    }
+
+    /**
+     * Posuvník vedle rolovatelné mřížky. Kreslí se jen když je co rolovat -
+     * s prázdným blocks.json se přehled vejde celý a pruh by jen mátl.
+     *
+     * Není to ovládací prvek, jen ukazatel: roluje se kolečkem. Tažení za
+     * značku by znamenalo další stav myši v obrazovce, která už tři má
+     * (klik, shift-klik, tažení hromádky).
+     */
+    private void drawScrollbar(Renderer2D shapes, int screenWidth, int screenHeight, int scale)
+    {
+        int max = maxScrollRow();
+
+        if(scrollable == null || max <= 0)
+        {
+            return;
+        }
+
+        float x = panelLeft(screenWidth, scale, panelWidth)
+                + (scrollable.guiX() + scrollable.columns() * SLOT_PITCH + 2) * scale;
+        float top = scrollable.guiY();
+        int height = scrollable.rows() * SLOT_PITCH;
+        float y = panelBottom(screenHeight, scale, panelHeight)
+                + (panelHeight - top - height) * scale;
+
+        shapes.bevelRect(x, y, SCROLLBAR_WIDTH * scale, height * scale, scale,
+                Palette.SLOT_OUTLINE, Palette.SLOT_FILL,
+                Palette.SLOT_SHADOW, Palette.SLOT_HIGHLIGHT);
+
+        // Značka je pevně vysoká (jako v Minecraftu) a jezdí po zbytku dráhy.
+        float travel = (height - SCROLLBAR_THUMB) * scale;
+        float thumbY = y + travel * (1f - scrollRow / (float) max);
+
+        shapes.fillRect(x + scale, thumbY, (SCROLLBAR_WIDTH - 2) * scale,
+                SCROLLBAR_THUMB * scale, Palette.SELECTOR);
     }
 
     private void drawSlot(Renderer2D shapes, SlotGrid grid,
@@ -662,7 +852,7 @@ public class ContainerScreen {
                 Palette.SLOT_SHADOW, Palette.SLOT_HIGHLIGHT);
 
         // Sloty v tažení se zesvětlí, aby bylo vidět, kam puštění položí kusy.
-        if(isDragged(grid, grid.firstSlot() + row * grid.columns() + column))
+        if(isDragged(grid, slotIndex(grid, row, column)))
         {
             shapes.fillRect(x + scale, y + scale, SLOT_INNER * scale, SLOT_INNER * scale,
                     Palette.SLOT_DRAG);
@@ -682,7 +872,7 @@ public class ContainerScreen {
                 for(int column = 0; column < grid.columns(); column++)
                 {
                     ItemStack stack =
-                            shownAt(grid, grid.firstSlot() + row * grid.columns() + column);
+                            shownAt(grid, slotIndex(grid, row, column));
 
                     if(stack.isEmpty())
                     {
@@ -729,7 +919,7 @@ public class ContainerScreen {
                 for(int column = 0; column < grid.columns(); column++)
                 {
                     ItemStack stack =
-                            shownAt(grid, grid.firstSlot() + row * grid.columns() + column);
+                            shownAt(grid, slotIndex(grid, row, column));
 
                     if(stack.isEmpty() || stack.count() <= 1)
                     {
@@ -806,5 +996,39 @@ public class ContainerScreen {
                 .add(crafting, 0, 3, 3, 30, 17)
                 .addOutput(result, 124, 35)
                 .withCrafting(crafting, 3, 3);
+    }
+
+    // ------------------------------------------------------------------
+    // creative
+    // ------------------------------------------------------------------
+
+    /** Kolik řádků přehledu je vidět naráz; zbytek se doroluje. */
+    public static final int CREATIVE_COLUMNS = 9;
+    public static final int CREATIVE_ROWS = 5;
+
+    /** Panel creative přehledu: širší o posuvník, vyšší o mřížku bloků. */
+    public static final int CREATIVE_WIDTH = 186;
+    public static final int CREATIVE_HEIGHT = 206;
+
+    /**
+     * Creative přehled: nahoře všechny bloky, dole obyčejný inventář hráče.
+     *
+     * ⚠️ JE TO JINÁ OBRAZOVKA NEŽ INVENTÁŘ NA E V SURVIVALU, ne jeho režim.
+     * Crafting mřížka tu schválně není - v creative se nic vyrábět nemusí -
+     * a horní mřížka je nekonečný zdroj, ne kontejner k přesouvání. Survival
+     * obrazovka se tím nezměnila ani o řádek; je to jen další tovární metoda,
+     * přesně jak to ContainerScreen od začátku zamýšlel.
+     *
+     * source se staví při každém otevření (CreativeInventory.container),
+     * takže blok právě založený v labu je v přehledu hned.
+     */
+    public static ContainerScreen creativeInventory(Container source, Container inventory)
+    {
+        return new ContainerScreen("Creative Inventory")
+                .size(CREATIVE_WIDTH, CREATIVE_HEIGHT)
+                .addInfinite(source, CREATIVE_COLUMNS, CREATIVE_ROWS, 8, 18)
+                .section("Inventory", 112)
+                .add(inventory, Inventory.HOTBAR_SIZE, 9, 3, 8, 124)   // batoh
+                .add(inventory, 0, 9, 1, 8, 182);                      // hotbar
     }
 }

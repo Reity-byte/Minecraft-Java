@@ -54,6 +54,16 @@ public class World {
     public static final byte TORCH = 13;
     public static final byte FENCE = 14;
 
+    /**
+     * Největší obsazené id vestavěného bloku.
+     *
+     * ⚠️ Zvýšit při přidání konstanty výš. Je to jediné místo, kde je napsané,
+     * které z id 0-63 opravdu existují - samotné hardness() ani isOpaque()
+     * to nepoznají, mají default větev. Ptá se na to creative přehled
+     * (CreativeInventory), aby v něm nebyly prázdné položky.
+     */
+    public static final byte LAST_BUILT_IN = FENCE;
+
     /** Výška světa v blocích. 128 = 8 sekcí po 16. */
     public static final int WORLD_HEIGHT = 128;
 

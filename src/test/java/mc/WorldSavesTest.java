@@ -292,8 +292,9 @@ public class WorldSavesTest {
         String json = text(big.metaFile());
         check("seed je v souboru jako retezec (double by ho zaokrouhlil)",
                 json.contains("\"seed\": \"" + 0x7FFFFFFFFFFFFABCL + "\""), json);
-        check("soubor ma format 1 a zacina jako blocks.json",
-                json.startsWith("{\n  \"format\": 1,\n"), json.substring(0, Math.min(30, json.length())));
+        check("soubor zacina cislem formatu jako blocks.json",
+                json.startsWith("{\n  \"format\": " + WorldSaves.FORMAT + ",\n"),
+                json.substring(0, Math.min(30, json.length())));
         check("soubor konci novym radkem a jen s \\n", json.endsWith("}\n") && !json.contains("\r"), "");
 
         WorldSaves.WorldInfo quoted = WorldSaves.create(root, "He said \"hi\" \\ bye", 1L, "a\"b\\c", 2000L);

@@ -124,6 +124,19 @@ public class Main {
     /** Svět, který se právě hraje (kam se ukládá a kam jde náhled), nebo null. */
     private WorldSaves.WorldInfo currentWorld;
 
+    /**
+     * Herní mód hraného světa. Bere se z world.json při načtení a za běhu
+     * se nemění - viz GameMode. V menu je to survival, aby nic nezáviselo
+     * na tom, co se hrálo naposledy.
+     */
+    private GameMode mode = GameMode.SURVIVAL;
+
+    /**
+     * Dvojstisk mezerníku = přepnutí letu, jako v Minecraftu. Jen v creative;
+     * ladicí klávesa F je vedle toho a na mód nekouká.
+     */
+    private final DoubleTap flyTap = new DoubleTap();
+
     /** Otevřený texture lab, nebo null; a kam se z něj vrací. */
     private TextureLab lab;
 
@@ -408,14 +421,21 @@ public class Main {
                 return;
             }
 
+            // ⚠️ C a F jsou LADICÍ klávesy a zůstávají jimi: platí v obou
+            // módech a obcházejí pravidla schválně, stejně jako T (posun času).
             // C = noclip (proletět čímkoliv), F = volný let (bez gravitace).
-            // Jsou to dvě různé věci: v letu kolize pořád platí.
+            // Jsou to dvě různé věci: v letu kolize pořád platí, a právě proto
+            // se C do creativu nehodí - creative let v Minecraftu koliduje.
             if (key == GLFW_KEY_C) {
                 player.noclip = !player.noclip;
             }
             if (key == GLFW_KEY_F) {
-                player.flying = !player.flying;
-                player.vy = 0; // ať se po vypnutí letu nezačne padat setrvačností
+                toggleFlight();
+            }
+
+            // Herní přepnutí letu: dvojstisk mezerníku, jen v creative.
+            if (key == GLFW_KEY_SPACE && mode.canFly() && flyTap.tap(glfwGetTime())) {
+                toggleFlight();
             }
             // F3 schová a zase ukáže ladicí výpis.
             if (key == GLFW_KEY_F3) {
@@ -563,7 +583,9 @@ public class Main {
 
                 if (!selected.isEmpty() && !player.intersectsBlock(px, py, pz)
                         && world.placeBlock(px, py, pz, selected.block())) {
-                    inventory.removeOne(selectedSlot);
+                    // V creative se z hotbaru neubírá - hráč má čehokoliv
+                    // v ruce nekonečno. Rozhoduje o tom mód, ne tenhle kód.
+                    mode.afterPlace(inventory, selectedSlot);
                     swing.trigger();
                     // V prostoru, ze středu položeného bloku.
                     sound.playAt(Sound.placeOf(selected.block()), px + 0.5f, py + 0.5f, pz + 0.5f);
@@ -574,6 +596,12 @@ public class Main {
         glfwSetScrollCallback(window, (win, xoffset, yoffset) -> {
             if (state == GameState.SELECT_WORLD) {
                 selectScreen.scroll(yoffset);
+                return;
+            }
+
+            // Creative přehled se kolečkem roluje; obyčejný inventář nemá co.
+            if (state == GameState.CONTAINER) {
+                screen.scroll(yoffset);
                 return;
             }
 
@@ -739,9 +767,12 @@ public class Main {
         }
 
         // Odejít do menu s drženým tlačítkem by po návratu pokračovalo v kopání.
+        // Rozdělaný dvojstisk mezerníku se zahazuje ze stejného důvodu: skok
+        // před odchodem a skok po návratu spolu nemají co dělat.
         if (next != GameState.PLAYING) {
             miningHeld = false;
             mining.cancel();
+            flyTap.reset();
         }
     }
 
@@ -854,6 +885,11 @@ public class Main {
         }
 
         currentWorld = world;
+
+        // Mód je vlastnost světa a bere se z jeho metadat. Svět bez něj
+        // (založený před creativem) je survival - viz WorldSaves.
+        mode = world.mode();
+
         freshWorld(world.seed());
 
         if (save == null) {
@@ -931,8 +967,28 @@ public class Main {
         meshesTotal = 0;
     }
 
+    /**
+     * Přepne volný let. Nulování svislé rychlosti je tu proto, aby se
+     * po vypnutí letu nezačalo padat setrvačností z poslední hodnoty vy.
+     */
+    private void toggleFlight() {
+        player.flying = !player.flying;
+        player.vy = 0;
+    }
+
+    /**
+     * E: v survivalu obyčejný inventář s crafting mřížkou, v creative přehled
+     * všech bloků. Jsou to dvě různé obrazovky, ne dva režimy jedné.
+     *
+     * ⚠️ Přehled se staví ZNOVU při každém otevření, z aktivního registru -
+     * blok právě založený v labu je v něm tím pádem hned.
+     */
     private void openInventory() {
-        screen = ContainerScreen.playerInventory(inventory, craftingSmall, craftingResult);
+        screen = mode == GameMode.CREATIVE
+                ? ContainerScreen.creativeInventory(
+                        CreativeInventory.container(BlockRegistry.active()), inventory)
+                : ContainerScreen.playerInventory(inventory, craftingSmall, craftingResult);
+
         screen.refreshResult();
         setState(GameState.CONTAINER);
     }
@@ -1032,6 +1088,10 @@ public class Main {
         captureThumbnail();
         saveWorld();
         currentWorld = null;
+
+        // V menu se na mód nikdo neptá, ale ať tam po creative světě nezůstane
+        // viset - příští svět si ho stejně nastaví sám z metadat.
+        mode = GameMode.SURVIVAL;
         setState(GameState.MAIN_MENU);
     }
 
@@ -1087,7 +1147,7 @@ public class Main {
     private void createWorld() {
         long seed = Seeds.parse(createScreen.seedText(), Seeds::random);
         WorldSaves.WorldInfo world = WorldSaves.create(WorldSaves.ROOT, createScreen.name(),
-                seed, createScreen.seedText(), System.currentTimeMillis());
+                seed, createScreen.seedText(), createScreen.mode(), System.currentTimeMillis());
 
         if (world == null) {
             System.err.println("Svet se nepovedlo zalozit - viz vyse");
@@ -1194,9 +1254,10 @@ public class Main {
             swing.trigger();
         }
 
-        if (mining.update(world, dt, miningHeld, hit)) {
-            // Vytěžený kus jde do inventáře; co se nevejde, vypadne na zem.
-            mining.harvest(world, inventory, drops, sound);
+        if (mining.update(world, dt, miningHeld, hit, mode)) {
+            // Survival: vytěžený kus jde do inventáře, co se nevejde na zem.
+            // Creative: blok zmizí a nic po něm nezbude.
+            mining.harvest(world, inventory, drops, sound, mode);
         }
 
         // Až po pohybu hráče, ať se sbírá podle toho, kde hráč stojí teď.
@@ -1441,13 +1502,15 @@ public class Main {
                                 (int) Math.floor(camera.y), (int) Math.floor(camera.z)),
                         world.blockLightAt((int) Math.floor(camera.x),
                                 (int) Math.floor(camera.y), (int) Math.floor(camera.z))),
-                String.format("%s   vy %.2f",
+                String.format("%s   vy %.2f   mode %s",
                         player.noclip ? "NOCLIP" : player.flying ? "FLYING"
                                 : player.inWater
                                     ? String.format("swimming %.0f%%", player.submerged * 100)
                                 : player.onGround ? "on ground" : "in air",
-                        player.vy),
-                "F fly   C noclip   1-9 slot   Q drop   T time   V vsync   Esc pause",
+                        player.vy, mode.label()),
+                mode.canFly()
+                        ? "Space x2 fly   Space/Ctrl up/down   Q drop   T time   V vsync   Esc pause"
+                        : "F fly   C noclip   1-9 slot   Q drop   T time   V vsync   Esc pause",
                 "F3 debug   F5 view   F6 texture lab   F11 fullscreen"
         };
     }

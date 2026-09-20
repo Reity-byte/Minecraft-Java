@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **1346 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **1452 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -85,6 +85,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu změřené před refaktorem** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) |
 | `ThumbnailTest` | Náhled: orientace (horní řádek obrazovky = horní řádek obrázku), výřez středu podle poměru stran, zmenšení průměrováním, PNG tam a zpět, odmítnutí příliš velkého obrázku |
 | `WorldScreenTest` | Obrazovky světů: psaní do pole se jménem i seedem, náhled cílové složky (i s `(2)`), Tab/Esc/Enter/Ctrl+V, seznam od naposledy hraného, výběr klikem, **dvojklik hraje**, šipky a rolování, **mazání až po potvrzení**, prázdný seznam, a celá cesta založit → uložit → najít v seznamu → načíst se stejným terénem |
+| `CreativeTest` | Creative mód: přepínač na obrazovce zakládání světa (cyklus, nepřekryje Create/Cancel, `reset()` vrací survival), **okamžitá těžba** (praskne v prvním framu i u železa, ale vzduch, voda, puštěné tlačítko a kurzor mimo blok dál ne), **vytěžený blok mizí** (nic do inventáře, nic na zem, ani s plným inventářem), pokládání neubírá z hotbaru (50 položení, jeden kus vydrží 200), obsah přehledu (přesně jeden záznam na placovatelný vestavěný blok i na každý lab blok, bez `blocks.json` jen vestavěné, determinismus, pořadí), **nekonečný zdroj** (braní kopíruje, shift-klik kopíruje do hotbaru, položení do přehledu zahodí, rolování a klik po odrolování), let (stoupání i klesání, obě klávesy se vyruší, Shift zrychlí, **kolize v letu platí** proti propadnutí s noclipem, po vypnutí letu dopad), dvojstisk mezerníku (**z trojice přepne jen druhý**, reset, běžné skákání ne), mód ve `world.json` (tam a zpět, `touch()` ho zachová, **chybějící klíč i překlep → survival**) — a ke každému pravidlu **kontrola, že survival větev je nezměněná** |
 | `OptionsTest` | Nastavení: výchozí hodnoty = dnešní hra, oříznutí na meze, **render ≤ simulation po 2000 náhodných změnách**, převod na čísla enginu (dohled < `(loadRadius-1)·16`), `options.json` tam a zpět, **chybějící i šest druhů poškozeného souboru → výchozí hodnoty**, jedna špatná hodnota → výchozí jen pro ni, záloha `.bak`, obrazovka Options (hit-testy, tažení posuvníku i mimo dráhu, žádné překryvy), výběr monitoru pro fullscreen, plánování stropu FPS, křivka jasu, GUI měřítko |
 | `BlockRegistryTest` | `textures/blocks.json`: tvar výstupu, round-trip přes text i disk, **neexistující a poškozený soubor → jen vestavěné bloky** (náhodné bajty, useknutý JSON, špatné typy), přeskočení jednotlivých neplatných bloků, **stabilita id přes víc sezení** (i po ručním smazání bloku ze souboru), novější `format`, escape v JSON, plný registr, **záloha poškozeného souboru do `.bak`** |
 | `LabBlockTest` | Blok z labu ve hře: pevný/neprůhledný/obojí ne, neznámé id, **doba kopání podle tvrdosti z dat** (`Mining`), vytěžený blok do inventáře a zpět do světa, **každá stěna meshe bere UV ze své dlaždice**, culling a stín podle neprůhlednosti, hráč duchem propadne a na mramoru stojí, paprsek zaměří i ducha, zvuk podle tvrdosti, náhled labu = mesh hry, **uložený svět nese id beze změny formátu** (svět bez bloků z labu je bajt po bajtu stejný), koloběh lab → soubor → restart |
@@ -122,6 +123,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `WorldStorage` — uložení a načtení rozdílu proti generátoru (jeden svět); **bez GL**
 - `WorldSaves` — světy v `saves/<složka>/`, metadata, migrace starého formátu; **bez GL**
 - `Seeds` — seed z textu (prázdné = náhodný); **bez GL**
+- `GameMode` — survival / creative: jméno, popis a všechna pravidla módu jako pojmenované metody; **bez GL**
 - `TerrainGenerator` — neměnný generátor terénu pro jeden seed (výšky, jeskyně, rudy, stromy, spawn); **bez GL**
 - `Thumbnails` — náhled světa: framebuffer → PNG a zpátky; **bez GL**
 - `BlockRegistry` — bloky z texture labu (id 64–127) nad vestavěnými konstantami, `textures/blocks.json`; **bez GL**
@@ -143,6 +145,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `Container` — mřížka slotů s pravidly slévání; **tohle je ta znovupoužitelná část**
 - `Inventory` — kontejner hráče, sloty 0–8 hotbar, 9–35 batoh; shift-klik (`quickMove`)
 - `Recipes` — tvarované i bezetvarové recepty, hledané kdekoliv v mřížce
+- `CreativeInventory` — obsah creative přehledu: jeden kus od každého placovatelného bloku (vestavěné + z labu)
 
 **Nastavení a obrazovky**
 - `Options` — hodnoty nastavení, meze a `options.json`; **bez GL**
@@ -154,7 +157,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `FrameLimiter` — strop FPS, když je vsync vypnutý; plánování **bez GL**
 - `SafeFiles` — atomický zápis textového souboru se zálohou `.bak`; **bez GL**
 - `SelectWorldScreen` — seznam světů s náhledy, mazání s potvrzením; hit-testy **bez GL**
-- `CreateWorldScreen` — jméno a seed nového světa; hit-testy **bez GL**
+- `CreateWorldScreen` — jméno, seed a herní mód nového světa; hit-testy **bez GL**
 
 **2D vrstva**
 - `Gui` — celočíselné měřítko UI (i volba GUI Scale) a zarovnání na GUI pixel
@@ -169,7 +172,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `TextRenderer` — sazba textu, počátek vlevo nahoře, kreslí v celočíselném měřítku
 - `Hud` — zaměřovač, hotbar s izometrickými kostkami, ladicí výpis, loading screen
 - `Menu` — tlačítka s bevelem, animované zvýraznění, hit-testing
-- `ContainerScreen` — kreslení a myš (klik, shift-klik, tažení) nad **seznamem mřížek**; jedna třída pro inventář i crafting table
+- `ContainerScreen` — kreslení a myš (klik, shift-klik, tažení) nad **seznamem mřížek**; jedna třída pro inventář, crafting table i creative přehled (mřížka s příznakem `infinite` a rolováním)
 - `BlockIcon` — izometrická kostka bloku, sdílená hotbarem i sloty
 
 **Texture lab (F6)**
@@ -188,6 +191,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `DroppedItems` — všechny položky na zemi: vyhození, sběr, zánik; **bez GL**
 - `DroppedItemMesh` — položky na zemi → trojúhelníky pro světový shader; `build()` **bez GL**
 - `HandSwing` — máchnutí rukou; **bez GL**
+- `DoubleTap` — dvojí stisk klávesy v krátkém okně (přepnutí letu mezerníkem); **bez GL**
 - `PlayerAnimation` — chůze, klid a máchnutí ve třetí osobě → `PlayerPose` (úhly kloubů); **bez GL**
 - `Raycaster` — DDA (Amanatides–Woo)
 - `GameState` — MAIN_MENU / CREATING_WORLD / PLAYING / PAUSED
@@ -473,14 +477,21 @@ nasypal do složky prvního.
 
 ```json
 {
-  "format": 1,
+  "format": 2,
   "name": "Cave Base",
   "seed": "99162322",
   "seedText": "hello",
+  "gameMode": "creative",
   "created": 1790000000000,
   "lastPlayed": 1790000100000
 }
 ```
+
+**⚠️ `format` je 2 kvůli hernímu módu.** Klíč `gameMode` přibyl ve formátu 2; svět
+z formátu 1 ho nemá a je survival (to je přesně to, čím dosud byl). Verze se zvýšila
+schválně, i když by chybějící klíč starší čtečka jen ignorovala — právě proto: starší
+build by jinak creative svět tiše hrál jako survival, takhle aspoň napíše, že je formát
+novější. Svět se i tak načte, seed je v souboru od formátu 1.
 
 **⚠️ Seed je ve `world.json` jako ŘETĚZEC.** `Json` čte čísla jako `double` a ten má
 53bitovou mantisu — seed nad 2^53 by se načetl jako jiné číslo, tedy jako úplně jiný svět.
@@ -560,9 +571,11 @@ uvnitř `saves/`.
 všech tvarech (dva průchody, jako v labu), takže by jinak prosvítal skrz panel dialogu —
 ztmavení pod ním zakryje jen tvary.
 
-**Zakládání světa je jméno a seed.** Pod jménem je vidět, do jaké složky svět půjde, včetně
+**Zakládání světa je jméno, seed a herní mód.** Pod jménem je vidět, do jaké složky svět půjde, včetně
 `(2)`, když stejná složka existuje. Prázdný seed znamená náhodný svět; hint pod polem to
 říká. Ctrl+V vloží do pole, ve kterém je fokus — seedy se obvykle odněkud kopírují.
+Pod seedem je cyklující tlačítko Game Mode s popisem toho, co mód znamená; volba se
+uloží ke světu a za běhu se nemění (viz **Creative mód**).
 
 ### Voda
 
@@ -1505,6 +1518,109 @@ se kreslí svou barvou (skutečné sklo by potřebovalo průhledný průchod jak
 blok z labu zaměří vždycky, i ducha (ne pevný, ne neprůhledný) — jinak by nešel vytěžit.
 Zvuk se odvodí z tvrdosti stejnými skupinami jako u vestavěných bloků.
 
+### Creative mód
+
+**Mód je vlastnost SVĚTA, ne hráče.** Vybírá se při zakládání světa (cyklující
+tlačítko „Game Mode: Survival / Creative" na obrazovce Create New World, pod ním
+jednořádkový popis jako v Minecraftu), ukládá se do `world.json` vedle seedu a za
+běhu se **nemění**. Měnit ho v Minecraftu umí jen příkaz `/gamemode`, a příkazová
+řádka tu není — postavit ji kvůli jednomu přepínači by byl větší kus práce než celý
+creative mód. Přepínač v Options by zase znamenal, že survival svět jde jedním klikem
+„vyléčit" a hra o pravidla přijde. Pevná volba při založení je tedy záměr, ne
+zjednodušení, a `world.json` se dá v nouzi přepsat ručně (mód je tam textem).
+
+**⚠️ Všechna pravidla módu jsou pojmenované metody na `GameMode`, ne `if` rozsypané
+po kódu.** `instantMining()`, `keepsMinedBlock()`, `canFly()` a `afterPlace()` — každá
+otázka, kterou se hra na mód ptá, je vidět na jednom místě. Bez toho by nešlo najít, co
+všechno creative mění, a hlavně by se dala snadno změnit i survival větev. Takhle je
+survival doslova „to, co bylo": `Mining.update()` i `harvest()` mají původní signaturu
+jako přetížení, které dosadí `SURVIVAL`, a `CreativeTest` u každého creative pravidla
+ověřuje, že volání bez módu vyjde stejně jako předtím.
+
+**Těžba je okamžitá, ale pravidla platí dál.** Creative větev v `Mining.update()`
+zkracuje jen ČEKÁNÍ — test na `World.isTargetable()` zůstává nad ní, takže se vzduch ani
+voda nerozbijí ani v creative. Praskliny se nestihnou objevit (`stage()` vrací −1), což
+je správně: blok praskne ve framu, kdy se na něj začne s drženým tlačítkem mířit.
+Držená myš pak při přejíždění boří blok za blokem, stejně jako ve vanille; zvuk před
+kulometem chrání `SoundThrottle`, který tam byl dřív.
+
+**Vytěžený blok v creative MIZÍ** — nejde do inventáře ani nevypadne na zem.
+`Mining.harvest()` se v creative inventáře a seznamu položek vůbec nedotkne, takže se
+jich nemá jak dotknout ani omylem. Rozbití a zvuk jsou pro oba módy tytéž; liší se
+jen to, co se stane s kusem.
+
+**Pokládání nespotřebovává.** Po úspěšném `World.placeBlock()` volá `Main` jeden řádek
+`mode.afterPlace(inventory, slot)`; v survivalu je to původní `removeOne()`, v creative
+nic. Je to metoda, a ne podmínka v `Main`, aby to šlo otestovat headless — pokládání
+samo je uvnitř GL smyčky.
+
+**Creative přehled je JINÁ OBRAZOVKA než inventář na E, ne jeho režim.** Postavená je
+ale na témže `ContainerScreen` — je to jen další tovární metoda (`creativeInventory`),
+přesně jak to ta třída od začátku zamýšlela: „batoh + hotbar + mřížka všech bloků"
+místo „batoh + hotbar + crafting + výsledek". Panel je vyšší (186×206 místo 176×166),
+crafting mřížka tam schválně není a nahoře je mřížka 9×5 s posuvníkem.
+
+**⚠️ Horní mřížka je NEKONEČNÝ ZDROJ (`infinite`), ne kontejner k přesouvání.** Braní
+z ní vrací KOPII a ve slotu zůstává, co tam bylo — jinak by si hráč přehled po chvíli
+vysbíral. Položit do ní něco znamená to zahodit (koš, jako v Minecraftu), shift-klik
+kopíruje rovnou do hotbaru (do batohu by blok zmizel do řady, kterou hráč nemá na
+očích) a do tažení hromádky se nezařadí. Nekonečnost je pravidlo OBRAZOVKY, ne
+`Container`u — ten o sobě dál neví nic, takže survival inventář ani crafting se
+nemusely dotknout.
+
+**Ve slotu přehledu je jeden kus, protože se jeden kus nikdy nespotřebuje.** Co je
+vidět, to se taky vezme. Minecraft dává 64, ale tady se pokládáním neubírá, takže
+by se vyšší číslo jen rozcházelo s tím, co je ve slotu napsané.
+
+**Obsah přehledu se POČÍTÁ, neskládá ručně** (`CreativeInventory`). Vestavěné bloky
+jsou id 1 až `World.LAST_BUILT_IN` (nula je vzduch, tedy „nic", ne blok), bloky z labu
+si řekne aktivní `BlockRegistry`. Nový blok — v kódu i v labu — se tím v přehledu
+objeví sám, bez druhého místa na údržbu; `World.LAST_BUILT_IN` je jediná konstanta,
+kterou je při přidání vestavěného bloku potřeba zvýšit (samotné `hardness()` ani
+`isOpaque()` neexistenci id nepoznají, mají default větev). Voda v přehledu je:
+`placeBlock()` na druh bloku nekouká a v creative je to přesně ten blok, ke kterému
+se hráč jinak nedostane, protože vytěžit ho nejde. Bez `blocks.json` vyjdou jen
+vestavěné bloky a hra je přesně jako dřív. **Přehled se staví ZNOVU při každém
+otevření**, takže blok právě založený v labu je v něm hned.
+
+**Rolování posouvá jen INDEXY, ne kreslení.** Mřížka zůstává, kde je, a mění se to,
+co je v ní vidět — stejně jako v seznamu světů. Kdyby se posouvaly souřadnice, musely
+by se sloty ořezávat na okraji panelu. Posuvník vedle mřížky je jen ukazatel a kreslí
+se, až když je co rolovat; roluje se kolečkem. Tažení za značku by znamenalo další stav
+myši v obrazovce, která už tři má (klik, shift-klik, tažení hromádky).
+
+**Let: dvojstisk mezerníku, jako v Minecraftu.** Je to jediné ovládání letu, které
+nepotřebuje nic vysvětlovat — kdo hrál Minecraft, zkusí ho první. Nová klávesa by
+navíc musela být volná: F, C, T, V, E, Q i F3–F11 už něco dělají. Dvojstisk hlídá
+`DoubleTap` (okno 0,3 s, o kousek delší než minecraftích 0,25 s kvůli pomalejším
+prstům); **⚠️ po úspěšném dvojstisku se okno zahodí**, jinak by trojí stisk přepnul
+let dvakrát a rychlé poskakování by letem blikalo. Odchod do menu, pauzy nebo
+inventáře rozdělaný dvojstisk zahodí ze stejného důvodu jako zrušení kopání — skok
+před odchodem a skok po návratu spolu nemají co dělat. **Let jde jen v creative**
+(`GameMode.canFly()`); v letu je mezerník nahoru, Ctrl dolů a Shift zrychluje.
+
+**Ctrl, a ne Shift, protože Shift je tady sprint.** Minecraft má dolů „klávesu plížení"
+— tady je to Ctrl (viz tabulka ovládání), takže je to TÁŽ role, jen jiná klávesa.
+Shift zůstává zrychlením, což je zase přesně to, co dělá v Minecraftu sprint v letu.
+Samotná fyzika letu se nepsala znovu: `Player.flying` i větev bez gravitace v `update()`
+existovaly jako ladicí přepínač, creative jim jen přidal herní spouštěč.
+
+**⚠️ Ladicí klávesy F a C ZŮSTÁVAJÍ, jaké byly — v obou módech.** Je to samostatná
+vrstva, která pravidla obchází schválně, stejně jako T (posun času); odebrat je
+survivalu by byla změna survival chování, kterou tahle úprava dělat nemá. Rozšířit
+C (noclip) na creative let by navíc byla chyba: v Minecraftu creative let **koliduje**,
+kdežto noclip kolize vypíná úplně. Jsou to dvě různé věci a `CreativeTest` to hlídá
+přímo — hráč v letu na podlaze stojí, hráč s noclipem jí propadne. C proto zůstává
+ladicím přepínačem a s módem nemá nic společného.
+
+**Mimo rozsah (a proč):** přepnutí módu za běhu (chtělo by příkazovou řádku),
+crafting v creative (v Minecraftu je pod vlastní záložkou a v creative není k čemu),
+záložky/vyhledávání v přehledu (78 bloků se vejde do dvou obrazovek rolování) a
+hlad ani zdraví (ve hře neexistují, zavádět je kvůli módu by bylo naopak). **Známé
+zjednodušení:** v creative světě není survival inventář na E vůbec dostupný, takže
+crafting mřížka 2×2 je jen v survivalu; crafting table pravým tlačítkem funguje v obou
+módech dál.
+
 ### Ostatní
 
 **Pozadí menu je jeden quad, ne stovky dlaždic.** Textura má `GL_REPEAT` a UV jdou od 0
@@ -1545,7 +1661,9 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | | |
 |---|---|
 | Singleplayer → seznam světů | hrát (dvojklik / Enter), založit, smazat (s potvrzením) |
-| E | inventář (znovu E nebo Esc zavře) |
+| Create New World → Game Mode | přepínač Survival / Creative; mód se uloží ke světu a dál se nemění |
+| E | inventář (znovu E nebo Esc zavře); v creative **přehled všech bloků** |
+| v creative přehledu: klik / shift-klik / kolečko | vzít kopii bloku / poslat ho do hotbaru / rolovat |
 | Shift+LMB v inventáři | přesun hromádky hotbar ↔ batoh; z crafting mřížky zpět do inventáře |
 | LMB / PMB táhnout v inventáři | rozdělit drženou hromádku rovnoměrně / po jednom kusu |
 | Q / Ctrl+Q | vyhodit z ruky jeden kus / celou hromádku (držené Q sype dál) |
@@ -1558,10 +1676,11 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | LMB (držet) | kopat — doba podle tvrdosti bloku |
 | T | posun času o desetinu cyklu (ladění) |
 | WASD / Space / Ctrl | pohyb / skok (nahoru v letu) / plížení (dolů v letu) |
+| **Space 2× (jen creative)** | zapnout a vypnout let |
 | Shift | sprint |
 | 1–9, kolečko | výběr slotu hotbaru |
 | LMB / PMB | těžit / položit |
-| F / C | let / noclip |
+| F / C | let / noclip — **ladicí klávesy, platí v obou módech** |
 | V / Esc | vsync / pauza |
 
 Hráč: hitbox 0,6 × 1,8, oči 1,62, chůze 4,3 b/s, gravitace 28 b/s², skok **1,19 bloku**

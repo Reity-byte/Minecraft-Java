@@ -32,8 +32,25 @@ public class Mining {
      *
      * hit smí být null (kurzor nemíří na nic) a held false (tlačítko není
      * stisknuté) - obojí kopání zruší.
+     *
+     * Bez módu se kope survival pravidly - tedy přesně jako dřív.
      */
     public boolean update(World world, float dt, boolean held, Raycaster.RaycastHit hit)
+    {
+        return update(world, dt, held, hit, GameMode.SURVIVAL);
+    }
+
+    /**
+     * Totéž, ale s herním módem. V creative je kopání OKAMŽITÉ: postup skočí
+     * rovnou na jedničku, takže blok praskne ve framu, kdy se na něj začne
+     * mířit s drženým tlačítkem.
+     *
+     * ⚠️ Zkracuje se jenom čekání. Test na World.isTargetable() zůstává nad
+     * touhle větví, takže vzduch ani voda se nerozbijí ani v creative -
+     * creative pravidla neobchází, jen v nich nečeká.
+     */
+    public boolean update(World world, float dt, boolean held, Raycaster.RaycastHit hit,
+                          GameMode mode)
     {
         if(!held || hit == null)
         {
@@ -58,6 +75,15 @@ public class Mining {
             z = hit.z();
             block = target;
             progress = 0f;
+        }
+
+        // Creative: žádné čekání. cancel() je tu ze stejného důvodu jako
+        // na konci survival větve - postup se vynuluje, ale x/y/z zůstanou,
+        // takže na ně harvest() ve stejném framu ještě dosáhne.
+        if(mode.instantMining())
+        {
+            cancel();
+            return true;
         }
 
         float hardness = World.hardness(block);
@@ -90,8 +116,24 @@ public class Mining {
      * Vrací true, když se blok opravdu rozbil.
      *
      * Rozbití zazní v prostoru, ze středu bloku, zvukem jeho materiálu.
+     *
+     * Bez módu se těží survival pravidly - tedy přesně jako dřív.
      */
     public boolean harvest(World world, Container inventory, DroppedItems drops, SoundSink sounds)
+    {
+        return harvest(world, inventory, drops, sounds, GameMode.SURVIVAL);
+    }
+
+    /**
+     * Totéž, ale s herním módem. V creative vytěžený blok MIZÍ - nejde
+     * do inventáře ani nevypadne na zem, stejně jako ve vanilla Minecraftu.
+     *
+     * Rozbití a zvuk jsou pro oba módy tytéž; liší se jen to, co se stane
+     * s vytěženým kusem. Inventář ani seznam položek se v creative nedotkne,
+     * takže se jich nemá jak dotknout ani omylem.
+     */
+    public boolean harvest(World world, Container inventory, DroppedItems drops, SoundSink sounds,
+                           GameMode mode)
     {
         byte mined = world.getBlock(x, y, z);
 
@@ -103,6 +145,11 @@ public class Mining {
         }
 
         sounds.playAt(Sound.breakOf(mined), x + 0.5f, y + 0.5f, z + 0.5f);
+
+        if(!mode.keepsMinedBlock())
+        {
+            return true;
+        }
 
         ItemStack rest = inventory.add(ItemStack.of(mined, 1));
         drops.dropFromBlock(x, y, z, rest);

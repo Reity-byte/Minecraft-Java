@@ -16,6 +16,12 @@ import static org.lwjgl.glfw.GLFW.*;
  * Prázdný seed = náhodný svět, cokoliv jiného se použije deterministicky
  * (číslo jako číslo, text přes hashCode) - viz Seeds.parse. Obrazovka sama
  * seed neřeší, jen podrží text; převod dělá Main, aby šel zapsat do metadat.
+ *
+ * ⚠️ HERNÍ MÓD SE VYBÍRÁ JEN TADY. Je to vlastnost světa a ukládá se vedle
+ * seedu do world.json; za běhu už se nemění, protože měnit ho by v Minecraftu
+ * znamenalo příkaz /gamemode a příkazová řádka tu není. Přepínač proto cykluje
+ * mezi módy jedním tlačítkem, jako v Minecraftu, a pod ním je vidět, co daný
+ * mód znamená.
  * ---------------------------------------------------------------------------
  *
  * Kreslení je jediná část, která sahá na GL; vstup a hit-testy jdou testovat.
@@ -24,7 +30,7 @@ public final class CreateWorldScreen {
 
     public enum Action { NONE, CREATE, CANCEL }
 
-    public static final int WIDTH = 320, HEIGHT = 150;
+    public static final int WIDTH = 320, HEIGHT = 182;
 
     static final ScreenLayout.Rect NAME_LABEL = new ScreenLayout.Rect(60, 28, 200, 10);
     static final ScreenLayout.Rect NAME = new ScreenLayout.Rect(60, 40, 200, 16);
@@ -34,8 +40,11 @@ public final class CreateWorldScreen {
     static final ScreenLayout.Rect SEED = new ScreenLayout.Rect(60, 88, 200, 16);
     static final ScreenLayout.Rect SEED_HINT = new ScreenLayout.Rect(60, 106, 200, 10);
 
-    static final ScreenLayout.Rect CREATE = new ScreenLayout.Rect(60, 122, 98, 20);
-    static final ScreenLayout.Rect CANCEL = new ScreenLayout.Rect(162, 122, 98, 20);
+    static final ScreenLayout.Rect MODE = new ScreenLayout.Rect(60, 120, 200, 20);
+    static final ScreenLayout.Rect MODE_HINT = new ScreenLayout.Rect(60, 142, 200, 10);
+
+    static final ScreenLayout.Rect CREATE = new ScreenLayout.Rect(60, 154, 98, 20);
+    static final ScreenLayout.Rect CANCEL = new ScreenLayout.Rect(162, 154, 98, 20);
 
     /** Seed se vejde i jako nejdelší long se znaménkem; jméno jako v metadatech. */
     static final int SEED_LENGTH = 32;
@@ -45,6 +54,9 @@ public final class CreateWorldScreen {
 
     private final TextField name = new TextField(WorldSaves.MAX_NAME_LENGTH);
     private final TextField seed = new TextField(SEED_LENGTH);
+
+    /** Vybraný mód. Survival je výchozí - jako v Minecraftu. */
+    private GameMode mode = GameMode.SURVIVAL;
 
     // Cache náhledu složky - počítá se ze jména a sahá na disk, takže se
     // nepřepočítává každý frame, ale jen když se jméno změní.
@@ -65,11 +77,13 @@ public final class CreateWorldScreen {
         name.setFocused(true);
         seed.clear();
         seed.setFocused(false);
+        mode = GameMode.SURVIVAL;
         folderFor = null;
     }
 
     public String name()     { return name.text(); }
     public String seedText() { return seed.text(); }
+    public GameMode mode()   { return mode; }
 
     /** Složka, do které svět půjde - i s odlišením, když jméno už někdo má. */
     public String folder()
@@ -93,6 +107,14 @@ public final class CreateWorldScreen {
 
         name.setFocused(l.hit(NAME, mouseX, mouseY));
         seed.setFocused(l.hit(SEED, mouseX, mouseY));
+
+        // Cyklující tlačítko, ne dvě: se dvěma módy by "vybráno / nevybráno"
+        // zabralo dvakrát tolik místa a přibyl by stav navíc.
+        if(l.hit(MODE, mouseX, mouseY))
+        {
+            mode = mode.next();
+            return Action.NONE;
+        }
 
         if(l.hit(CREATE, mouseX, mouseY))
         {
@@ -159,6 +181,7 @@ public final class CreateWorldScreen {
         widgets.shapes.begin(screenWidth, screenHeight);
         widgets.textField(l, screenHeight, NAME, name.isFocused());
         widgets.textField(l, screenHeight, SEED, seed.isFocused());
+        widgets.button(l, screenHeight, MODE, l.hit(MODE, mouseX, mouseY), true);
         widgets.button(l, screenHeight, CREATE, l.hit(CREATE, mouseX, mouseY), true);
         widgets.button(l, screenHeight, CANCEL, l.hit(CANCEL, mouseX, mouseY), true);
         widgets.shapes.end();
@@ -180,6 +203,10 @@ public final class CreateWorldScreen {
         widgets.muted(l, SEED_HINT.x(), SEED_HINT.y(), seed.text().isBlank()
                 ? "Leave blank for a random seed"
                 : widgets.fit("Same seed = same world", SEED_HINT.w(), l.scale()));
+
+        widgets.centered(l, MODE, "Game Mode: " + mode.label());
+        widgets.muted(l, MODE_HINT.x(), MODE_HINT.y(),
+                widgets.fit(mode.description(), MODE_HINT.w(), l.scale()));
 
         widgets.centered(l, CREATE, "Create");
         widgets.centered(l, CANCEL, "Cancel");

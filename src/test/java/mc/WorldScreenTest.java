@@ -106,7 +106,8 @@ public class WorldScreenTest {
             // Obrazovka se vejde do panelu a prvky se neprekryvaji.
             ScreenLayout.Rect[] rects = {CreateWorldScreen.NAME, CreateWorldScreen.NAME_LABEL,
                     CreateWorldScreen.FOLDER, CreateWorldScreen.SEED_LABEL, CreateWorldScreen.SEED,
-                    CreateWorldScreen.SEED_HINT, CreateWorldScreen.CREATE, CreateWorldScreen.CANCEL};
+                    CreateWorldScreen.SEED_HINT, CreateWorldScreen.MODE, CreateWorldScreen.MODE_HINT,
+                    CreateWorldScreen.CREATE, CreateWorldScreen.CANCEL};
             check("prvky zalozeni sveta se neprekryvaji a jsou v panelu",
                     separate(rects, CreateWorldScreen.WIDTH, CreateWorldScreen.HEIGHT), "");
         } finally {

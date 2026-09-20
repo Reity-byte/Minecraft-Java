@@ -71,8 +71,17 @@ public final class WorldSaves {
     /** Delší jméno by se nevešlo do seznamu světů ani na tlačítko. */
     public static final int MAX_NAME_LENGTH = 32;
 
-    /** Verze formátu world.json. */
-    public static final int FORMAT = 1;
+    /**
+     * Verze formátu world.json.
+     *
+     * Historie: 1 = jméno, seed a časy; 2 = k tomu herní mód (gameMode).
+     *
+     * ⚠️ Zvýšeno kvůli módu schválně, i když by chybějící klíč starší čtečka
+     * jen ignorovala. Právě proto: starší build by creative svět tiše hrál
+     * jako survival. S vyšším formátem aspoň napíše "format 2 je novejsi",
+     * a svět se pořád načte - seed je v souboru od formátu 1.
+     */
+    public static final int FORMAT = 2;
 
     /** Dočasná složka migrace. Tečka na začátku = seznam světů ji přeskočí. */
     static final String MIGRATING_DIR = ".migrating";
@@ -110,8 +119,19 @@ public final class WorldSaves {
      * je to, co uživatel při zakládání napsal do políčka Seed (prázdné =
      * seed byl náhodný), časy jsou v milisekundách jako System.currentTimeMillis().
      */
-    public record WorldInfo(String folder, String name, long seed, String seedText,
+    public record WorldInfo(String folder, String name, long seed, String seedText, GameMode mode,
                             long created, long lastPlayed, Path dir) {
+
+        /**
+         * Bez uvedeného módu je svět survival - stejně jako světy založené
+         * dřív, než creative vůbec existoval. Je to táž úmluva jako
+         * u chybějícího klíče ve world.json, jen v kódu.
+         */
+        public WorldInfo(String folder, String name, long seed, String seedText,
+                         long created, long lastPlayed, Path dir)
+        {
+            this(folder, name, seed, seedText, GameMode.SURVIVAL, created, lastPlayed, dir);
+        }
 
         public Path worldFile() { return dir.resolve(WORLD_FILE); }
         public Path iconFile()  { return dir.resolve(ICON_FILE); }
@@ -140,8 +160,8 @@ public final class WorldSaves {
      * bez něj by svět vypadal jinak, takže soubor, ve kterém chybí, je
      * nepoužitelný a sáhne se po záloze.
      */
-    private record Meta(String name, long seed, String seedText, Long created, Long lastPlayed,
-                        Migrated migrated) {}
+    private record Meta(String name, long seed, String seedText, GameMode mode,
+                        Long created, Long lastPlayed, Migrated migrated) {}
 
     // ------------------------------------------------------------------
     // seznam světů
@@ -236,13 +256,14 @@ public final class WorldSaves {
         {
             System.err.println("Svet " + folder + ": metadata chybi nebo nejdou precist"
                     + " - jmeno podle slozky a seed " + World.DEFAULT_SEED);
-            meta = new Meta(null, World.DEFAULT_SEED, "", null, null, null);
+            meta = new Meta(null, World.DEFAULT_SEED, "", GameMode.SURVIVAL, null, null, null);
         }
 
         return new WorldInfo(folder,
                 meta.name() == null ? cleanName(folder) : meta.name(),
                 meta.seed(),
                 meta.seedText(),
+                meta.mode(),
                 meta.created() == null ? fallbackTime : meta.created(),
                 meta.lastPlayed() == null ? fallbackTime : meta.lastPlayed(),
                 dir);
@@ -258,6 +279,16 @@ public final class WorldSaves {
      */
     public static WorldInfo create(Path root, String displayName, long seed, String seedText, long now)
     {
+        return create(root, displayName, seed, seedText, GameMode.SURVIVAL, now);
+    }
+
+    /**
+     * Totéž s herním módem. Mód je vlastnost světa a zapisuje se sem jednou
+     * provždy - za běhu se nemění, viz GameMode.
+     */
+    public static WorldInfo create(Path root, String displayName, long seed, String seedText,
+                                   GameMode mode, long now)
+    {
         String name = cleanName(displayName);
 
         try
@@ -271,7 +302,8 @@ public final class WorldSaves {
             Files.createDirectory(dir);
 
             WorldInfo info = new WorldInfo(folder, name, seed,
-                    seedText == null ? "" : seedText, now, now, dir);
+                    seedText == null ? "" : seedText,
+                    mode == null ? GameMode.SURVIVAL : mode, now, now, dir);
 
             if(!writeMeta(info, null))
             {
@@ -297,7 +329,7 @@ public final class WorldSaves {
      */
     public static WorldInfo touch(WorldInfo w, long now)
     {
-        WorldInfo updated = new WorldInfo(w.folder(), w.name(), w.seed(), w.seedText(),
+        WorldInfo updated = new WorldInfo(w.folder(), w.name(), w.seed(), w.seedText(), w.mode(),
                 w.created(), now, w.dir());
 
         writeMeta(updated, migrationOf(w.metaFile()));
@@ -708,6 +740,11 @@ public final class WorldSaves {
         // ⚠️ Seed v uvozovkách - jako číslo by se nad 2^53 načetl nepřesně.
         out.append("  \"seed\": \"").append(w.seed()).append("\",\n");
         out.append("  \"seedText\": ").append(Json.quote(w.seedText())).append(",\n");
+
+        // Herní mód. Textem, ne číslem: soubor se dá otevřít a přečíst,
+        // a přibude-li někdy třetí mód, nepřečíslují se ty dosavadní.
+        out.append("  \"gameMode\": ").append(Json.quote(w.mode().id())).append(",\n");
+
         out.append("  \"created\": ").append(w.created()).append(",\n");
         out.append("  \"lastPlayed\": ").append(w.lastPlayed());
 
@@ -830,7 +867,36 @@ public final class WorldSaves {
             problems.add("chybi created nebo lastPlayed - vezme se cas souboru");
         }
 
-        return new Meta(name, seed, seedText, created, lastPlayed, migrated(root, problems));
+        return new Meta(name, seed, seedText, gameMode(root, problems),
+                created, lastPlayed, migrated(root, problems));
+    }
+
+    /**
+     * Herní mód z metadat.
+     *
+     * ⚠️ CHYBĚJÍCÍ KLÍČ NENÍ CHYBA. Světy z formátu 1 (a migrovaný starý svět)
+     * ho nemají a survival je přesně to, čím dosud byly - mlčky tedy survival.
+     * Překlep nebo cizí hodnota už chyba je: svět by se dal hrát v jiném módu,
+     * než jakým vznikl, a o tom musí být vidět zpráva. Svět se i tak načte,
+     * ze stejného důvodu jako u GENERATOR_VERSION.
+     */
+    private static GameMode gameMode(Map<?, ?> root, List<String> problems)
+    {
+        Object raw = root.get("gameMode");
+
+        if(raw == null)
+        {
+            return GameMode.SURVIVAL;
+        }
+
+        if(raw instanceof String id && GameMode.known(id))
+        {
+            return GameMode.byId(id);
+        }
+
+        problems.add("gameMode \"" + raw + "\" neznam - svet se bude hrat jako "
+                + GameMode.SURVIVAL.id());
+        return GameMode.SURVIVAL;
     }
 
     private static Migrated migrated(Map<?, ?> root, List<String> problems)
