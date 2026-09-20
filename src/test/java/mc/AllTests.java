@@ -125,6 +125,10 @@ public class AllTests {
         ThumbnailTest.main(args);
         failures += ThumbnailTest.failures;
 
+        System.out.println(NEWLINE + "========== WorldScreenTest ==========");
+        WorldScreenTest.main(args);
+        failures += WorldScreenTest.failures;
+
         System.out.println(NEWLINE + "========== OptionsTest ==========");
         OptionsTest.main(args);
         failures += OptionsTest.failures;

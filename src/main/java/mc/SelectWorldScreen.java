@@ -375,6 +375,16 @@ public final class SelectWorldScreen {
 
         text.begin(screenWidth, screenHeight, l.scale());
 
+        // ⚠️ Při potvrzení mazání se texty seznamu NEKRESLÍ. Text jde na
+        // obrazovku až po všech tvarech, takže by jinak prosvítal skrz panel
+        // dialogu - ztmavení pod ním zakryje jen tvary.
+        if(confirming)
+        {
+            drawConfirmTexts(l);
+            text.end();
+            return;
+        }
+
         if(worlds.isEmpty())
         {
             widgets.centered(l, LIST, "No worlds yet - create one");
@@ -395,7 +405,9 @@ public final class SelectWorldScreen {
 
         if(worlds.size() > ROWS)
         {
-            widgets.muted(l, LIST.x(), LIST.y() + LIST.h() - 2,
+            // Nad seznamem vlevo, vedle nadpisu - pod seznamem by se kryl
+            // s posledním řádkem i s tlačítky.
+            widgets.muted(l, LIST.x(), LIST.y() - 11,
                     (scroll + 1) + "-" + Math.min(worlds.size(), scroll + ROWS) + " of " + worlds.size()
                             + "   (scroll)");
         }
@@ -405,20 +417,20 @@ public final class SelectWorldScreen {
         widgets.centered(l, DELETE, "Delete", hasWorld);
         widgets.centered(l, CANCEL, "Cancel");
 
-        if(confirming)
-        {
-            WorldSaves.WorldInfo world = selected();
-            String name = world == null ? "" : world.name();
-
-            widgets.centered(l, new ScreenLayout.Rect(CONFIRM_PANEL.x(), CONFIRM_PANEL.y() + 12,
-                    CONFIRM_PANEL.w(), 12), widgets.fit("Delete \"" + name + "\"?", CONFIRM_PANEL.w() - 10, l.scale()));
-            widgets.centered(l, new ScreenLayout.Rect(CONFIRM_PANEL.x(), CONFIRM_PANEL.y() + 30,
-                    CONFIRM_PANEL.w(), 12), "This world will be gone forever.");
-            widgets.centered(l, CONFIRM_DELETE, "Delete");
-            widgets.centered(l, CONFIRM_CANCEL, "Cancel");
-        }
-
         text.end();
+    }
+
+    private void drawConfirmTexts(ScreenLayout l)
+    {
+        WorldSaves.WorldInfo world = selected();
+        String name = world == null ? "" : world.name();
+
+        widgets.centered(l, new ScreenLayout.Rect(CONFIRM_PANEL.x(), CONFIRM_PANEL.y() + 12,
+                CONFIRM_PANEL.w(), 12), widgets.fit("Delete \"" + name + "\"?", CONFIRM_PANEL.w() - 10, l.scale()));
+        widgets.centered(l, new ScreenLayout.Rect(CONFIRM_PANEL.x(), CONFIRM_PANEL.y() + 32,
+                CONFIRM_PANEL.w(), 12), "This world will be gone forever.");
+        widgets.centered(l, CONFIRM_DELETE, "Delete");
+        widgets.centered(l, CONFIRM_CANCEL, "Cancel");
     }
 
     /** Uvolní náhledové textury - volat při zavření obrazovky. */
