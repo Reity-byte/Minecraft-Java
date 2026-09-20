@@ -65,14 +65,10 @@ public class Main {
 
     // Texty UI jsou anglicky schválně: atlas fontu pokrývá jen ASCII 32-126,
     // takže česká diakritika by se vykreslila jako otazníky.
-    /** Kam se ukládá svět. Jeden slot; víc světů by chtělo výběr v menu. */
-    private static final Path SAVE_PATH = Path.of("saves", "world.dat");
-
-    // Hlavní menu se skládá znovu při každém návratu do něj: tlačítko
-    // "Load World" má smysl ukazovat, jen když nějaký uložený svět existuje.
-    private Menu mainMenu = new Menu("Minecraft Base", "Create World", "Quit");
-    private boolean mainMenuHasLoad = false;
-    private final Menu pauseMenu = new Menu("Paused", "Resume", "Back to Menu");
+    // Světy jsou v saves/<složka>/ a vybírají se na vlastní obrazovce, takže
+    // hlavní menu má jen "Singleplayer" a nemusí se skládat znovu.
+    private final Menu mainMenu = new Menu("Minecraft Base", "Singleplayer", "Options", "Texture Lab", "Quit");
+    private final Menu pauseMenu = new Menu("Paused", "Resume", "Options", "Save and Quit to Title");
 
     // mouse look state
     private double lastX, lastY;
@@ -107,6 +103,19 @@ public class Main {
      */
     private int[] atlasPixels;
     private boolean atlasFromFile;
+
+    /** Obrazovky mimo lab: nastavení, výběr a založení světa. */
+    private Widgets widgets;
+    private ImageRenderer images;
+    private OptionsScreen optionsScreen;
+    private SelectWorldScreen selectScreen;
+    private CreateWorldScreen createScreen;
+
+    /** Kam se vrátit z nastavení - do menu, nebo do pauzy. */
+    private GameState optionsReturnState = GameState.MAIN_MENU;
+
+    /** Svět, který se právě hraje (kam se ukládá a kam jde náhled), nebo null. */
+    private WorldSaves.WorldInfo currentWorld;
 
     /** Otevřený texture lab, nebo null; a kam se z něj vrací. */
     private TextureLab lab;
@@ -175,13 +184,22 @@ public class Main {
         // Zavření okna uprostřed hry je běžný způsob, jak skončit - svět
         // se proto uloží i tady, ne jen při odchodu do menu.
         if (state == GameState.PLAYING || state == GameState.PAUSED
+                || (state == GameState.OPTIONS && optionsReturnState == GameState.PLAYING)
                 || (state == GameState.TEXTURE_LAB && labReturnState == GameState.PLAYING)) {
+            // Zavřít okno uprostřed hry je běžný způsob, jak skončit - svět
+            // se proto uloží i s náhledem, stejně jako při odchodu do menu.
+            captureThumbnail();
             saveWorld();
         }
+
+        saveOptions();
 
         if (lab != null) {
             lab.delete();
         }
+
+        selectScreen.delete();
+        images.delete();
 
         world.shutdown();
         sound.shutdown();
@@ -246,6 +264,16 @@ public class Main {
                 return;
             }
 
+            // V nastavení tažení posouvá posuvník - a hodnota se hned použije.
+            if (state == GameState.OPTIONS) {
+                optionsScreen.drag(xpos, ypos, width, height);
+
+                if (optionsScreen.takeChanged()) {
+                    applyOptions();
+                }
+                return;
+            }
+
             // Rozhlížení jen ve hře. V menu by kamera utíkala pod kurzorem.
             if (state != GameState.PLAYING) {
                 return;
@@ -268,6 +296,8 @@ public class Main {
         glfwSetCharCallback(window, (win, codepoint) -> {
             if (state == GameState.TEXTURE_LAB) {
                 lab.typed(codepoint);
+            } else if (state == GameState.CREATE_WORLD) {
+                createScreen.typed(codepoint);
             }
         });
 
@@ -296,6 +326,21 @@ public class Main {
                     closeTextureLab();
                 }
                 return;
+            }
+
+            // Nové obrazovky berou i opakování klávesy (držené Backspace
+            // v poli se jménem), zavírají se ale jen stiskem.
+            if (state == GameState.OPTIONS || state == GameState.SELECT_WORLD
+                    || state == GameState.CREATE_WORLD) {
+                if (action == GLFW_RELEASE || key == GLFW_KEY_F11) {
+                    // F11 propadne dolů k přepnutí fullscreenu.
+                    if (action != GLFW_PRESS) {
+                        return;
+                    }
+                } else {
+                    screenKey(key, mods);
+                    return;
+                }
             }
 
             if (action != GLFW_PRESS) {
@@ -424,6 +469,47 @@ public class Main {
                 return;
             }
 
+            // Nastavení potřebuje zmáčknutí i puštění zvlášť - mezi nimi
+            // se táhne posuvníkem.
+            if (state == GameState.OPTIONS) {
+                if (button != GLFW_MOUSE_BUTTON_LEFT) {
+                    return;
+                }
+
+                if (action == GLFW_PRESS) {
+                    if (optionsScreen.press(mouseX, mouseY, width, height)) {
+                        sound.play(Sound.CLICK);
+                        closeOptions();
+                    } else if (optionsScreen.takeChanged()) {
+                        applyOptions();
+                    }
+                } else if (action == GLFW_RELEASE) {
+                    optionsScreen.release();
+                }
+                return;
+            }
+
+            if (state == GameState.SELECT_WORLD && action == GLFW_PRESS
+                    && button == GLFW_MOUSE_BUTTON_LEFT) {
+                switch (selectScreen.press(mouseX, mouseY, width, height, glfwGetTime())) {
+                    case PLAY -> { sound.play(Sound.CLICK); playWorld(selectScreen.selected()); }
+                    case CREATE -> { sound.play(Sound.CLICK); openCreateWorld(); }
+                    case CANCEL -> { sound.play(Sound.CLICK); setState(GameState.MAIN_MENU); }
+                    default -> { }
+                }
+                return;
+            }
+
+            if (state == GameState.CREATE_WORLD && action == GLFW_PRESS
+                    && button == GLFW_MOUSE_BUTTON_LEFT) {
+                switch (createScreen.press(mouseX, mouseY, width, height)) {
+                    case CREATE -> { sound.play(Sound.CLICK); createWorld(); }
+                    case CANCEL -> { sound.play(Sound.CLICK); openSelectWorld(); }
+                    default -> { }
+                }
+                return;
+            }
+
             if (action != GLFW_PRESS) {
                 return;
             }
@@ -469,6 +555,11 @@ public class Main {
         });
 
         glfwSetScrollCallback(window, (win, xoffset, yoffset) -> {
+            if (state == GameState.SELECT_WORLD) {
+                selectScreen.scroll(yoffset);
+                return;
+            }
+
             if (state != GameState.PLAYING) {
                 return;
             }
@@ -505,6 +596,14 @@ public class Main {
         glEnable(GL_CULL_FACE);
 
         glClearColor(WorldRenderer.SKY_R, WorldRenderer.SKY_G, WorldRenderer.SKY_B, 1.0f);
+
+        // Starý svět ze saves/world.dat (jeden slot) se přesune do saves/<složka>/.
+        // Původní soubor se nemaže, jen přejmenuje - viz WorldSaves.migrateLegacy.
+        WorldSaves.Migration migration = WorldSaves.migrateLegacy(WorldSaves.ROOT);
+
+        if (migration != WorldSaves.Migration.NONE) {
+            System.out.println("Stary svet: " + migration);
+        }
 
         // Bloky z texture labu (textures/blocks.json) PŘED atlasem: procedurální
         // atlas podle nich vyznačí dlaždice, které bez atlas.png nemá. Když
@@ -545,6 +644,12 @@ public class Main {
         background = new BackgroundRenderer(dirtTile);
         hud = new Hud(shapes, text, icons);
 
+        widgets = new Widgets(shapes, text);
+        images = new ImageRenderer();
+        optionsScreen = new OptionsScreen(options, widgets);
+        selectScreen = new SelectWorldScreen(widgets, images, WorldSaves.ROOT);
+        createScreen = new CreateWorldScreen(widgets, WorldSaves.ROOT);
+
         // Teprve teď existuje všechno, co nastavení řídí (svět, renderer, kamera).
         applyOptions();
 
@@ -584,14 +689,6 @@ public class Main {
 
     private void setState(GameState next) {
         state = next;
-
-        if (next == GameState.MAIN_MENU) {
-            mainMenuHasLoad = WorldStorage.exists(SAVE_PATH);
-            // Texture Lab je vývojářská volba - na úpravy atlasu netřeba svět.
-            mainMenu = mainMenuHasLoad
-                    ? new Menu("Minecraft Base", "Create World", "Load World", "Texture Lab", "Quit")
-                    : new Menu("Minecraft Base", "Create World", "Texture Lab", "Quit");
-        }
 
         // Kurzor je chycený jen při hraní; v menu musí být vidět a volný.
         glfwSetInputMode(window, GLFW_CURSOR,
@@ -642,6 +739,34 @@ public class Main {
                     renderWorld();
                     screen.render(shapes, text, icons, width, height, mouseX, mouseY);
                 }
+                case OPTIONS -> {
+                    // Z pauzy se za nastavením dál kreslí (a generuje) svět -
+                    // posunutí render distance je tak vidět rovnou při tažení.
+                    if (optionsReturnState == GameState.PLAYING) {
+                        world.update(player.x, player.z);
+                        renderWorld();
+                    } else {
+                        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                        background.draw(width, height, Palette.BACKGROUND_TINT);
+                    }
+
+                    optionsScreen.render(width, height, mouseX, mouseY,
+                            optionsReturnState == GameState.PLAYING);
+
+                    if (optionsScreen.takeChanged()) {
+                        applyOptions();
+                    }
+                }
+                case SELECT_WORLD -> {
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                    background.draw(width, height, Palette.BACKGROUND_TINT);
+                    selectScreen.render(width, height, mouseX, mouseY);
+                }
+                case CREATE_WORLD -> {
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                    background.draw(width, height, Palette.BACKGROUND_TINT);
+                    createScreen.render(width, height, mouseX, mouseY);
+                }
                 case TEXTURE_LAB -> {
                     // Otevřený ze hry: svět za labem se kreslí dál, i s upraveným
                     // atlasem. Z menu: pozadí menu.
@@ -670,33 +795,51 @@ public class Main {
     // stavy
     // ------------------------------------------------------------------
 
-    private void startWorldCreation() {
-        freshWorld();
+    /**
+     * Začne hrát vybraný svět: s uloženým souborem ho načte, bez něj (nově
+     * založený svět) vygeneruje terén jeho seedem a najde spawn.
+     *
+     * ⚠️ Poškozený soubor světa se NEPŘEPISUJE novým světem - hráč zůstane
+     * v seznamu a uvidí důvod na konzoli. Dřív byl svět jeden a nový svět se
+     * prostě založil; teď by to znamenalo přepsat konkrétní uložený svět.
+     */
+    private void playWorld(WorldSaves.WorldInfo world) {
+        WorldStorage.Save save = null;
 
+        if (WorldStorage.exists(world.worldFile())) {
+            save = WorldStorage.load(world.worldFile());
+
+            if (save == null) {
+                System.err.println("Svet " + world.folder() + " nejde nacist - zustava v seznamu");
+                return;
+            }
+        }
+
+        currentWorld = world;
+        freshWorld(world.seed());
+
+        if (save == null) {
+            newWorldSpawn();
+        } else {
+            restore(save);
+        }
+
+        setState(GameState.CREATING_WORLD);
+    }
+
+    private void newWorldSpawn() {
         // Terén u počátku souřadnic vychází pod hladinou, takže se spawn hledá:
         // jinak by hra začínala po pás ve vodě. Výška terénu je čistá funkce
-        // šumu, takže to nepotřebuje vygenerovaný svět.
-        int[] spawn = World.findLandSpawn(SPAWN_SEARCH_X, SPAWN_SEARCH_Z, SPAWN_SEARCH_RADIUS);
+        // šumu a seedu, takže to nepotřebuje vygenerovaný svět.
+        int[] spawn = world.generator().findLandSpawn(SPAWN_SEARCH_X, SPAWN_SEARCH_Z, SPAWN_SEARCH_RADIUS);
 
         loadingTitle = "Creating world";
         worldCenterX = spawn[0] + 0.5f;
         worldCenterZ = spawn[1] + 0.5f;
         spawnDone = false;   // hráče postaví na terén až updateCreatingWorld
-
-        setState(GameState.CREATING_WORLD);
     }
 
-    private void loadWorld() {
-        WorldStorage.Save save = WorldStorage.load(SAVE_PATH);
-
-        if (save == null) {
-            // Soubor je pryč nebo poškozený; zpráva už je na stderr.
-            // Spadnout kvůli tomu nemá smysl - založí se nový svět.
-            startWorldCreation();
-            return;
-        }
-
-        freshWorld();
+    private void restore(WorldStorage.Save save) {
 
         // Změny se musí nasadit PŘED prvním update(), aby si je sloupce
         // vzaly rovnou při generování a nikdy nebyly vidět bez nich.
@@ -724,14 +867,13 @@ public class Main {
         worldCenterZ = player.z;
         spawnDone = true;    // pozice je z uloženého světa, hledat terén netřeba
 
-        setState(GameState.CREATING_WORLD);
     }
 
     /** Společný začátek nového i načteného světa. */
-    private void freshWorld() {
+    private void freshWorld(long seed) {
         // Starý svět musí zastavit svoje generující vlákno, jinak by běžela dvě.
         world.shutdown();
-        world = new World();
+        world = new World(seed);
 
         // Zvuk symetricky se světem: nový svět nezdědí nic, co ještě hraje
         // ze starého. Změřeno: zavření ~30 ms, nové otevření 55-150 ms.
@@ -811,12 +953,110 @@ public class Main {
         setState(GameState.PLAYING);
     }
 
+    /**
+     * Náhled světa do saves/<složka>/icon.png: svět se překreslí BEZ HUD
+     * a pauzy a hned přečte ze zadního bufferu. Vzniká při odchodu do menu
+     * a při zavření okna, tedy přesně když se svět ukládá - v seznamu je pak
+     * vidět, kde hráč naposledy skončil.
+     */
+    private void captureThumbnail() {
+        if (currentWorld == null || width <= 0 || height <= 0) {
+            return;
+        }
+
+        renderWorld();
+
+        java.nio.ByteBuffer pixels = org.lwjgl.BufferUtils.createByteBuffer(width * height * 4);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+        int[] argb = Thumbnails.fromFramebuffer(pixels, width, height, Thumbnails.WIDTH, Thumbnails.HEIGHT);
+        Thumbnails.save(argb, Thumbnails.WIDTH, Thumbnails.HEIGHT, currentWorld.iconFile());
+    }
+
     private void saveWorld() {
-        WorldStorage.save(SAVE_PATH, new WorldStorage.Save(
+        if (currentWorld == null) {
+            return;
+        }
+
+        WorldStorage.save(currentWorld.worldFile(), new WorldStorage.Save(
                 player.x, player.y, player.z,
                 camera.yaw, camera.pitch,
                 player.flying, selectedSlot,
                 world.changes(), inventorySnapshot()));
+
+        // Poslední hraní se posune až po uložení - seznam světů se podle něj řadí.
+        currentWorld = WorldSaves.touch(currentWorld, System.currentTimeMillis());
+    }
+
+    /** Uloží svět i s náhledem a vrátí se do hlavního menu. */
+    private void quitToTitle() {
+        captureThumbnail();
+        saveWorld();
+        currentWorld = null;
+        setState(GameState.MAIN_MENU);
+    }
+
+    /** Klávesy obrazovek nastavení, výběru a založení světa. */
+    private void screenKey(int key, int mods) {
+        switch (state) {
+            case OPTIONS -> {
+                if (optionsScreen.key(key)) {
+                    closeOptions();
+                }
+            }
+            case SELECT_WORLD -> {
+                switch (selectScreen.key(key)) {
+                    case PLAY -> playWorld(selectScreen.selected());
+                    case CANCEL -> setState(GameState.MAIN_MENU);
+                    default -> { }
+                }
+            }
+            case CREATE_WORLD -> {
+                String clipboard = glfwGetClipboardString(window);
+
+                switch (createScreen.key(key, mods, clipboard)) {
+                    case CREATE -> createWorld();
+                    case CANCEL -> openSelectWorld();
+                    default -> { }
+                }
+            }
+            default -> { }
+        }
+    }
+
+    private void openCreateWorld() {
+        createScreen.reset();
+        setState(GameState.CREATE_WORLD);
+    }
+
+    private void openOptions() {
+        optionsReturnState = state;
+        setState(GameState.OPTIONS);
+    }
+
+    private void closeOptions() {
+        saveOptions();
+        setState(optionsReturnState);
+    }
+
+    private void openSelectWorld() {
+        selectScreen.refresh();
+        setState(GameState.SELECT_WORLD);
+    }
+
+    /** Založí svět podle obrazovky a rovnou ho začne hrát. */
+    private void createWorld() {
+        long seed = Seeds.parse(createScreen.seedText(), Seeds::random);
+        WorldSaves.WorldInfo world = WorldSaves.create(WorldSaves.ROOT, createScreen.name(),
+                seed, createScreen.seedText(), System.currentTimeMillis());
+
+        if (world == null) {
+            System.err.println("Svet se nepovedlo zalozit - viz vyse");
+            return;
+        }
+
+        playWorld(world);
     }
 
     private void updateCreatingWorld() {
@@ -1068,11 +1308,10 @@ public class Main {
                 return;
             }
 
-            // Pořadí tlačítek se liší podle toho, jestli je co načítat -
-            // proto se rozhoduje podle popisku, ne podle indexu.
+            // Rozhoduje popisek, ne index - pořadí tlačítek se může měnit.
             switch (mainMenu.label(index)) {
-                case "Create World" -> startWorldCreation();
-                case "Load World" -> loadWorld();
+                case "Singleplayer" -> openSelectWorld();
+                case "Options" -> openOptions();
                 case "Texture Lab" -> openTextureLab();
                 default -> glfwSetWindowShouldClose(window, true);
             }
@@ -1083,13 +1322,12 @@ public class Main {
 
         int index = hoveredButton(pauseMenu);
 
-        switch (index) {
-            case 0 -> setState(GameState.PLAYING);
-            case 1 -> {
-                // Odchod do menu svět zahazuje, takže se musí uložit teď.
-                saveWorld();
-                setState(GameState.MAIN_MENU);
-            }
+        switch (pauseMenu.label(index)) {
+            case "Resume" -> setState(GameState.PLAYING);
+            case "Options" -> openOptions();
+            // Odchod do menu svět zahazuje, takže se musí uložit teď -
+            // i s náhledem, který se pak ukazuje v seznamu světů.
+            case "Save and Quit to Title" -> quitToTitle();
             default -> { }
         }
 

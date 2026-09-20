@@ -1,0 +1,195 @@
+package mc;
+
+import java.nio.file.Path;
+
+import static org.lwjgl.glfw.GLFW.*;
+
+/**
+ * Obrazovka "Create New World": jméno světa a seed.
+ *
+ * ---------------------------------------------------------------------------
+ * Dvě textová pole a dvě tlačítka, jako v Minecraftu. Jméno je to, co uvidíš
+ * v seznamu; složka na disku z něj vznikne očištěním (WorldSaves.folderFor)
+ * a pod obrazovkou je pořád vidět, kam se svět uloží - i s uvozovkou (2),
+ * když stejná složka už existuje.
+ *
+ * Prázdný seed = náhodný svět, cokoliv jiného se použije deterministicky
+ * (číslo jako číslo, text přes hashCode) - viz Seeds.parse. Obrazovka sama
+ * seed neřeší, jen podrží text; převod dělá Main, aby šel zapsat do metadat.
+ * ---------------------------------------------------------------------------
+ *
+ * Kreslení je jediná část, která sahá na GL; vstup a hit-testy jdou testovat.
+ */
+public final class CreateWorldScreen {
+
+    public enum Action { NONE, CREATE, CANCEL }
+
+    public static final int WIDTH = 320, HEIGHT = 150;
+
+    static final ScreenLayout.Rect NAME_LABEL = new ScreenLayout.Rect(60, 28, 200, 10);
+    static final ScreenLayout.Rect NAME = new ScreenLayout.Rect(60, 40, 200, 16);
+    static final ScreenLayout.Rect FOLDER = new ScreenLayout.Rect(60, 58, 200, 10);
+
+    static final ScreenLayout.Rect SEED_LABEL = new ScreenLayout.Rect(60, 76, 200, 10);
+    static final ScreenLayout.Rect SEED = new ScreenLayout.Rect(60, 88, 200, 16);
+    static final ScreenLayout.Rect SEED_HINT = new ScreenLayout.Rect(60, 106, 200, 10);
+
+    static final ScreenLayout.Rect CREATE = new ScreenLayout.Rect(60, 122, 98, 20);
+    static final ScreenLayout.Rect CANCEL = new ScreenLayout.Rect(162, 122, 98, 20);
+
+    /** Seed se vejde i jako nejdelší long se znaménkem; jméno jako v metadatech. */
+    static final int SEED_LENGTH = 32;
+
+    private final Widgets widgets;
+    private final Path root;
+
+    private final TextField name = new TextField(WorldSaves.MAX_NAME_LENGTH);
+    private final TextField seed = new TextField(SEED_LENGTH);
+
+    // Cache náhledu složky - počítá se ze jména a sahá na disk, takže se
+    // nepřepočítává každý frame, ale jen když se jméno změní.
+    private String folderFor = null;
+    private String folderCache = "";
+
+    public CreateWorldScreen(Widgets widgets, Path root)
+    {
+        this.widgets = widgets;
+        this.root = root;
+        reset();
+    }
+
+    /** Nová obrazovka: výchozí jméno vybrané k přepsání, prázdný seed. */
+    public void reset()
+    {
+        name.setText(WorldSaves.DEFAULT_NAME);
+        name.setFocused(true);
+        seed.clear();
+        seed.setFocused(false);
+        folderFor = null;
+    }
+
+    public String name()     { return name.text(); }
+    public String seedText() { return seed.text(); }
+
+    /** Složka, do které svět půjde - i s odlišením, když jméno už někdo má. */
+    public String folder()
+    {
+        if(!name.text().equals(folderFor))
+        {
+            folderFor = name.text();
+            folderCache = WorldSaves.uniqueFolder(root, WorldSaves.folderFor(WorldSaves.cleanName(name.text())));
+        }
+
+        return folderCache;
+    }
+
+    // ------------------------------------------------------------------
+    // vstup
+    // ------------------------------------------------------------------
+
+    public Action press(double mouseX, double mouseY, int screenWidth, int screenHeight)
+    {
+        ScreenLayout l = layout(screenWidth, screenHeight);
+
+        name.setFocused(l.hit(NAME, mouseX, mouseY));
+        seed.setFocused(l.hit(SEED, mouseX, mouseY));
+
+        if(l.hit(CREATE, mouseX, mouseY))
+        {
+            return Action.CREATE;
+        }
+        if(l.hit(CANCEL, mouseX, mouseY))
+        {
+            return Action.CANCEL;
+        }
+
+        return Action.NONE;
+    }
+
+    /** Napsaný znak z char callbacku. */
+    public void typed(int codepoint)
+    {
+        name.type(codepoint);
+        seed.type(codepoint);
+    }
+
+    /**
+     * Klávesa. Enter zakládá, Esc ruší, Tab přepíná pole, Ctrl+V vloží
+     * schránku (seedy se obvykle odněkud kopírují).
+     */
+    public Action key(int key, int mods, String clipboard)
+    {
+        boolean ctrl = (mods & GLFW_MOD_CONTROL) != 0;
+
+        if(ctrl && key == GLFW_KEY_V)
+        {
+            if(name.isFocused()) name.insert(clipboard);
+            if(seed.isFocused()) seed.insert(clipboard);
+            return Action.NONE;
+        }
+
+        return switch(key)
+        {
+            case GLFW_KEY_ESCAPE -> Action.CANCEL;
+            case GLFW_KEY_ENTER, GLFW_KEY_KP_ENTER -> Action.CREATE;
+            case GLFW_KEY_BACKSPACE -> { name.backspace(); seed.backspace(); yield Action.NONE; }
+            case GLFW_KEY_TAB -> {
+                boolean toSeed = name.isFocused();
+                name.setFocused(!toSeed);
+                seed.setFocused(toSeed);
+                yield Action.NONE;
+            }
+            default -> Action.NONE;
+        };
+    }
+
+    static ScreenLayout layout(int screenWidth, int screenHeight)
+    {
+        return new ScreenLayout(WIDTH, HEIGHT, screenWidth, screenHeight);
+    }
+
+    // ------------------------------------------------------------------
+    // kreslení
+    // ------------------------------------------------------------------
+
+    public void render(int screenWidth, int screenHeight, double mouseX, double mouseY)
+    {
+        ScreenLayout l = layout(screenWidth, screenHeight);
+
+        widgets.shapes.begin(screenWidth, screenHeight);
+        widgets.textField(l, screenHeight, NAME, name.isFocused());
+        widgets.textField(l, screenHeight, SEED, seed.isFocused());
+        widgets.button(l, screenHeight, CREATE, l.hit(CREATE, mouseX, mouseY), true);
+        widgets.button(l, screenHeight, CANCEL, l.hit(CANCEL, mouseX, mouseY), true);
+        widgets.shapes.end();
+
+        widgets.text.begin(screenWidth, screenHeight, l.scale() * 2);
+        widgets.text.drawCenteredShadowed("Create New World", l.textLeft(WIDTH / 2f), l.textTop(4),
+                Palette.TEXT, Palette.TEXT_SHADOW);
+        widgets.text.end();
+
+        widgets.text.begin(screenWidth, screenHeight, l.scale());
+
+        widgets.label(l, NAME_LABEL.x(), NAME_LABEL.y(), "World Name");
+        widgets.label(l, NAME.x() + 4, NAME.y() + 4, caret(name));
+        widgets.muted(l, FOLDER.x(), FOLDER.y(),
+                widgets.fit("Will be saved in: saves/" + folder(), FOLDER.w(), l.scale()));
+
+        widgets.label(l, SEED_LABEL.x(), SEED_LABEL.y(), "Seed for the World Generator");
+        widgets.label(l, SEED.x() + 4, SEED.y() + 4, caret(seed));
+        widgets.muted(l, SEED_HINT.x(), SEED_HINT.y(), seed.text().isBlank()
+                ? "Leave blank for a random seed"
+                : widgets.fit("Same seed = same world", SEED_HINT.w(), l.scale()));
+
+        widgets.centered(l, CREATE, "Create");
+        widgets.centered(l, CANCEL, "Cancel");
+
+        widgets.text.end();
+    }
+
+    /** Text pole s kurzorem, když je v něm fokus. */
+    private static String caret(TextField field)
+    {
+        return field.text() + (field.isFocused() ? "_" : "");
+    }
+}

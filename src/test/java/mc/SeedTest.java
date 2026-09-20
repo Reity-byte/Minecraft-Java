@@ -126,9 +126,13 @@ public class SeedTest {
         check("spawn vychoziho sveta sedi", spawn[0] == SPAWN_X && spawn[1] == SPAWN_Z,
                 spawn[0] + "," + spawn[1]);
 
-        int[] staticSpawn = World.findLandSpawn(8, 8, 64);
-        check("staticke World.findLandSpawn (pro dnesni Main) dava totez",
-                staticSpawn[0] == spawn[0] && staticSpawn[1] == spawn[1], "");
+        // Main hleda spawn na generatoru sveta, ktery zaklada - svet s vychozim
+        // seedem proto musi dat tentyz spawn jako TerrainGenerator.DEFAULT.
+        World world = new World();
+        int[] worldSpawn = world.generator().findLandSpawn(8, 8, 64);
+        check("svet s vychozim seedem najde tentyz spawn",
+                worldSpawn[0] == spawn[0] && worldSpawn[1] == spawn[1], "");
+        world.shutdown();
     }
 
     // ==================================================================

@@ -22,5 +22,14 @@ public enum GameState {
     CONTAINER,
 
     /** Texture lab - úpravy dlaždic atlasu (F6 nebo z hlavního menu). */
-    TEXTURE_LAB
+    TEXTURE_LAB,
+
+    /** Nastavení - z hlavního menu i z pauzy (pak se za ním kreslí svět). */
+    OPTIONS,
+
+    /** Seznam uložených světů s náhledy. */
+    SELECT_WORLD,
+
+    /** Jméno a seed nového světa. */
+    CREATE_WORLD
 }

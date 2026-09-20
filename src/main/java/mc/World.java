@@ -616,18 +616,6 @@ public class World {
         return generator.generateColumn(cx, cz);
     }
 
-    /**
-     * Nejbližší suchý spawn podle VÝCHOZÍHO seedu.
-     *
-     * ⚠️ Jen pro dnešní Main, zmizí při napojení seedu - pak se bude volat
-     * world.generator().findLandSpawn() na generátoru toho světa, který
-     * se právě otevírá.
-     */
-    public static int[] findLandSpawn(int preferredX, int preferredZ, int maxRadius)
-    {
-        return TerrainGenerator.DEFAULT.findLandSpawn(preferredX, preferredZ, maxRadius);
-    }
-
     // ------------------------------------------------------------------
     // přístup pro renderer
     // ------------------------------------------------------------------
