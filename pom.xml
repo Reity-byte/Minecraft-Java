@@ -48,6 +48,13 @@
         <dependency><groupId>org.lwjgl</groupId><artifactId>lwjgl-opengl</artifactId><classifier>natives-macos</classifier></dependency>
         <dependency><groupId>org.lwjgl</groupId><artifactId>lwjgl-openal</artifactId><classifier>natives-macos</classifier></dependency>
 
+        <!-- Apple Silicon (M1 a dál) je JINÝ classifier než natives-macos, což je Intel.
+             Bez obou by se hra na jednom z těch dvou Maců nespustila. -->
+        <dependency><groupId>org.lwjgl</groupId><artifactId>lwjgl</artifactId><classifier>natives-macos-arm64</classifier></dependency>
+        <dependency><groupId>org.lwjgl</groupId><artifactId>lwjgl-glfw</artifactId><classifier>natives-macos-arm64</classifier></dependency>
+        <dependency><groupId>org.lwjgl</groupId><artifactId>lwjgl-opengl</artifactId><classifier>natives-macos-arm64</classifier></dependency>
+        <dependency><groupId>org.lwjgl</groupId><artifactId>lwjgl-openal</artifactId><classifier>natives-macos-arm64</classifier></dependency>
+
         <!-- matice a vektory pro shader pipeline (perspective, lookAt, frustum culling) -->
         <dependency>
             <groupId>org.joml</groupId>
@@ -66,6 +73,54 @@
                 <configuration>
                     <mainClass>mc.Main</mainClass>
                 </configuration>
+            </plugin>
+
+            <!--
+                Jeden spustitelny jar se vsim uvnitr: mvn -B package vyrobi
+                target/minecraft-base-1.0.jar, ktery jde poslat komukoliv
+                a spustit pres java -jar. Puvodni "tenky" jar zustava vedle
+                jako target/original-minecraft-base-1.0.jar.
+
+                Nativni knihovny LWJGL leti do jaru taky - kazda platforma ma
+                v jarech svou vlastni cestu (windows/x64, macos/arm64, ...),
+                takze se navzajem neprebijeji a LWJGL si za behu rozbali tu
+                spravnou podle stroje, na kterem hra bezi.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.2</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!-- Nechceme, aby build generoval dependency-reduced-pom.xml do repa. -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>mc.Main</mainClass>
+                                </transformer>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <!-- Popisy modulu z jednotlivych zavislosti do sloucenneho
+                                             jaru nepatri a podpisy by po slouceni stejne neplatily. -->
+                                        <exclude>module-info.class</exclude>
+                                        <exclude>META-INF/versions/*/module-info.class</exclude>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
