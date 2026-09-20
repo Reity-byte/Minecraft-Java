@@ -129,6 +129,10 @@ public class AllTests {
         WorldScreenTest.main(args);
         failures += WorldScreenTest.failures;
 
+        System.out.println(NEWLINE + "========== MouseScaleTest ==========");
+        MouseScaleTest.main(args);
+        failures += MouseScaleTest.failures;
+
         System.out.println(NEWLINE + "========== OptionsTest ==========");
         OptionsTest.main(args);
         failures += OptionsTest.failures;

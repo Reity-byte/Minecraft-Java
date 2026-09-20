@@ -74,8 +74,15 @@ public class Main {
     private double lastX, lastY;
     private boolean firstMouse = true;
 
-    // pozice kurzoru pro menu (v soustavě GLFW, počátek vlevo nahoře)
+    /**
+     * Poloha kurzoru pro menu a obrazovky: počátek vlevo nahoře jako v GLFW,
+     * ale už PŘEPOČÍTANÁ na pixely framebufferu - v nich se kreslí i hit-testuje.
+     * Viz MouseScale (na Retině je framebuffer dvakrát větší než okno).
+     */
     private double mouseX, mouseY;
+
+    /** Poměr pixelů framebufferu na bod okna; na běžném displeji 1. */
+    private final MouseScale mouseScale = new MouseScale();
 
     private Raycaster.RaycastHit hit;
 
@@ -246,27 +253,35 @@ public class Main {
             width = w;
             height = h;
             glViewport(0, 0, w, h);
+            refreshMouseScale();
         });
 
+        // Okno se může přesunout na monitor s jiným měřítkem, aniž by se
+        // změnil framebuffer - poměr se proto hlídá i při změně velikosti okna.
+        glfwSetWindowSizeCallback(window, (win, w, h) -> refreshMouseScale());
+
         glfwSetCursorPosCallback(window, (win, xpos, ypos) -> {
-            mouseX = xpos;
-            mouseY = ypos;
+            // ⚠️ Myš chodí v bodech OKNA, UI se kreslí v pixelech FRAMEBUFFERU.
+            // Na Retině je to dvojnásobek, takže se to musí přepočítat, než
+            // se s tím začne cokoliv porovnávat - viz MouseScale.
+            mouseX = mouseScale.toFramebufferX(xpos);
+            mouseY = mouseScale.toFramebufferY(ypos);
 
             // S drženým tlačítkem nad kontejnerem se táhne přes sloty.
             if (state == GameState.CONTAINER) {
-                screen.drag(xpos, ypos, width, height);
+                screen.drag(mouseX, mouseY, width, height);
                 return;
             }
 
             // V labu tažení maluje (nebo posouvá posuvník barvy).
             if (state == GameState.TEXTURE_LAB) {
-                lab.drag(xpos, ypos, width, height);
+                lab.drag(mouseX, mouseY, width, height);
                 return;
             }
 
             // V nastavení tažení posouvá posuvník - a hodnota se hned použije.
             if (state == GameState.OPTIONS) {
-                optionsScreen.drag(xpos, ypos, width, height);
+                optionsScreen.drag(mouseX, mouseY, width, height);
 
                 if (optionsScreen.takeChanged()) {
                     applyOptions();
@@ -279,6 +294,8 @@ public class Main {
                 return;
             }
 
+            // ⚠️ Rozhlížení jede z NEPŘEPOČÍTANÝCH bodů okna: citlivost myši
+            // je v nich a přepočtem by se na Retině zdvojnásobila.
             if (firstMouse) {
                 lastX = xpos;
                 lastY = ypos;
@@ -588,6 +605,10 @@ public class Main {
         height = fbHeight[0];
         glViewport(0, 0, width, height);
 
+        // Poměr okno : framebuffer se musí znát dřív, než přijde první pohyb
+        // myši - callback velikosti se při startu nezavolá.
+        refreshMouseScale();
+
         glEnable(GL_DEPTH_TEST);
 
         // Backface culling: zahodí stěny odvrácené od kamery ještě před
@@ -685,6 +706,23 @@ public class Main {
     /** Uloží nastavení na disk. Chyba se jen ohlásí - hra kvůli ní nepadá. */
     private void saveOptions() {
         options.save(Options.FILE);
+    }
+
+    /**
+     * Zjistí, kolik pixelů framebufferu připadá na bod okna. Volá se při startu
+     * a po každé změně velikosti okna nebo framebufferu (i po přepnutí
+     * fullscreenu a po přesunu na monitor s jiným měřítkem).
+     */
+    private void refreshMouseScale() {
+        int[] windowWidth = new int[1];
+        int[] windowHeight = new int[1];
+        int[] frameWidth = new int[1];
+        int[] frameHeight = new int[1];
+
+        glfwGetWindowSize(window, windowWidth, windowHeight);
+        glfwGetFramebufferSize(window, frameWidth, frameHeight);
+
+        mouseScale.update(windowWidth[0], windowHeight[0], frameWidth[0], frameHeight[0]);
     }
 
     private void setState(GameState next) {
