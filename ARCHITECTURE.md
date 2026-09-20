@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **1452 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **1458 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -86,7 +86,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `ThumbnailTest` | Náhled: orientace (horní řádek obrazovky = horní řádek obrázku), výřez středu podle poměru stran, zmenšení průměrováním, PNG tam a zpět, odmítnutí příliš velkého obrázku |
 | `WorldScreenTest` | Obrazovky světů: psaní do pole se jménem i seedem, náhled cílové složky (i s `(2)`), Tab/Esc/Enter/Ctrl+V, seznam od naposledy hraného, výběr klikem, **dvojklik hraje**, šipky a rolování, **mazání až po potvrzení**, prázdný seznam, a celá cesta založit → uložit → najít v seznamu → načíst se stejným terénem |
 | `CreativeTest` | Creative mód: přepínač na obrazovce zakládání světa (cyklus, nepřekryje Create/Cancel, `reset()` vrací survival), **okamžitá těžba** (praskne v prvním framu i u železa, ale vzduch, voda, puštěné tlačítko a kurzor mimo blok dál ne), **vytěžený blok mizí** (nic do inventáře, nic na zem, ani s plným inventářem), pokládání neubírá z hotbaru (50 položení, jeden kus vydrží 200), obsah přehledu (přesně jeden záznam na placovatelný vestavěný blok i na každý lab blok, bez `blocks.json` jen vestavěné, determinismus, pořadí), **nekonečný zdroj** (braní kopíruje, shift-klik kopíruje do hotbaru, položení do přehledu zahodí, rolování a klik po odrolování), let (stoupání i klesání, obě klávesy se vyruší, Shift zrychlí, **kolize v letu platí** proti propadnutí s noclipem, po vypnutí letu dopad), dvojstisk mezerníku (**z trojice přepne jen druhý**, reset, běžné skákání ne), mód ve `world.json` (tam a zpět, `touch()` ho zachová, **chybějící klíč i překlep → survival**) — a ke každému pravidlu **kontrola, že survival větev je nezměněná** |
-| `OptionsTest` | Nastavení: výchozí hodnoty = dnešní hra, oříznutí na meze, **render ≤ simulation po 2000 náhodných změnách**, převod na čísla enginu (dohled < `(loadRadius-1)·16`), `options.json` tam a zpět, **chybějící i šest druhů poškozeného souboru → výchozí hodnoty**, jedna špatná hodnota → výchozí jen pro ni, záloha `.bak`, obrazovka Options (hit-testy, tažení posuvníku i mimo dráhu, žádné překryvy), výběr monitoru pro fullscreen, plánování stropu FPS, křivka jasu, GUI měřítko |
+| `OptionsTest` | Nastavení: výchozí hodnoty = dnešní hra, oříznutí na meze, **render ≤ simulation po 2000 náhodných změnách**, převod na čísla enginu (dohled < `(loadRadius-1)·16`), `options.json` tam a zpět, **chybějící i šest druhů poškozeného souboru → výchozí hodnoty**, jedna špatná hodnota → výchozí jen pro ni, záloha `.bak`, obrazovka Options (hit-testy, tažení posuvníku i mimo dráhu, žádné překryvy), výběr monitoru pro fullscreen, **počet skutečných přepnutí monitoru** (start ve fullscreenu přepne přesně jednou, i když `init()` volá `apply()` dvakrát; F11 tam a zpět pokaždé), plánování stropu FPS, křivka jasu, GUI měřítko |
 | `BlockRegistryTest` | `textures/blocks.json`: tvar výstupu, round-trip přes text i disk, **neexistující a poškozený soubor → jen vestavěné bloky** (náhodné bajty, useknutý JSON, špatné typy), přeskočení jednotlivých neplatných bloků, **stabilita id přes víc sezení** (i po ručním smazání bloku ze souboru), novější `format`, escape v JSON, plný registr, **záloha poškozeného souboru do `.bak`** |
 | `LabBlockTest` | Blok z labu ve hře: pevný/neprůhledný/obojí ne, neznámé id, **doba kopání podle tvrdosti z dat** (`Mining`), vytěžený blok do inventáře a zpět do světa, **každá stěna meshe bere UV ze své dlaždice**, culling a stín podle neprůhlednosti, hráč duchem propadne a na mramoru stojí, paprsek zaměří i ducha, zvuk podle tvrdosti, náhled labu = mesh hry, **uložený svět nese id beze změny formátu** (svět bez bloků z labu je bajt po bajtu stejný), koloběh lab → soubor → restart |
 
@@ -1280,10 +1280,35 @@ i ve fragment shaderu světa (`uBrightness`); nenastavený uniform je 0, takže 
 v labu vypadá dál stejně.
 
 **Fullscreen přepíná TÝŽ window a TÝŽ GL kontext** (`glfwSetWindowMonitor`), takže se
-nic nenahrává znovu. Poloha a velikost okna se zapamatují před přepnutím, jinak by
+nic nenahrává znovu — ověřeno i tím, že tytéž textury a shadery kreslí dál po přepnutí
+tam i zpět. Poloha a velikost okna se zapamatují před přepnutím, jinak by
 se okno vrátilo do rohu v rozlišení monitoru. Jde na monitor, na kterém okno leží
 největší plochou — na dvou monitorech by jinak hra skočila na primární. F11 přepíná
 odkudkoliv, jako v Minecraftu.
+
+**⚠️ `GL.createCapabilities()` MUSÍ být dřív než první `windowMode.apply()`** — jinak
+hra se `"fullscreen": true` spadne při startu na černé obrazovce, a to nativně
+(`EXCEPTION_ACCESS_VIOLATION` v `lwjgl_opengl.dll`), ne Java výjimkou. Řetěz je:
+`glfwSetWindowMonitor` změní velikost framebufferu → GLFW **synchronně** zavolá callback
+velikosti framebufferu → ten volá `glViewport` → ukazatele na funkce OpenGL pro tohle
+vlákno ještě neexistují → skok na nulovou adresu. `createCapabilities()` totiž
+nevytváří žádný GL objekt, jen tuhle tabulku ukazatelů; **dokud neproběhne, je každé
+volání GL pád.**
+
+Zákeřné na tom bylo, že se to projevilo **jen se startem ve fullscreenu**: v okně se
+`apply()` nemá co přepínat (viz guard níž), callback se nezavolá a chyba spí. K tomu
+`Main` drží příznak `glReady` a callback velikosti framebufferu sahá na GL až po něm —
+pojistka, aby se to nerozbilo přidáním další GLFW volačky nad `createCapabilities()`.
+Nic se tím neztratí: `init()` si velikost framebufferu po `createCapabilities()` zjistí
+sám (a musí, protože při startu v okně se callback nezavolá vůbec).
+
+**⚠️ `WindowMode.apply()` se stejnou hodnotou NEPŘEPÍNÁ** (`needsSwitch`). Není to
+úspora: `glfwSetWindowMonitor` přestaví framebuffer a spustí callbacky, takže
+redundantní volání není „nic se nestane". Záleží na tom proto, že `init()` volá
+`apply()` dvakrát — jednou přímo a pak ještě z `applyOptions()` na konci — a přepnout
+se smí nejvýš jednou. `needsSwitch` je čistá funkce, takže `OptionsTest` umí bez GLFW
+spočítat, kolik skutečných přepnutí by daná posloupnost udělala (start ve fullscreenu
+přesně jedno, F11 tam a zpět pokaždé).
 
 **Strop FPS čeká na PLÁNOVANÝ začátek dalšího framu**, ne „period od konce tohohle" —
 jinak by FPS vyšlo vždycky nižší než strop (frame 3 ms + čekání 8,3 ms = 88 místo 120).

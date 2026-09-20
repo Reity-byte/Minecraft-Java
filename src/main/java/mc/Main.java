@@ -84,6 +84,14 @@ public class Main {
     /** Poměr pixelů framebufferu na bod okna; na běžném displeji 1. */
     private final MouseScale mouseScale = new MouseScale();
 
+    /**
+     * Existují už ukazatele na funkce OpenGL (GL.createCapabilities())?
+     *
+     * ⚠️ Volat GL dřív je pád v nativním kódu, ne výjimka - a callbacky GLFW
+     * se umí spustit ještě během init(). Viz callback velikosti framebufferu.
+     */
+    private boolean glReady = false;
+
     private Raycaster.RaycastHit hit;
 
     /** Kopání: drží se tlačítko a jak daleko je rozbíjení. */
@@ -265,7 +273,23 @@ public class Main {
         glfwSetFramebufferSizeCallback(window, (win, w, h) -> {
             width = w;
             height = h;
-            glViewport(0, 0, w, h);
+
+            // ⚠️ GL až potom, co existují ukazatele na funkce (glReady).
+            //
+            // GLFW volá tenhle callback SYNCHRONNĚ zevnitř svých funkcí -
+            // mimo jiné z glfwSetWindowMonitor při přepnutí na celou
+            // obrazovku. To se v init() stane dřív, než se stihne cokoliv
+            // nakreslit, a volat GL dřív než GL.createCapabilities() je pád
+            // v nativním kódu, ne výjimka. Pořadí v init() je nastavené tak,
+            // aby k tomu dojít nemohlo; tohle je pojistka, aby se to
+            // nerozbilo přidáním další GLFW volačky nad createCapabilities.
+            //
+            // Přeskočené nastavení se nikde neztratí: init() si velikost
+            // framebufferu po createCapabilities() stejně zjistí sám.
+            if (glReady) {
+                glViewport(0, 0, w, h);
+            }
+
             refreshMouseScale();
         });
 
@@ -615,6 +639,24 @@ public class Main {
         });
 
         glfwMakeContextCurrent(window);
+
+        // ⚠️ MUSÍ BÝT HNED PO makeContextCurrent, JEŠTĚ PŘED windowMode.apply().
+        //
+        // Tady se nevytváří žádný GL objekt - jen se naplní tabulka ukazatelů
+        // na funkce OpenGL pro tohle vlákno. Bez ní je KAŽDÉ volání GL pád
+        // v nativním kódu (EXCEPTION_ACCESS_VIOLATION v lwjgl_opengl.dll),
+        // protože se skáče na nulovou adresu.
+        //
+        // A pád tu opravdu hrozí: glfwSetWindowMonitor uvnitř apply() změní
+        // velikost framebufferu a GLFW kvůli tomu zavolá SYNCHRONNĚ callback
+        // velikosti framebufferu - ten, co je registrovaný nahoře a volá
+        // glViewport. Se startem ve fullscreenu se tak GL volalo dřív, než
+        // existovaly ukazatele, a hra spadla na černé obrazovce dřív, než se
+        // stihla vykreslit. S oknem se apply() nepřepíná (viz guard ve
+        // WindowMode), callback se nezavolal a chyba se neprojevila.
+        GL.createCapabilities();
+        glReady = true;
+
         glfwSwapInterval(options.vsync() ? 1 : 0);
 
         // Celá obrazovka až po vytvoření okna: přepíná se tentýž window
@@ -622,10 +664,10 @@ public class Main {
         windowMode.apply(window, options.fullscreen(), options.vsync());
         glfwShowWindow(window);
 
-        GL.createCapabilities();
-
-        // Framebuffer nemusí mít stejnou velikost jako okno (DPI škálování),
-        // a callback se při startu nezavolá - je potřeba se zeptat ručně.
+        // Framebuffer nemusí mít stejnou velikost jako okno (DPI škálování).
+        // Ptáme se ručně, protože při startu v okně se callback nezavolá
+        // vůbec; při startu ve fullscreenu se zavolá (přepnutí monitoru) a
+        // tohle jen zopakuje totéž s konečnou velikostí - je to idempotentní.
         int[] fbWidth = new int[1];
         int[] fbHeight = new int[1];
         glfwGetFramebufferSize(window, fbWidth, fbHeight);
@@ -634,7 +676,7 @@ public class Main {
         glViewport(0, 0, width, height);
 
         // Poměr okno : framebuffer se musí znát dřív, než přijde první pohyb
-        // myši - callback velikosti se při startu nezavolá.
+        // myši - a při startu v okně se callback velikosti nezavolá.
         refreshMouseScale();
 
         glEnable(GL_DEPTH_TEST);

@@ -39,13 +39,30 @@ final class WindowMode {
     }
 
     /**
+     * Má se opravdu přepínat, nebo už je okno v požadovaném režimu?
+     *
+     * ⚠️ TOHLE NENÍ JEN ÚSPORA. glfwSetWindowMonitor přestaví framebuffer
+     * a synchronně spustí callbacky velikosti - redundantní volání by tedy
+     * nebylo "nic se nestane", ale zbytečná přestavba uprostřed běhu.
+     * Proto se při startu přepíná nejvýš jednou, i když applyOptions()
+     * na konci init() zavolá apply() podruhé s touž hodnotou.
+     *
+     * Čistá funkce schválně - jako jediná část rozhodování jde otestovat
+     * bez GLFW (viz WindowModeTest).
+     */
+    static boolean needsSwitch(boolean current, boolean wanted)
+    {
+        return current != wanted;
+    }
+
+    /**
      * Přepne okno do požadovaného režimu (když už v něm je, nic nedělá).
      * Po přepnutí se znovu nastaví vsync - některé ovladače ho při změně
      * režimu zapomenou.
      */
     void apply(long window, boolean wantFullscreen, boolean vsync)
     {
-        if(wantFullscreen == fullscreen)
+        if(!needsSwitch(fullscreen, wantFullscreen))
         {
             return;
         }
