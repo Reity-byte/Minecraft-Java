@@ -103,6 +103,8 @@ public class TextureLab {
 
     /** Mód Recipes. Vzniká s labem, aby se rozepsaný recept nezahodil přepnutím. */
     private final RecipeLab recipeLab;
+    private final KeybindLab keybindLab;
+    private final BiomeTunerLab biomeLab;
 
     /**
      * Ikony bloků pro mód Recipes - tytéž izometrické kostky jako v hotbaru
@@ -208,6 +210,8 @@ public class TextureLab {
 
         blockIcons = new BlockIcon(atlas);
         recipeLab = new RecipeLab(this, shapes, text);
+        keybindLab = new KeybindLab(this, shapes, text);
+        biomeLab = new BiomeTunerLab(this, shapes, text);
 
         selectTile(0);
         setColor(editor.get(0, 0));
@@ -219,6 +223,8 @@ public class TextureLab {
         modes.add(new PixelMode(Mode.SKIN, "Skin",
                 "Skin: pick a body face on the left, paint it in the middle"));
         modes.add(recipeLab);
+        modes.add(keybindLab);
+        modes.add(biomeLab);
 
         current().onEnter();
     }
@@ -431,14 +437,18 @@ public class TextureLab {
     }
 
     /**
-     * Kolečko myši. Zatím ho používá jen mód Recipes na rolování přehledem
-     * bloků; ostatní módy ho ignorují, takže se nic neděje.
+     * Kolečko myši. Recipes jím roluje přehledem bloků, Biomes přepíná biom;
+     * ostatní módy ho ignorují, takže se nic neděje.
      */
     public void scroll(double yoffset)
     {
         if(current() == recipeLab)
         {
             recipeLab.scroll(yoffset);
+        }
+        else if(current() == biomeLab)
+        {
+            biomeLab.scroll(yoffset);
         }
     }
 
@@ -587,9 +597,22 @@ public class TextureLab {
             return modes.get(hovered).title() + " - " + modes.get(hovered).hint();
         }
 
-        return current() instanceof PixelMode
-                ? help(layout, mouseX, mouseY)
-                : recipeLab.help(layout, mouseX, mouseY);
+        if(current() instanceof PixelMode)
+        {
+            return help(layout, mouseX, mouseY);
+        }
+
+        if(current() == recipeLab)
+        {
+            return recipeLab.help(layout, mouseX, mouseY);
+        }
+
+        if(current() == keybindLab)
+        {
+            return keybindLab.help(layout, mouseX, mouseY);
+        }
+
+        return biomeLab.help(layout, mouseX, mouseY);
     }
 
     /** Měřič fází vykreslení - pro sondy, které lab kreslí mimo hru. */
@@ -2080,6 +2103,12 @@ public class TextureLab {
      * Vlastní shader se musí navázat MIMO dávku `Renderer2D`, takže si o ikony
      * mód říká až po `shapes.end()`.
      */
+    /** Atlas bloků - náhled stromu kreslí týmiž texturami jako hra. */
+    Texture atlasTexture()
+    {
+        return atlas;
+    }
+
     void blockIconsBegin(int screenWidth, int screenHeight)
     {
         blockIcons.begin(screenWidth, screenHeight);
@@ -2295,5 +2324,6 @@ public class TextureLab {
         blockIcons.delete();
         preview.delete();
         skinPreview.delete();
+        biomeLab.delete();
     }
 }

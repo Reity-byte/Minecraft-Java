@@ -103,5 +103,25 @@ public final class Palette {
      */
     public static final float[] TEXT_SHADOW = {0.25f, 0.25f, 0.25f, 1f};
 
+    /**
+     * Červená pro chybu, kterou musí uživatel vidět, ne přečíst na konzoli -
+     * dnes kolize kláves v Keybind Labu.
+     *
+     * ⚠️ Chyba se NEHLÁSÍ JEN BARVOU. Vedle obarveného tlačítka stojí i věta,
+     * která kolizi pojmenuje - barva sama by pro barvoslepého uživatele
+     * nebyla žádná informace a na tmavém pozadí se ztratí i jinak.
+     */
+    public static final float[] TEXT_WARNING = {1f, 0.44f, 0.40f, 1f};
+
+    /** Výplň prvku v chybovém stavu - tlačítko kolidující klávesy. */
+    public static final float[] WARNING_FILL      = {0.52f, 0.20f, 0.18f, 1f};
+    public static final float[] WARNING_HIGHLIGHT = {0.70f, 0.30f, 0.28f, 1f};
+    public static final float[] WARNING_SHADOW    = {0.28f, 0.10f, 0.09f, 1f};
+
+    /** Prvek, který čeká na vstup - tlačítko, kam se zrovna mačká nová klávesa. */
+    public static final float[] ARMED_FILL      = {0.30f, 0.46f, 0.26f, 1f};
+    public static final float[] ARMED_HIGHLIGHT = {0.44f, 0.62f, 0.38f, 1f};
+    public static final float[] ARMED_SHADOW    = {0.15f, 0.24f, 0.13f, 1f};
+
     private Palette() {}
 }

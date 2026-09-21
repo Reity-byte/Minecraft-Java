@@ -166,6 +166,179 @@ public final class TextureLabLayout {
     public static final int RECIPE_LIST_Y = 106;
     public static final int PICKER_LABEL_Y = 118;
 
+    // ------------------------------------------------------------------
+    // mód Keybinds
+    //
+    // ⚠️ DVA SLOUPCE, NE JEDEN. Akcí je 27 a na jeden sloupec by při rozteči
+    // 14 GUI pixelů potřebovaly 378 pixelů výšky - obsah má 300. Rolování by
+    // bylo horší: klávesu hledá uživatel očima podle jména a rolovací seznam
+    // znamená, že polovina jmen není vidět, právě když je porovnává.
+    // ------------------------------------------------------------------
+
+    public static final int KEY_COLUMNS = 2;
+    public static final int KEY_ROWS = 14;
+
+    /** Rozteč řádků; řádek je vysoký 12, takže mezi nimi zbývají 2 pixely. */
+    public static final int KEY_ROW_PITCH = 14;
+    public static final int KEY_ROW_HEIGHT = 12;
+
+    /**
+     * Šířka jednoho sloupce i s mezerou k dalšímu.
+     *
+     * ⚠️ POČÍTÁ SE Z ŠÍŘKY OBSAHU, neodhaduje se: obsah je 448 a okraje
+     * po 8, takže na dva sloupce zbývá 432 a na jeden 216. S 224 by druhý
+     * sloupec přetekl přes pravý okraj panelu a jeho tlačítka by končila
+     * až za ním. TextureLabTest to hlídá výčtem obdélníků.
+     */
+    public static final int KEY_COLUMN_PITCH = (CONTENT_WIDTH - 2 * 8) / KEY_COLUMNS;
+
+    /** Tlačítko s klávesou u pravého okraje sloupce; vlevo od něj je jméno akce. */
+    public static final int KEY_BUTTON_WIDTH = 74;
+
+    public static final int KEY_FIRST_Y = 22;
+    public static final int KEY_LEFT = 8;
+
+    /** Kde se vypisují kolize - dva řádky, víc se jich najednou nestane. */
+    public static final int KEY_CONFLICT_Y = 226;
+    public static final int KEY_CONFLICT_Y2 = 238;
+
+    public static final Rect KEYBIND_SAVE  = new Rect(8, 252, 104, 18);
+    public static final Rect KEYBIND_RESET = new Rect(118, 252, 104, 18);
+    public static final Rect KEYBIND_CLOSE = new Rect(228, 252, 104, 18);
+
+    /** Tlačítko s klávesou u akce `index` (index = pořadí v Keybinds.Action). */
+    public static Rect keyButton(int index)
+    {
+        int column = index / KEY_ROWS;
+        int row = index % KEY_ROWS;
+
+        // Tlačítko sedí u pravého okraje svého sloupce, o 8 pixelů dovnitř -
+        // ta mezera odděluje sloupec od jména akce v tom vedlejším.
+        return new Rect(KEY_LEFT + column * KEY_COLUMN_PITCH
+                + KEY_COLUMN_PITCH - 8 - KEY_BUTTON_WIDTH,
+                KEY_FIRST_Y + row * KEY_ROW_PITCH,
+                KEY_BUTTON_WIDTH, KEY_ROW_HEIGHT);
+    }
+
+    /** Levý okraj jména akce u toho řádku, v GUI pixelech. */
+    public static int keyLabelX(int index)
+    {
+        return KEY_LEFT + (index / KEY_ROWS) * KEY_COLUMN_PITCH;
+    }
+
+    public static int keyLabelY(int index)
+    {
+        return KEY_FIRST_Y + (index % KEY_ROWS) * KEY_ROW_PITCH + 2;
+    }
+
+    /** Index akce, na jejíž tlačítko myš ukazuje, nebo -1. */
+    public int keyButtonAt(double mouseX, double mouseY, int count)
+    {
+        for(int i = 0; i < count; i++)
+        {
+            if(keyButton(i).contains(guiX(mouseX), guiY(mouseY)))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // ------------------------------------------------------------------
+    // mód Biomes (Ore / Biome Tuner)
+    //
+    // Vlevo řádky čísel, vpravo živý náhled jednoho stromu. Stejná obsahová
+    // plocha jako ostatní módy - viz poznámka u módu Recipes.
+    // ------------------------------------------------------------------
+
+    /** Záložka biomu nahoře; osm vedle sebe přes celou šířku obsahu. */
+    public static final int BIOME_TAB_PITCH = 54;
+    public static final int BIOME_TAB_W = 52, BIOME_TAB_H = 16;
+    public static final int BIOME_TAB_Y = 20;
+
+    public static Rect biomeTab(int index)
+    {
+        return new Rect(8 + index * BIOME_TAB_PITCH, BIOME_TAB_Y, BIOME_TAB_W, BIOME_TAB_H);
+    }
+
+    public int biomeTabAt(double mouseX, double mouseY, int count)
+    {
+        for(int i = 0; i < count; i++)
+        {
+            if(biomeTab(i).contains(guiX(mouseX), guiY(mouseY)))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /** Řádek jednoho čísla: jméno, [-], hodnota, [+]. */
+    public static final int TUNE_ROW_PITCH = 18;
+    public static final int TUNE_FIRST_Y = 48;
+    public static final int TUNE_LESS_X = 130, TUNE_VALUE_X = 146, TUNE_MORE_X = 194;
+    public static final int TUNE_BUTTON = 12;
+
+    public static Rect tuneLess(int row)
+    {
+        return new Rect(TUNE_LESS_X, TUNE_FIRST_Y + row * TUNE_ROW_PITCH,
+                TUNE_BUTTON, TUNE_BUTTON);
+    }
+
+    public static Rect tuneValue(int row)
+    {
+        return new Rect(TUNE_VALUE_X, TUNE_FIRST_Y + row * TUNE_ROW_PITCH, 44, TUNE_BUTTON);
+    }
+
+    public static Rect tuneMore(int row)
+    {
+        return new Rect(TUNE_MORE_X, TUNE_FIRST_Y + row * TUNE_ROW_PITCH,
+                TUNE_BUTTON, TUNE_BUTTON);
+    }
+
+    public static int tuneLabelY(int row)
+    {
+        return TUNE_FIRST_Y + row * TUNE_ROW_PITCH + 2;
+    }
+
+    /** Řádek, na jehož [-] myš ukazuje, nebo -1. */
+    public int tuneLessAt(double mouseX, double mouseY, int rows)
+    {
+        return tuneRowAt(mouseX, mouseY, rows, true);
+    }
+
+    /** Řádek, na jehož [+] myš ukazuje, nebo -1. */
+    public int tuneMoreAt(double mouseX, double mouseY, int rows)
+    {
+        return tuneRowAt(mouseX, mouseY, rows, false);
+    }
+
+    private int tuneRowAt(double mouseX, double mouseY, int rows, boolean less)
+    {
+        for(int row = 0; row < rows; row++)
+        {
+            if((less ? tuneLess(row) : tuneMore(row)).contains(guiX(mouseX), guiY(mouseY)))
+            {
+                return row;
+            }
+        }
+
+        return -1;
+    }
+
+    /** Živý náhled stromu - vpravo, na místě náhledu bloku a ještě o kus níž. */
+    public static final Rect TREE_PREVIEW = new Rect(220, 40, 220, 188);
+
+    public static final Rect TUNE_SAVE   = new Rect(8, 234, 100, 18);
+    public static final Rect TUNE_RESET  = new Rect(114, 234, 100, 18);
+    public static final Rect TUNE_REROLL = new Rect(220, 234, 104, 18);
+    public static final Rect TUNE_CLOSE  = new Rect(330, 234, 110, 18);
+
+    /** Kde se vypisuje, co je v souboru a co tuning udělá. */
+    public static final int TUNE_INFO_Y = 258;
+
     public static final int TITLE_Y = 6;
     public static final int INFO_Y = 154;
     public static final int GLOBAL_LABEL_Y = 241;
