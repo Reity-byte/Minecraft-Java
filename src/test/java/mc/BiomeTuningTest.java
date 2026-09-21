@@ -1,0 +1,721 @@
+package mc;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Overuje Ore/Biome Tuner: biome_tuning.json a randomizaci velikosti stromu.
+ *
+ * ---------------------------------------------------------------------------
+ * Nejdulezitejsi kontroly jsou tri.
+ *
+ * 1) VYCHOZI TUNING = DNESNI HRA BIT PO BITU. Chybejici soubor nesmi zmenit
+ *    ani jeden blok terenu - jinak by nepovinny soubor prestal byt nepovinny
+ *    a vsem ulozenym svetum by se posunul teren pod stavbami.
+ *
+ * 2) ROZSAH OPRAVDU LOSUJE. Kdyby se randomizace tise nepouzila (treba
+ *    proto, ze se nekdo splet ve vetvi "min == max"), vypadalo by to jako
+ *    dnes a nikdo by si toho nevsiml - test proto MERI, kolik ruznych
+ *    velikosti na dost velkem vzorku padne.
+ *
+ * 3) TYZ SEED A SOURADNICE = TYZ STROM, POKAZDE. Na tom stoji razitkovani
+ *    stromu ze sousednich sloupcu: stejny strom musi vyjit identicky, at
+ *    se na nej pta kterykoliv ze ctyr sousedu.
+ *
+ * ⚠️ Testy si na konci vrati puvodni aktivni tuning. BiomeTuning.active()
+ * je globalni stav a AllTests bezi vsechno v jednom JVM.
+ * ---------------------------------------------------------------------------
+ *
+ * Nesaha na GL.
+ */
+public class BiomeTuningTest {
+
+    static int failures = 0;
+
+    static void check(String name, boolean ok, String detail) {
+        System.out.println((ok ? "  OK   " : "  FAIL ") + name + (detail.isEmpty() ? "" : "  -> " + detail));
+        if (!ok) failures++;
+    }
+
+    public static void main(String[] args) throws IOException {
+        BiomeTuning before = BiomeTuning.active();
+
+        try {
+            defaults();
+            clamping();
+            roundTrip();
+            brokenFile();
+            oreDensity();
+            treeRandomness();
+            treeDeterminism();
+            terrainUnchanged();
+            tunedTerrain();
+            previewIsReal();
+        } finally {
+            BiomeTuning.activate(before);
+        }
+
+        System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+
+    // ==================================================================
+    // 1) vychozi hodnoty = data z Biome
+    // ==================================================================
+
+    static void defaults() {
+        System.out.println("\n-- vychozi tuning --");
+
+        BiomeTuning d = BiomeTuning.defaults();
+
+        check("vychozi tuning je vychozi", d.isDefault(), "");
+
+        boolean fromEnum = true;
+        for (Biome biome : Biome.values()) {
+            BiomeTuning.Tune t = d.tune(biome);
+            Biome.TreeType type = biome.treeType();
+
+            // Poust je TreeType.NONE s kmenem 0, coz je mimo meze - vychozi
+            // hodnoty jsou proto uz oriznute (viz nize). Rozsah se u ni
+            // stejne nepouzije, protoze nema stromy.
+            boolean hasTrees = type != Biome.TreeType.NONE;
+
+            fromEnum &= t.baseHeight() == biome.baseHeight()
+                    && t.amplitude() == biome.amplitude()
+                    && t.treeDensity() == biome.treeDensity()
+                    && (!hasTrees || (t.trunkMin() == type.trunkMin
+                            && t.trunkMax() == type.trunkMax()
+                            && t.crownMin() == type.maxRadius()
+                            && t.crownMax() == type.maxRadius()));
+        }
+        check("vychozi cisla se ctou z Biome, neopisuji se", fromEnum, "");
+
+        // ⚠️ Vychozi hodnoty MUSI byt uz oriznute, jinak by ulozeny
+        // a znovu nacteny vychozi tuning vysel jinak nez vychozi - nacitani
+        // orezava, takze by se "chybejici soubor" a "soubor s vychozimi
+        // hodnotami" chovaly ruzne. Prave tohle odhalilo poust.
+        boolean allClamped = true;
+        for (Biome biome : Biome.values()) {
+            allClamped &= d.tune(biome).isClamped();
+        }
+        check("vychozi hodnoty jsou uz oriznute (jinak se rozejde soubor tam a zpet)",
+                allClamped, "");
+
+        // Plane jsou "ten puvodni teren" - drzi to ARCHITECTURE.md i SeedTest.
+        check("plane maji porad 64 / 20",
+                d.tune(Biome.PLAINS).baseHeight() == 64 && d.tune(Biome.PLAINS).amplitude() == 20, "");
+
+        check("hory maji 3x vic zeleza", d.tune(Biome.MOUNTAINS).ironDensity() == 3.0, "");
+        check("nikde jinde se zelezo nemeni",
+                d.tune(Biome.PLAINS).ironDensity() == 1.0
+                        && d.tune(Biome.TAIGA).ironDensity() == 1.0, "");
+        check("uhli se nemeni nikde",
+                d.tune(Biome.MOUNTAINS).coalDensity() == 1.0
+                        && d.tune(Biome.PLAINS).coalDensity() == 1.0, "");
+
+        // ⚠️ Vychozi rozsahy jsou JEDNOPRVKOVE u koruny - jinak by se teren
+        // hnul uz jen tim, ze tuner existuje.
+        boolean fixedCrowns = true;
+        for (Biome biome : Biome.values()) {
+            fixedCrowns &= d.tune(biome).crownVariants() == 1;
+        }
+        check("vychozi polomer koruny je jedno cislo, ne rozsah", fixedCrowns, "");
+
+        check("dosah koruny je nejvetsi polomer se stromy (prales, 3)",
+                d.maxCrownRadius() == Biome.TreeType.JUNGLE.maxRadius(), "" + d.maxCrownRadius());
+        check("nejvyssi strom je pralesni kmen 11 + 2",
+                d.maxTreeHeight() == Biome.TreeType.JUNGLE.trunkMax() + 2, "" + d.maxTreeHeight());
+
+        check("with() nemeni puvodni tuning",
+                BiomeTuning.defaults().with(Biome.PLAINS,
+                        new BiomeTuning.Tune(90, 5, 1, 4, 4, 2, 2, 1, 1))
+                        .tune(Biome.PLAINS).baseHeight() == 90
+                        && BiomeTuning.defaults().tune(Biome.PLAINS).baseHeight() == 64, "");
+    }
+
+    // ==================================================================
+    // 2) hodnoty mimo meze
+    // ==================================================================
+
+    static void clamping() {
+        System.out.println("\n-- hodnoty mimo meze --");
+
+        BiomeTuning.Tune wild = new BiomeTuning.Tune(
+                9999, -40, 999, -5, 999, -3, 99, -2.0, 1000.0).clamped();
+
+        check("zaporna amplituda se orizne na nulu",
+                wild.amplitude() == BiomeTuning.MIN_AMPLITUDE, "" + wild.amplitude());
+        check("prilis vysoky zaklad se orizne na strop",
+                wild.baseHeight() == BiomeTuning.MAX_BASE, "" + wild.baseHeight());
+        check("hustota stromu se orizne na 16",
+                wild.treeDensity() == BiomeTuning.MAX_DENSITY, "" + wild.treeDensity());
+        check("kmen se orizne do mezi",
+                wild.trunkMin() == BiomeTuning.MIN_TRUNK
+                        && wild.trunkMax() == BiomeTuning.MAX_TRUNK, "");
+        check("polomer koruny se orizne do mezi",
+                wild.crownMin() == BiomeTuning.MIN_CROWN
+                        && wild.crownMax() == BiomeTuning.MAX_CROWN, "");
+        check("zaporny nasobek rudy se orizne na nulu", wild.ironDensity() == 0.0, "");
+        check("prilis velky nasobek rudy se orizne", wild.coalDensity() == BiomeTuning.MAX_ORE, "");
+
+        // ⚠️ Prehozeny rozsah se PROHODI, ne srovna na jedno cislo - jinak
+        // by preklep v souboru tise vypnul celou variabilitu.
+        BiomeTuning.Tune swapped = new BiomeTuning.Tune(64, 20, 5, 9, 4, 3, 1, 1, 1).clamped();
+        check("min > max se prohodi, rozsah zustane",
+                swapped.trunkMin() == 4 && swapped.trunkMax() == 9, "");
+        check("a u koruny taky",
+                swapped.crownMin() == 1 && swapped.crownMax() == 3, "");
+
+        check("nulova hustota stromu je platna hodnota (biom bez stromu)",
+                new BiomeTuning.Tune(64, 20, 0, 4, 6, 2, 2, 1, 1).clamped().treeDensity() == 0, "");
+
+        check("NaN u nasobku spadne na dolni mez",
+                new BiomeTuning.Tune(64, 20, 5, 4, 6, 2, 2, Double.NaN, 1).clamped()
+                        .ironDensity() == BiomeTuning.MIN_ORE, "");
+
+        check("uz oriznute hodnoty se nemeni",
+                BiomeTuning.defaults().tune(Biome.PLAINS).isClamped(), "");
+
+        BiomeTuning.Tune range = new BiomeTuning.Tune(64, 20, 5, 4, 8, 1, 3, 1, 1);
+        check("pocet variant kmene sedi", range.trunkVariants() == 5, "" + range.trunkVariants());
+        check("pocet variant koruny sedi", range.crownVariants() == 3, "" + range.crownVariants());
+        check("rozsah se pozna jako promenlivy", range.variesTreeSize(), "");
+        check("jednoprvkovy rozsah se pozna jako pevny",
+                !new BiomeTuning.Tune(64, 20, 5, 4, 4, 2, 2, 1, 1).variesTreeSize(), "");
+    }
+
+    // ==================================================================
+    // 3) soubor tam a zpatky
+    // ==================================================================
+
+    static void roundTrip() throws IOException {
+        System.out.println("\n-- biome_tuning.json tam a zpatky --");
+
+        Path dir = Files.createTempDirectory("mc-tuning");
+        Path file = dir.resolve("biome_tuning.json");
+
+        try {
+            check("chybejici soubor da VYCHOZI hodnoty MLCKY",
+                    BiomeTuning.load(file).isDefault(), "");
+
+            BiomeTuning custom = BiomeTuning.defaults()
+                    .with(Biome.PLAINS, new BiomeTuning.Tune(70, 26, 8, 4, 9, 2, 4, 1.5, 0.5))
+                    .with(Biome.TUNDRA, new BiomeTuning.Tune(65, 11, 0, 6, 6, 2, 2, 1.0, 1.0));
+
+            check("ulozeni zapise soubor", custom.save(file) && Files.isRegularFile(file), "");
+
+            BiomeTuning loaded = BiomeTuning.load(file);
+
+            boolean same = true;
+            for (Biome biome : Biome.values()) {
+                same &= loaded.tune(biome).equals(custom.tune(biome));
+            }
+            check("nacteny tuning je ten ulozeny", same, "");
+            check("nacteny tuning uz neni vychozi", !loaded.isDefault(), "");
+
+            String first = Files.readString(file);
+            custom.save(file);
+            check("druhy zapis je bajt po bajtu stejny", first.equals(Files.readString(file)), "");
+
+            check("soubor je citelny - biomy jsou pojmenovane",
+                    first.contains("\"plains\"") && first.contains("\"mountains\""), "");
+            check("a nasobky rud jsou v nem jako desetinna cisla",
+                    first.contains("\"ironDensity\": 3.00"), "");
+
+            BiomeTuning.defaults().save(file);
+            check("ulozene vychozi hodnoty se nactou jako vychozi",
+                    BiomeTuning.load(file).isDefault(), "");
+        } finally {
+            delete(dir);
+        }
+    }
+
+    // ==================================================================
+    // 4) poskozeny soubor
+    // ==================================================================
+
+    static void brokenFile() throws IOException {
+        System.out.println("\n-- poskozeny soubor --");
+
+        Path dir = Files.createTempDirectory("mc-tuning-broken");
+        Path file = dir.resolve("biome_tuning.json");
+
+        try {
+            String[] junk = {"tohle neni json", "", "[1,2,3]", "{}", "{\"format\": 1}",
+                    "{\"biomes\": 7}", "{\"format\": 1, \"biomes\": [1,2]}"};
+
+            boolean allDefault = true;
+            for (String text : junk) {
+                Files.writeString(file, text);
+                allDefault &= BiomeTuning.load(file).isDefault();
+            }
+            check("kazdy druh poskozeneho souboru da VYCHOZI hodnoty (= teren jako dnes)",
+                    allDefault, "");
+
+            Files.writeString(file, "{\"format\": 1, \"biomes\": {"
+                    + "\"plains\": {\"baseHeight\": 70},"
+                    + "\"neexistuje\": {\"baseHeight\": 90},"
+                    + "\"hills\": {\"amplitude\": \"hodne\"},"
+                    + "\"taiga\": 5}}");
+
+            BiomeTuning partial = BiomeTuning.load(file);
+            check("platna hodnota se nacte", partial.tune(Biome.PLAINS).baseHeight() == 70, "");
+            check("chybejici hodnota zustane vychozi",
+                    partial.tune(Biome.PLAINS).amplitude() == Biome.PLAINS.amplitude(), "");
+            check("hodnota, ktera neni cislo, necha biom na vychozi",
+                    partial.tune(Biome.HILLS).amplitude() == Biome.HILLS.amplitude(), "");
+            check("biom, ktery neni objekt, zustane vychozi",
+                    partial.tune(Biome.TAIGA).equals(BiomeTuning.defaults().tune(Biome.TAIGA)), "");
+            check("neznamy biom jen zmizi, ostatni se nactou",
+                    partial.tune(Biome.DESERT).equals(BiomeTuning.defaults().tune(Biome.DESERT)), "");
+
+            // Hodnota mimo meze se orizne a nacte - soubor se kvuli ni nezahodi.
+            Files.writeString(file, "{\"format\": 1, \"biomes\": {"
+                    + "\"plains\": {\"amplitude\": 9999, \"trunkMin\": 9, \"trunkMax\": 4}}}");
+            BiomeTuning clamped = BiomeTuning.load(file);
+            check("hodnota mimo meze se orizne, soubor se nezahodi",
+                    clamped.tune(Biome.PLAINS).amplitude() == BiomeTuning.MAX_AMPLITUDE, "");
+            check("a prehozeny rozsah se prohodi",
+                    clamped.tune(Biome.PLAINS).trunkMin() == 4
+                            && clamped.tune(Biome.PLAINS).trunkMax() == 9, "");
+
+            Files.writeString(file, "{\"format\": 99, \"biomes\": {\"plains\": {\"baseHeight\": 70}}}");
+            check("novejsi format se precte, co zna",
+                    BiomeTuning.load(file).tune(Biome.PLAINS).baseHeight() == 70, "");
+
+            Files.writeString(file, "{\"format\": 1, \"biomes\": {\"plains\": {\"amplitude\": \"x\"}}}");
+            BiomeTuning.defaults().save(file);
+            check("poskozeny soubor se pred prepsanim zalohoval do .bak",
+                    Files.isRegularFile(dir.resolve("biome_tuning.json.bak")), "");
+        } finally {
+            delete(dir);
+        }
+    }
+
+    // ==================================================================
+    // 5) nasobky rud
+    // ==================================================================
+
+    static void oreDensity() {
+        System.out.println("\n-- nasobky rud --");
+
+        // ⚠️ Vychozi hory musi trefit PRESNE dnesni IRON_RARITY_MOUNTAINS,
+        // jinak by se v nich zmenilo mnozstvi zeleza jen tim, ze tuner vznikl.
+        check("hory: 3x hustota = dnesni vzacnost 20",
+                BiomeTuning.rarity(60, 3.0) == TerrainGenerator.IRON_RARITY_MOUNTAINS,
+                "" + BiomeTuning.rarity(60, 3.0));
+        check("nasobek 1 nechava zakladni vzacnost", BiomeTuning.rarity(60, 1.0) == 60, "");
+        check("dvojnasobna hustota = polovicni vzacnost", BiomeTuning.rarity(60, 2.0) == 30, "");
+        check("polovicni hustota = dvojnasobna vzacnost", BiomeTuning.rarity(60, 0.5) == 120, "");
+
+        // ⚠️ Nula znamena "ruda tu neni". Delenim by vyslo nekonecno.
+        check("nulova hustota = ruda v tom biomu neni (0, ne nekonecno)",
+                BiomeTuning.rarity(60, 0.0) == 0, "");
+        check("obrovska hustota se nezbláznila na nulovou vzacnost",
+                BiomeTuning.rarity(60, 1000.0) >= 1, "" + BiomeTuning.rarity(60, 1000.0));
+
+        // A ted totez pres skutecny generator.
+        BiomeTuning noIron = BiomeTuning.defaults().with(Biome.PLAINS,
+                new BiomeTuning.Tune(64, 20, 5, 4, 6, 2, 2, 0.0, 1.0));
+        TerrainGenerator plain = new TerrainGenerator(World.DEFAULT_SEED, noIron);
+        TerrainGenerator normal = new TerrainGenerator(World.DEFAULT_SEED);
+
+        int ironOff = 0, ironOn = 0;
+
+        for (int x = 0; x < 240; x++) {
+            for (int y = 3; y <= 42; y += 3) {
+                for (int z = 0; z < 60; z++) {
+                    if (normal.biomeAt(x, z) != Biome.PLAINS) {
+                        continue;
+                    }
+                    if (plain.oreAt(x, y, z, Biome.PLAINS) == World.IRON_ORE)  ironOff++;
+                    if (normal.oreAt(x, y, z, Biome.PLAINS) == World.IRON_ORE) ironOn++;
+                }
+            }
+        }
+
+        check("s nulovou hustotou v planich zadne zelezo nevznikne",
+                ironOff == 0 && ironOn > 0, ironOff + " vs " + ironOn);
+    }
+
+    // ==================================================================
+    // 6) rozsah opravdu losuje
+    // ==================================================================
+
+    static void treeRandomness() {
+        System.out.println("\n-- rozsah velikosti stromu --");
+
+        // Prales je nejhustsi biom, takze se v nem najde dost stromu
+        // na zmereni. Kmen 5-11, koruna 2-5.
+        BiomeTuning wide = BiomeTuning.defaults().with(Biome.JUNGLE,
+                new BiomeTuning.Tune(64, 18, 16, 5, 11, 2, 5, 1.0, 1.0));
+
+        TerrainGenerator generator = new TerrainGenerator(World.DEFAULT_SEED, wide);
+        BiomeTuning.Tune tune = wide.tune(Biome.JUNGLE);
+
+        Set<Integer> trunks = new HashSet<>();
+        Set<Integer> crowns = new HashSet<>();
+
+        for (int x = 0; x < 400; x++) {
+            for (int z = 0; z < 400; z += 7) {
+                trunks.add(generator.trunkHeight(x, z, tune));
+                crowns.add(generator.crownDelta(x, z, Biome.TreeType.JUNGLE, tune));
+            }
+        }
+
+        // ⚠️ TOHLE JE TA KONTROLA, ktera odhali "randomizace se tise
+        // nepouzila". Kdyby generator bral porad jedno cislo, byla by
+        // v mnozine jedna hodnota a jinak by to vypadalo uplne stejne.
+        check("vyska kmene pokryje cely rozsah 5-11", trunks.size() == 7, "" + trunks.size());
+        check("a nic mimo nej",
+                java.util.Collections.min(trunks) == 5 && java.util.Collections.max(trunks) == 11, "");
+
+        check("polomer koruny pokryje cely rozsah 2-5", crowns.size() == 4, "" + crowns.size());
+
+        // Delta je polomer minus vlastni polomer druhu (prales ma 3).
+        int base = Biome.TreeType.JUNGLE.maxRadius();
+        check("a odpovida polomerum 2 az 5",
+                java.util.Collections.min(crowns) == 2 - base
+                        && java.util.Collections.max(crowns) == 5 - base, "");
+
+        // Kmen a koruna se nesmi tahnout za jeden provaz - jinak by les
+        // vypadal jako rada zvetsenin jednoho stromu.
+        int together = 0, apart = 0;
+
+        for (int x = 0; x < 600; x++) {
+            boolean tallTrunk = generator.trunkHeight(x, 0, tune) >= 9;
+            boolean wideCrown = generator.crownDelta(x, 0, Biome.TreeType.JUNGLE, tune) >= 1;
+
+            if (tallTrunk == wideCrown) together++; else apart++;
+        }
+
+        check("vysoky kmen NENI spraheny se sirokou korunou",
+                apart > 600 * 0.3 && together > 600 * 0.3, together + " spolu / " + apart + " zvlast");
+
+        // ⚠️ Jednoprvkovy rozsah musi dat presne to jedno cislo - na tom
+        // stoji "vychozi tuning = dnesni teren".
+        BiomeTuning.Tune fixed = new BiomeTuning.Tune(64, 18, 16, 7, 7, 3, 3, 1, 1);
+        boolean alwaysSame = true;
+
+        for (int x = 0; x < 500; x++) {
+            alwaysSame &= generator.trunkHeight(x, 3, fixed) == 7
+                    && generator.crownDelta(x, 3, Biome.TreeType.JUNGLE, fixed) == 0;
+        }
+        check("jednoprvkovy rozsah dava porad tu jednu hodnotu", alwaysSame, "");
+
+        // A tvar: vetsi delta = sirsi koruna, spicka smrku zustane spicka.
+        check("delta +1 rozsiri korunu dubu z 2 na 3",
+                TreeShape.reach(Biome.TreeType.OAK, 1) == 3, "");
+        check("delta -1 ji zuzi na 1", TreeShape.reach(Biome.TreeType.OAK, -1) == 1, "");
+        check("polomer nikdy nespadne pod nulu",
+                TreeShape.reach(Biome.TreeType.OAK, -9) == 0, "");
+    }
+
+    // ==================================================================
+    // 7) determinismus
+    // ==================================================================
+
+    static void treeDeterminism() {
+        System.out.println("\n-- determinismus stromu --");
+
+        BiomeTuning wide = BiomeTuning.defaults().with(Biome.JUNGLE,
+                new BiomeTuning.Tune(64, 18, 16, 5, 11, 2, 5, 1.0, 1.0));
+        BiomeTuning.Tune tune = wide.tune(Biome.JUNGLE);
+
+        TerrainGenerator a = new TerrainGenerator(World.DEFAULT_SEED, wide);
+        TerrainGenerator b = new TerrainGenerator(World.DEFAULT_SEED, wide);
+
+        boolean same = true;
+        for (int x = -200; x < 200; x += 3) {
+            for (int z = -200; z < 200; z += 37) {
+                same &= a.trunkHeight(x, z, tune) == b.trunkHeight(x, z, tune)
+                        && a.crownDelta(x, z, Biome.TreeType.JUNGLE, tune)
+                                == b.crownDelta(x, z, Biome.TreeType.JUNGLE, tune);
+            }
+        }
+        check("tyz seed a souradnice = tyz strom, i v zapornych souradnicich", same, "");
+
+        // Opakovany dotaz na tomtez generatoru - na tom stoji razitkovani
+        // ze sousednich sloupcu.
+        boolean stable = true;
+        for (int i = 0; i < 100; i++) {
+            stable &= a.trunkHeight(37, -91, tune) == a.trunkHeight(37, -91, tune);
+        }
+        check("opakovany dotaz vraci totez", stable, "");
+
+        // Jiny seed = jine stromy.
+        TerrainGenerator other = new TerrainGenerator(World.DEFAULT_SEED + 12345, wide);
+        int different = 0;
+
+        for (int x = 0; x < 500; x++) {
+            if (a.trunkHeight(x, 11, tune) != other.trunkHeight(x, 11, tune)) {
+                different++;
+            }
+        }
+        check("jiny seed da jine stromy", different > 300, different + " z 500");
+
+        // ⚠️ Kmen nikdy nevyjde kratsi nez minimum - hash je nezaporny,
+        // takze zbytek po deleni taky. Kdyby byl zaporny, rostly by stromy
+        // bez kmene a bylo by to videt az ve svete.
+        int shortest = Integer.MAX_VALUE;
+        for (int x = -3000; x < 3000; x += 7) {
+            shortest = Math.min(shortest, a.trunkHeight(x, x / 3, tune));
+        }
+        check("kmen nikdy nevyjde kratsi nez minimum rozsahu", shortest == 5, "" + shortest);
+    }
+
+    // ==================================================================
+    // 8) vychozi tuning nehne terenem ani o blok
+    // ==================================================================
+
+    static void terrainUnchanged() {
+        System.out.println("\n-- vychozi tuning = dnesni teren --");
+
+        // Explicitne vychozi tuning proti tomu, co si generator vezme sam.
+        TerrainGenerator explicit = new TerrainGenerator(World.DEFAULT_SEED, BiomeTuning.defaults());
+        TerrainGenerator implicit = new TerrainGenerator(World.DEFAULT_SEED);
+
+        boolean sameHeights = true;
+        for (int x = -400; x < 400; x += 3) {
+            for (int z = -400; z < 400; z += 11) {
+                sameHeights &= explicit.terrainHeight(x, z) == implicit.terrainHeight(x, z);
+            }
+        }
+        check("vysky terenu jsou stejne", sameHeights, "");
+
+        // A cely sloupec blok po bloku, vcetne stromu a rud.
+        boolean sameColumns = true;
+        for (int cx = -2; cx <= 2 && sameColumns; cx++) {
+            for (int cz = -2; cz <= 2 && sameColumns; cz++) {
+                ChunkColumn left = explicit.generateColumn(cx, cz);
+                ChunkColumn right = implicit.generateColumn(cx, cz);
+
+                for (int x = 0; x < Chunk.SIZE && sameColumns; x++) {
+                    for (int y = 0; y < World.WORLD_HEIGHT && sameColumns; y++) {
+                        for (int z = 0; z < Chunk.SIZE; z++) {
+                            if (left.get(x, y, z) != right.get(x, y, z)) {
+                                sameColumns = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        check("25 sloupcu vyjde blok po bloku stejne", sameColumns, "");
+
+        // Strop terenu se pocita z nejvyssiho stromu - musi vyjit na dnesnich 114.
+        int cap = World.WORLD_HEIGHT - BiomeTuning.defaults().maxTreeHeight() - 1;
+        check("strop terenu vyjde na dnesnich 114", cap == 114, "" + cap);
+    }
+
+    // ==================================================================
+    // 9) natuneny teren se opravdu zmeni
+    // ==================================================================
+
+    static void tunedTerrain() {
+        System.out.println("\n-- natuneny teren --");
+
+        BiomeTuning raised = BiomeTuning.defaults().with(Biome.PLAINS,
+                new BiomeTuning.Tune(80, 20, 5, 4, 6, 2, 2, 1.0, 1.0));
+
+        TerrainGenerator normal = new TerrainGenerator(World.DEFAULT_SEED);
+        TerrainGenerator higher = new TerrainGenerator(World.DEFAULT_SEED, raised);
+
+        int checked = 0, higherCount = 0;
+
+        for (int x = 0; x < 400 && checked < 200; x++) {
+            for (int z = 0; z < 400 && checked < 200; z += 13) {
+                if (normal.biomeAt(x, z) != Biome.PLAINS) {
+                    continue;
+                }
+
+                checked++;
+                if (higher.terrainHeight(x, z) > normal.terrainHeight(x, z)) {
+                    higherCount++;
+                }
+            }
+        }
+
+        check("zvednuty zaklad plani zvedne teren v planich",
+                checked > 50 && higherCount == checked, higherCount + " z " + checked);
+
+        // Biom bez stromu: hustota 0 znamena zadny strom.
+        BiomeTuning noTrees = BiomeTuning.defaults().with(Biome.JUNGLE,
+                new BiomeTuning.Tune(64, 18, 0, 7, 11, 3, 3, 1.0, 1.0));
+        TerrainGenerator bare = new TerrainGenerator(World.DEFAULT_SEED, noTrees);
+        TerrainGenerator lush = new TerrainGenerator(World.DEFAULT_SEED);
+
+        int bareTrees = 0, lushTrees = 0;
+
+        for (int x = -600; x < 600; x++) {
+            for (int z = -600; z < 600; z += 17) {
+                if (lush.biomeAt(x, z) != Biome.JUNGLE) {
+                    continue;
+                }
+                if (bare.treeTypeAt(x, z) != null) bareTrees++;
+                if (lush.treeTypeAt(x, z) != null) lushTrees++;
+            }
+        }
+
+        check("nulova hustota vypne stromy v tom biomu",
+                bareTrees == 0 && lushTrees > 0, bareTrees + " vs " + lushTrees);
+
+        // ⚠️ Vetsi koruna musi zvetsit DOSAH razitkovani, jinak by se
+        // natunene koruny orezaly presne na svech chunku.
+        BiomeTuning bigCrowns = BiomeTuning.defaults().with(Biome.PLAINS,
+                new BiomeTuning.Tune(64, 20, 5, 4, 6, 5, 6, 1.0, 1.0));
+        check("vetsi koruna zvetsi dosah razitkovani",
+                bigCrowns.maxCrownRadius() == 6, "" + bigCrowns.maxCrownRadius());
+
+        // A vyssi kmen musi snizit strop terenu, aby se strom vzdycky vesel.
+        BiomeTuning tallTrees = BiomeTuning.defaults().with(Biome.PLAINS,
+                new BiomeTuning.Tune(64, 20, 5, 4, 16, 2, 2, 1.0, 1.0));
+        check("vyssi kmen snizi strop terenu",
+                tallTrees.maxTreeHeight() == 18, "" + tallTrees.maxTreeHeight());
+
+        // Cely sloupec s natunenymi stromy musi jit vygenerovat bez pádu
+        // a stromy v nem musi byt - to je nejlevnejsi kontrola, ze se
+        // razitkovani s tunenymi rozsahy nerozbilo.
+        BiomeTuning varied = BiomeTuning.defaults().with(Biome.PLAINS,
+                new BiomeTuning.Tune(64, 20, 16, 3, 10, 1, 5, 1.0, 1.0));
+        TerrainGenerator forest = new TerrainGenerator(World.DEFAULT_SEED, varied);
+
+        int logs = 0, leaves = 0;
+
+        for (int cx = 0; cx < 4; cx++) {
+            ChunkColumn column = forest.generateColumn(cx, 0);
+
+            for (int x = 0; x < Chunk.SIZE; x++) {
+                for (int y = 0; y < World.WORLD_HEIGHT; y++) {
+                    for (int z = 0; z < Chunk.SIZE; z++) {
+                        byte block = column.get(x, y, z);
+                        if (block == World.LOG) logs++;
+                        if (block == World.LEAVES) leaves++;
+                    }
+                }
+            }
+        }
+
+        check("natunene stromy se do sloupcu opravdu vyrazitkuji",
+                logs > 0 && leaves > logs, logs + " kmene, " + leaves + " listi");
+    }
+
+    // ==================================================================
+    // 10) nahled v labu je skutecny strom
+    // ==================================================================
+
+    /**
+     * ⚠️ NAHLED MUSI POSTAVIT TYZ STROM, JAKY VYROSTE VE SVETE.
+     *
+     * TreePreview je z vetsi casti GL, ale razitkovani samo GL nesaha -
+     * je to staticka stamp() nad obycejnym World. Test ji zavola a porovna
+     * vysledek s tim, co da TreeShape se stejnymi cisly z generatoru.
+     * Kdyby si nahled kreslil "podobny" strom, byl by to obrazek a ne nahled
+     * a lab by lhal - tataz uvaha jako u nahledu bloku (bajt po bajtu tyz
+     * mesh) a u nahledu receptu (tataz Recipes.match).
+     */
+    static void previewIsReal() {
+        System.out.println("\n-- nahled stromu je skutecny strom --");
+
+        BiomeTuning tuning = BiomeTuning.defaults().with(Biome.TAIGA,
+                new BiomeTuning.Tune(64, 16, 10, 5, 9, 1, 4, 1.0, 1.0));
+        TerrainGenerator generator = new TerrainGenerator(World.DEFAULT_SEED, tuning);
+
+        World world = TreePreview.createWorld();
+
+        try {
+            java.util.List<int[]> placed = new java.util.ArrayList<>();
+            TreePreview.stamp(world, placed, Biome.TAIGA, tuning, generator,
+                    TreePreview.X, TreePreview.Z);
+
+            BiomeTuning.Tune tune = tuning.tune(Biome.TAIGA);
+            int trunk = generator.trunkHeight(TreePreview.X, TreePreview.Z, tune);
+            int delta = generator.crownDelta(TreePreview.X, TreePreview.Z,
+                    Biome.TreeType.SPRUCE, tune);
+
+            check("nahled pouziva rozsah z tuningu, ne z druhu stromu",
+                    trunk >= 5 && trunk <= 9, "kmen " + trunk);
+
+            // Kmen musi ve svete nahledu opravdu stat, cely a ze spravneho dreva.
+            boolean wholeTrunk = true;
+            for (int y = TreePreview.GROUND; y < TreePreview.GROUND + trunk; y++) {
+                wholeTrunk &= world.getBlock(TreePreview.X, y, TreePreview.Z) == World.SPRUCE_LOG;
+            }
+            check("cely kmen stoji v nahledovem svete", wholeTrunk, "vyska " + trunk);
+
+            check("a pod nim je povrch biomu, ne vzduch",
+                    world.getBlock(TreePreview.X, TreePreview.GROUND - 1, TreePreview.Z)
+                            == Biome.TAIGA.surface(), "");
+
+            check("nad kmenem uz kmen neni",
+                    world.getBlock(TreePreview.X, TreePreview.GROUND + trunk, TreePreview.Z)
+                            != World.SPRUCE_LOG, "");
+
+            // A listi presne tam, kam ho poslal TreeShape - porovnano proti
+            // nezavislemu razitkovani do mnoziny.
+            Set<Long> expected = new HashSet<>();
+            TreeShape.stamp(Biome.TreeType.SPRUCE, trunk, delta,
+                    TreePreview.X, TreePreview.GROUND, TreePreview.Z,
+                    new TreeShape.Sink() {
+                        @Override public void leaves(int x, int y, int z, byte block) {
+                            expected.add(packed(x, y, z));
+                        }
+                        @Override public void log(int x, int y, int z, byte block) { }
+                    });
+
+            int found = 0, missing = 0;
+            for (long key : expected) {
+                int x = (int) (key >> 40) - 512;
+                int y = (int) ((key >> 20) & 0xFFFFF) - 512;
+                int z = (int) (key & 0xFFFFF) - 512;
+
+                byte block = world.getBlock(x, y, z);
+                if (block == World.SPRUCE_LEAVES || block == World.SPRUCE_LOG) found++; else missing++;
+            }
+
+            check("kazdy list koruny je v nahledovem svete tam, kam ho posila TreeShape",
+                    missing == 0 && found > 0, found + " nalezeno, " + missing + " chybi");
+
+            // Druhe razitkovani musi po sobe uklidit: po prepnuti na poust
+            // (bez stromu) nesmi zustat ani jeden smrkovy blok.
+            TreePreview.stamp(world, placed, Biome.DESERT, tuning, generator,
+                    TreePreview.X, TreePreview.Z);
+
+            boolean cleared = true;
+            for (int y = TreePreview.GROUND; y < TreePreview.GROUND + 20 && cleared; y++) {
+                for (int dx = -6; dx <= 6 && cleared; dx++) {
+                    for (int dz = -6; dz <= 6; dz++) {
+                        byte block = world.getBlock(TreePreview.X + dx, y, TreePreview.Z + dz);
+                        if (block == World.SPRUCE_LOG || block == World.SPRUCE_LEAVES) {
+                            cleared = false;
+                            break;
+                        }
+                    }
+                }
+            }
+            check("prepnuti biomu uklidi predchozi strom", cleared, "");
+
+            check("poust ukaze plosinku z pisku a zadny strom",
+                    world.getBlock(TreePreview.X, TreePreview.GROUND - 1, TreePreview.Z) == World.SAND
+                            && world.getBlock(TreePreview.X, TreePreview.GROUND, TreePreview.Z) == World.AIR, "");
+        } finally {
+            world.shutdown();
+        }
+    }
+
+    /** Souradnice do jednoho cisla - posun o 512 kvuli zapornym hodnotam. */
+    static long packed(int x, int y, int z) {
+        return ((long) (x + 512) << 40) | ((long) (y + 512) << 20) | (z + 512);
+    }
+
+    static void delete(Path dir) throws IOException {
+        try (var files = Files.walk(dir)) {
+            for (Path path : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+}

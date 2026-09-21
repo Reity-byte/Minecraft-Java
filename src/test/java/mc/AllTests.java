@@ -121,6 +121,14 @@ public class AllTests {
         RecipeLabTest.main(args);
         failures += RecipeLabTest.failures;
 
+        System.out.println(NEWLINE + "========== KeybindTest ==========");
+        KeybindTest.main(args);
+        failures += KeybindTest.failures;
+
+        System.out.println(NEWLINE + "========== BiomeTuningTest ==========");
+        BiomeTuningTest.main(args);
+        failures += BiomeTuningTest.failures;
+
         System.out.println(NEWLINE + "========== LabBlockTest ==========");
         LabBlockTest.main(args);
         failures += LabBlockTest.failures;

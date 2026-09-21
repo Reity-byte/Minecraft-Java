@@ -229,12 +229,16 @@ public final class BiomeTuning {
         {
             Biome.TreeType type = biome.treeType();
 
+            // ⚠️ clamped() i na VÝCHOZÍ hodnoty. TreeType.NONE (poušť) má
+            // v datech kmen 0, což je mimo meze - a nezkrácený default by
+            // po uložení a načtení vyšel jinak, protože načítání ořezává.
+            // Pouště se to nijak netýká: bez stromů se rozsah nepoužije.
             tunes[biome.ordinal()] = new Tune(
                     biome.baseHeight(), biome.amplitude(), biome.treeDensity(),
                     type.trunkMin, type.trunkMax(),
                     type.maxRadius(), type.maxRadius(),
                     biome == Biome.MOUNTAINS ? 3.0 : 1.0,
-                    1.0);
+                    1.0).clamped();
         }
 
         return new BiomeTuning(tunes);

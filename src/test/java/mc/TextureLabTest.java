@@ -676,6 +676,8 @@ public class TextureLabTest {
                         new TextureLabLayout.Rect[]{TextureLabLayout.RECIPE_SAVE,
                                 TextureLabLayout.RECIPE_CLEAR, TextureLabLayout.RECIPE_CLOSE}), "");
 
+        newModeLayouts(l);
+
         check("meritko labu: 1280 x 720 -> 2, Full HD -> 3",
                 TextureLabLayout.scaleFor(1280, 720) == 2 && TextureLabLayout.scaleFor(1920, 1080) == 3, "");
 
@@ -783,6 +785,103 @@ public class TextureLabTest {
         check("do pruhu se vejde aspon sest modu",
                 LabSidebar.capacity(TextureLabLayout.HEIGHT) >= 6,
                 "" + LabSidebar.capacity(TextureLabLayout.HEIGHT));
+    }
+
+    /**
+     * Rozvrzeni modu Keys a Biomes: kazdy prvek jde trefit, nic se
+     * neprekryva a nic nevisi mimo obsahovou plochu.
+     *
+     * ⚠️ TOHLE JE TA KONTROLA, KTERA CHYTI PRETEKLY SLOUPEC. Klavesy maji
+     * dva sloupce a jejich rozteč se POCITA ze sirky obsahu; s rucne
+     * napsanou hodnotou by druhy sloupec vylezl za pravy okraj panelu
+     * a jeho tlacitka by se kreslila mimo - na obrazovce by to slo prehlednout,
+     * tady ne.
+     */
+    static void newModeLayouts(TextureLabLayout l) {
+        int actions = Keybinds.Action.values().length;
+
+        check("vsechny akce se vejdou do dvou sloupcu bez rolovani",
+                actions <= TextureLabLayout.KEY_COLUMNS * TextureLabLayout.KEY_ROWS,
+                actions + " akci");
+
+        boolean hits = true;
+        for (int i = 0; i < actions; i++) {
+            double[] c = centre(l, TextureLabLayout.keyButton(i));
+            hits &= l.keyButtonAt(c[0], c[1], actions) == i;
+        }
+        check("kazde tlacitko klavesy jde trefit", hits, "");
+
+        // Mezera mezi radky neni tlacitko - jinak by klik vedle prepnul
+        // sousedni akci do rezimu "mackej novou klavesu".
+        TextureLabLayout.Rect first = TextureLabLayout.keyButton(0);
+        double gapY = l.top() + (first.y() + first.h() + 0.5) * l.scale();
+        check("mezera mezi radky nic netrefi",
+                l.keyButtonAt(centre(l, first)[0], gapY, actions) == -1, "");
+
+        // Jmeno akce musi mit misto vlevo od tlacitka a nesmi lezt do
+        // sousedniho sloupce.
+        boolean labels = true;
+        for (int i = 0; i < actions; i++) {
+            int labelX = TextureLabLayout.keyLabelX(i);
+            labels &= labelX >= 0 && labelX + 40 <= TextureLabLayout.keyButton(i).x();
+        }
+        check("jmeno akce ma misto vlevo od tlacitka", labels, "");
+
+        TextureLabLayout.Rect[] keyRects = new TextureLabLayout.Rect[actions + 3];
+        for (int i = 0; i < actions; i++) keyRects[i] = TextureLabLayout.keyButton(i);
+        keyRects[actions]     = TextureLabLayout.KEYBIND_SAVE;
+        keyRects[actions + 1] = TextureLabLayout.KEYBIND_RESET;
+        keyRects[actions + 2] = TextureLabLayout.KEYBIND_CLOSE;
+
+        check("rezim klaves: prvky se neprekryvaji a jsou v panelu",
+                separate(keyRects, new TextureLabLayout.Rect[0]), "");
+
+        // --- mod Biomes ---
+        int biomes = Biome.values().length;
+        int rows = BiomeTunerLab.Row.values().length;
+
+        boolean tabs = true;
+        for (int i = 0; i < biomes; i++) {
+            double[] c = centre(l, TextureLabLayout.biomeTab(i));
+            tabs &= l.biomeTabAt(c[0], c[1], biomes) == i;
+        }
+        check("kazda zalozka biomu jde trefit", tabs, "");
+
+        boolean steps = true;
+        for (int row = 0; row < rows; row++) {
+            double[] less = centre(l, TextureLabLayout.tuneLess(row));
+            double[] more = centre(l, TextureLabLayout.tuneMore(row));
+
+            steps &= l.tuneLessAt(less[0], less[1], rows) == row
+                    && l.tuneMoreAt(more[0], more[1], rows) == row
+                    // ⚠️ [-] nesmi byt zaroven [+]: klik na "min" by jinak
+                    // pridaval a hodnota by se hybala na opacnou stranu.
+                    && l.tuneMoreAt(less[0], less[1], rows) == -1
+                    && l.tuneLessAt(more[0], more[1], rows) == -1;
+        }
+        check("kazde [-] a [+] jde trefit a nezamenuji se", steps, "");
+
+        TextureLabLayout.Rect[] tuneRects = new TextureLabLayout.Rect[biomes + rows * 3 + 5];
+        int at = 0;
+        for (int i = 0; i < biomes; i++) tuneRects[at++] = TextureLabLayout.biomeTab(i);
+        for (int row = 0; row < rows; row++) {
+            tuneRects[at++] = TextureLabLayout.tuneLess(row);
+            tuneRects[at++] = TextureLabLayout.tuneValue(row);
+            tuneRects[at++] = TextureLabLayout.tuneMore(row);
+        }
+        tuneRects[at++] = TextureLabLayout.TREE_PREVIEW;
+        tuneRects[at++] = TextureLabLayout.TUNE_SAVE;
+        tuneRects[at++] = TextureLabLayout.TUNE_RESET;
+        tuneRects[at++] = TextureLabLayout.TUNE_REROLL;
+        tuneRects[at]   = TextureLabLayout.TUNE_CLOSE;
+
+        check("rezim biomu: prvky se neprekryvaji a jsou v panelu",
+                separate(tuneRects, new TextureLabLayout.Rect[0]), "");
+
+        // Nahled stromu musi zbyt dost mista, aby v nem strom byl videt.
+        check("nahled stromu je aspon 150 x 150 GUI pixelu",
+                TextureLabLayout.TREE_PREVIEW.w() >= 150 && TextureLabLayout.TREE_PREVIEW.h() >= 150,
+                TextureLabLayout.TREE_PREVIEW.w() + "x" + TextureLabLayout.TREE_PREVIEW.h());
     }
 
     static boolean separate(TextureLabLayout.Rect[] a, TextureLabLayout.Rect[] b) {
