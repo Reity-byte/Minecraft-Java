@@ -309,6 +309,24 @@ public enum Biome {
     public static double surfaceHeight(double temperature, double humidity,
                                        double relief, double fbm)
     {
+        return surfaceHeight(BiomeTuning.defaults(), temperature, humidity, relief, fbm);
+    }
+
+    /**
+     * Totéž se základními výškami a amplitudami z tuneru místo z enumu.
+     *
+     * ⚠️ VÁHY SE NEMĚNÍ, MĚNÍ SE JEN PARAMETRY, KTERÉ VÁŽÍ. Prahy, BAND
+     * i smoothstep zůstávají v kódu, takže "součet vah je přesně jedna"
+     * platí dál bez ohledu na to, co si uživatel natuní - a s ním i plynulý
+     * přechod. Kdyby tuner sahal i na prahy, mohl by si pásma překrýt a váhy
+     * by vyšly záporné (viz poznámka u BAND).
+     *
+     * S `BiomeTuning.defaults()` vyjde bit po bitu totéž, co vycházelo před
+     * tunerem: jsou to tytéž int hodnoty z enumu, jen načtené přes tuning.
+     */
+    public static double surfaceHeight(BiomeTuning tuning, double temperature, double humidity,
+                                       double relief, double fbm)
+    {
         double warm = warmWeight(temperature);
         double cold = coldWeight(temperature);
         double temperate = 1.0 - warm - cold;
@@ -320,17 +338,26 @@ public enum Biome {
         double hills = hillWeight(relief);
         double low = 1.0 - mountains - hills;
 
-        double base = mountains * MOUNTAINS.baseHeight
-                + hills * HILLS.baseHeight
-                + low * (cold * (dry * TUNDRA.baseHeight + wet * TAIGA.baseHeight)
-                       + temperate * (dry * PLAINS.baseHeight + wet * BIRCH_FOREST.baseHeight)
-                       + warm * (dry * DESERT.baseHeight + wet * JUNGLE.baseHeight));
+        int mountainsBase = tuning.tune(MOUNTAINS).baseHeight();
+        int hillsBase     = tuning.tune(HILLS).baseHeight();
+        int tundraBase    = tuning.tune(TUNDRA).baseHeight();
+        int taigaBase     = tuning.tune(TAIGA).baseHeight();
+        int plainsBase    = tuning.tune(PLAINS).baseHeight();
+        int birchBase     = tuning.tune(BIRCH_FOREST).baseHeight();
+        int desertBase    = tuning.tune(DESERT).baseHeight();
+        int jungleBase    = tuning.tune(JUNGLE).baseHeight();
 
-        double amplitude = mountains * MOUNTAINS.amplitude
-                + hills * HILLS.amplitude
-                + low * (cold * (dry * TUNDRA.amplitude + wet * TAIGA.amplitude)
-                       + temperate * (dry * PLAINS.amplitude + wet * BIRCH_FOREST.amplitude)
-                       + warm * (dry * DESERT.amplitude + wet * JUNGLE.amplitude));
+        double base = mountains * mountainsBase
+                + hills * hillsBase
+                + low * (cold * (dry * tundraBase + wet * taigaBase)
+                       + temperate * (dry * plainsBase + wet * birchBase)
+                       + warm * (dry * desertBase + wet * jungleBase));
+
+        double amplitude = mountains * tuning.tune(MOUNTAINS).amplitude()
+                + hills * tuning.tune(HILLS).amplitude()
+                + low * (cold * (dry * tuning.tune(TUNDRA).amplitude() + wet * tuning.tune(TAIGA).amplitude())
+                       + temperate * (dry * tuning.tune(PLAINS).amplitude() + wet * tuning.tune(BIRCH_FOREST).amplitude())
+                       + warm * (dry * tuning.tune(DESERT).amplitude() + wet * tuning.tune(JUNGLE).amplitude()));
 
         return base + fbm * amplitude;
     }

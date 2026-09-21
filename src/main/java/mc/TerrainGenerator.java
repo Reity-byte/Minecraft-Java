@@ -37,33 +37,10 @@ public final class TerrainGenerator {
     private static final int SOIL_DEPTH = 4;
 
     /**
-     * ⚠️ Strop a dno výšky terénu.
-     *
-     * Před biomy nebyl potřeba: jedna amplituda 20 kolem výšky 64 se do světa
-     * vždycky vešla. Hory mají amplitudu 42 nad základní výškou 84, takže
-     * extrémní hodnota šumu by mohla přerůst WORLD_HEIGHT.
-     *
-     * Strop se POČÍTÁ Z NEJVYŠŠÍHO STROMU, ne napsaný ručně: nad terénem musí
-     * zbýt místo i na tu nejvyšší korunu (pralesní kmen 11 bloků a nad ním
-     * ještě vrstva listí), jinak by se strom tiše neumístil. Změřeno: strop
-     * se trefí u 0,001 % sloupečků, takže je to opravdu jen pojistka a ne
-     * cesta, po které by vznikaly ploché vrcholky hor.
+     * ⚠️ Dno výšky terénu. Strop je instanční (`maxTerrainHeight`), protože
+     * se počítá z NEJVYŠŠÍHO STROMU a ten je od tuneru tunable - viz tam.
      */
-    private static final int MAX_TERRAIN_HEIGHT =
-            World.WORLD_HEIGHT - maxTreeHeight() - 1;
     private static final int MIN_TERRAIN_HEIGHT = 4;
-
-    private static int maxTreeHeight()
-    {
-        int max = 0;
-
-        for(Biome.TreeType type : Biome.TreeType.values())
-        {
-            max = Math.max(max, type.totalHeight());
-        }
-
-        return max;
-    }
 
     // --- biomy ---
 
@@ -166,8 +143,14 @@ public final class TerrainGenerator {
      * kamene se počty houpou), pětinásobek by v horách udělal ze železa
      * běžnou rudu a přestalo by být za co lezt. CaveTest ten poměr MĚŘÍ
      * a vypisuje, takže se po každé změně dá přečíst.
+     *
+     * ⚠️ UŽ SE TÍM NEPOČÍTÁ, POČÍTÁ SE TO Z TUNERU. Zůstává tu jako
+     * kontrolní číslo: výchozí `ironDensity` hor je 3, takže
+     * `BiomeTuning.rarity(IRON_RARITY, 3.0)` musí vyjít přesně na tuhle
+     * dvacítku. CaveTest to porovnává, aby se výchozí tuning nemohl tiše
+     * rozejít s tím, co hra dělala před tunerem.
      */
-    private static final int IRON_RARITY_MOUNTAINS = IRON_RARITY / 3;
+    static final int IRON_RARITY_MOUNTAINS = IRON_RARITY / 3;
 
     // Odlišují hashe jednotlivých rud, jinak by ležely na stejných místech.
     private static final int COAL_SALT = 0x51ED;
@@ -193,25 +176,37 @@ public final class TerrainGenerator {
      * přesně na švech chunků - a vypadalo by to jako "no tak takhle ten strom
      * vyrostl". Nový druh stromu s ještě širší korunou tím dosah zvětší sám.
      */
-    private static final int TREE_REACH = maxTreeRadius();
-
-    private static int maxTreeRadius()
-    {
-        int max = 0;
-
-        for(Biome.TreeType type : Biome.TreeType.values())
-        {
-            max = Math.max(max, type.maxRadius());
-        }
-
-        return max;
-    }
+    private final int treeReach;
 
     /** Generátor výchozího seedu - dokud si hra seed nepamatuje, jede na něm. */
     static final TerrainGenerator DEFAULT = new TerrainGenerator(World.DEFAULT_SEED);
 
     private final long seed;
     private final SimplexNoise noise;
+
+    /**
+     * ⚠️ TUNING SE BERE JEDNOU, PŘI VZNIKU GENERÁTORU, A PAK UŽ SE NEMĚNÍ.
+     * Generátor musí zůstat neměnný (viz komentář u třídy) - kdyby se ptal
+     * `BiomeTuning.active()` za běhu, mohl by uprostřed hry změnit parametry
+     * a sousední sloupce by na sebe přestaly navazovat. Změna tuningu se
+     * proto projeví u příštího světa, ne v rozehraném.
+     */
+    private final BiomeTuning tuning;
+
+    /** Vzácnost rud po biomech, spočítaná dopředu z násobků v tuningu. */
+    private final int[] ironRarity;
+    private final int[] coalRarity;
+
+    /** Hustota stromů po biomech - ať `treeTypeAt()` nesahá do záznamu. */
+    private final int[] treeDensity;
+
+    /**
+     * Strop výšky terénu. POČÍTÁ SE Z NEJVYŠŠÍHO STROMU, který v tomhle
+     * tuningu může vyrůst: nad terénem musí zbýt místo i na tu nejvyšší
+     * korunu, jinak by se strom tiše neumístil. S výchozím tuningem vyjde
+     * na 114, tedy přesně na to, co tu bylo jako konstanta před tunerem.
+     */
+    private final int maxTerrainHeight;
 
     /**
      * Příměs seedu do všech hashů (stromy, rudy).
@@ -224,9 +219,41 @@ public final class TerrainGenerator {
 
     public TerrainGenerator(long seed)
     {
+        this(seed, BiomeTuning.active());
+    }
+
+    /**
+     * Generátor s výslovně daným tuningem. Používají to testy a náhled
+     * stromu v labu, aby nezávisely na tom, co je zrovna aktivní.
+     */
+    public TerrainGenerator(long seed, BiomeTuning tuning)
+    {
         this.seed = seed;
         this.noise = new SimplexNoise(seed);
         this.seedMix = (int) fmix64(seed ^ World.DEFAULT_SEED);
+        this.tuning = tuning == null ? BiomeTuning.defaults() : tuning;
+
+        Biome[] biomes = Biome.values();
+        this.ironRarity  = new int[biomes.length];
+        this.coalRarity  = new int[biomes.length];
+        this.treeDensity = new int[biomes.length];
+
+        for(Biome biome : biomes)
+        {
+            BiomeTuning.Tune tune = this.tuning.tune(biome);
+            ironRarity[biome.ordinal()]  = BiomeTuning.rarity(IRON_RARITY, tune.ironDensity());
+            coalRarity[biome.ordinal()]  = BiomeTuning.rarity(COAL_RARITY, tune.coalDensity());
+            treeDensity[biome.ordinal()] = tune.treeDensity();
+        }
+
+        this.treeReach = this.tuning.maxCrownRadius();
+        this.maxTerrainHeight = World.WORLD_HEIGHT - this.tuning.maxTreeHeight() - 1;
+    }
+
+    /** Tuning, se kterým tenhle generátor vznikl. */
+    public BiomeTuning tuning()
+    {
+        return tuning;
     }
 
     public long seed()
@@ -380,10 +407,10 @@ public final class TerrainGenerator {
     private int heightFrom(int worldX, int worldZ,
                            double temperature, double humidity, double relief)
     {
-        double height = Biome.surfaceHeight(temperature, humidity, relief,
+        double height = Biome.surfaceHeight(tuning, temperature, humidity, relief,
                 fbm(worldX, worldZ));
 
-        return Math.max(MIN_TERRAIN_HEIGHT, Math.min(MAX_TERRAIN_HEIGHT, (int) height));
+        return Math.max(MIN_TERRAIN_HEIGHT, Math.min(maxTerrainHeight, (int) height));
     }
 
     // ------------------------------------------------------------------
@@ -515,9 +542,9 @@ public final class TerrainGenerator {
         int baseX = cx << Chunk.BITS;
         int baseZ = cz << Chunk.BITS;
 
-        for(int tx = baseX - TREE_REACH; tx < baseX + Chunk.SIZE + TREE_REACH; tx++)
+        for(int tx = baseX - treeReach; tx < baseX + Chunk.SIZE + treeReach; tx++)
         {
-            for(int tz = baseZ - TREE_REACH; tz < baseZ + Chunk.SIZE + TREE_REACH; tz++)
+            for(int tz = baseZ - treeReach; tz < baseZ + Chunk.SIZE + treeReach; tz++)
             {
                 Biome.TreeType type = treeTypeAt(tx, tz);
 
@@ -580,7 +607,7 @@ public final class TerrainGenerator {
 
         // Hustota z JINÝCH BITŮ hashe než pozice v buňce - jinak by v hustém
         // biomu byly stromy jen v jednom koutu každé buňky.
-        if(((cell >> 16) & 15) >= biome.treeDensity())
+        if(((cell >> 16) & 15) >= treeDensity[biome.ordinal()])
         {
             return null;
         }
@@ -600,59 +627,101 @@ public final class TerrainGenerator {
             return null;
         }
 
-        // A nad korunou musí zbýt místo ve světě.
-        return height + type.totalHeight() < World.WORLD_HEIGHT ? type : null;
+        // A nad korunou musí zbýt místo ve světě. Nejvyšší možný kmen
+        // tohohle biomu, ne druhu - rozsah je tunable.
+        int tallest = TreeShape.totalHeight(tuning.tune(biome).trunkMax());
+
+        return height + tallest < World.WORLD_HEIGHT ? type : null;
     }
 
-    private int trunkHeight(int worldX, int worldZ, Biome.TreeType type)
+    /**
+     * Jak vysoký kmen na téhle pozici vyroste.
+     *
+     * ⚠️ ROZSAH JE Z TUNERU, NE Z DRUHU. Dřív to byl `type.trunkMin` plus
+     * zbytek po `type.trunkVariants`, takže měly všechny stromy jednoho
+     * druhu tentýž rozsah ve všech biomech - smrk v tajze i v tundře.
+     * Teď si rozsah nese biom, takže smí mít tajga vzrostlé smrky a tundra
+     * zakrslé, aniž by přibyl druh stromu.
+     *
+     * ⚠️ PŘI JEDNOPRVKOVÉM ROZSAHU SE HASH VŮBEC NEVOLÁ. Není to úspora
+     * (jeden hash je pár nanosekund) - je to záruka: dokud se min rovná max,
+     * je výsledek přesně to jediné číslo, takže se dá na výchozím tuningu
+     * porovnat terén bit po bitu s tím, co hra dělala před tunerem.
+     *
+     * Hash je nezáporný (viz hash()), takže zbytek po dělení je taky
+     * nezáporný a kmen nikdy nevyjde kratší než trunkMin.
+     */
+    int trunkHeight(int worldX, int worldZ, BiomeTuning.Tune tune)
     {
-        return type.trunkMin
-                + (hash(worldX, 1, worldZ, TREE_SALT) % type.trunkVariants);
+        int variants = tune.trunkVariants();
+
+        if(variants <= 1)
+        {
+            return tune.trunkMin();
+        }
+
+        return tune.trunkMin() + (hash(worldX, 1, worldZ, TREE_SALT) % variants);
+    }
+
+    /**
+     * O kolik se posune poloměr každé vrstvy koruny proti tvaru druhu.
+     *
+     * ⚠️ NÁHODNÝ POLOMĚR JE NOVÝ, VÝŠKA KMENE UŽ NÁHODNÁ BYLA. Tohle je ta
+     * změna, kvůli které přestanou stromy jednoho druhu vypadat jako kopie:
+     * dva duby vedle sebe se dosud lišily jen výškou kmene, protože koruna
+     * byla pevné pole poloměrů v datech druhu.
+     *
+     * ⚠️ JINÁ SOUŘADNICE HASHE NEŽ KMEN (y = 2 proti y = 1). Se stejnou by
+     * byl vysoký kmen vždycky spřažený s širokou korunou a les by vypadal
+     * jako řada zvětšenin jednoho stromu. A protože se y = 2 dosud nikde
+     * nepoužívalo, nemůže tenhle hash změnit ani jedno z dosavadních čísel.
+     */
+    int crownDelta(int worldX, int worldZ, Biome.TreeType type, BiomeTuning.Tune tune)
+    {
+        int variants = tune.crownVariants();
+
+        int radius = variants <= 1
+                ? tune.crownMin()
+                : tune.crownMin() + (hash(worldX, 2, worldZ, TREE_SALT) % variants);
+
+        return radius - type.maxRadius();
     }
 
     /**
      * Vyrazítkuje jeden strom; zapíše jen ty bloky, které padnou do tohohle sloupce.
      *
-     * Tvar je klasický dub: kmen a kolem jeho vrcholu koruna ze čtyř vrstev -
-     * dvě široké 5x5 s useknutými rohy, nad nimi 3x3 a špička.
+     * ⚠️ TVAR JE V `TreeShape`, NE TADY. Tentýž kód razítkuje strom do světa
+     * i do náhledu v Ore/Biome Toneru, takže lab nemůže ukázat strom, který
+     * ve světě nevyroste - stejné pravidlo jako u náhledu bloku (staví ho
+     * `ChunkMesh.build()`) a u náhledu receptu (počítá ho `Recipes.match()`).
+     *
+     * Biom se tu zjišťuje znovu (tři vzorky šumu), protože rozsah velikosti
+     * je jeho. Stojí to jen u skutečných stromů, tedy jednotky případů na
+     * sloupec - `treeTypeAt()` zamítne 63 pozic ze 64 dřív, než se sem dojde.
      */
     private void placeTree(ChunkColumn column, int baseX, int baseZ,
                            int treeX, int treeZ, Biome.TreeType type)
     {
+        BiomeTuning.Tune tune = tuning.tune(biomeAt(treeX, treeZ));
+
         int ground = terrainHeight(treeX, treeZ);
-        int trunk = trunkHeight(treeX, treeZ, type);
-        int top = ground + trunk - 1;
+        int trunk = trunkHeight(treeX, treeZ, tune);
+        int delta = crownDelta(treeX, treeZ, type, tune);
 
-        int layers = type.layerRadius.length;
+        TreeShape.stamp(type, trunk, delta, treeX, ground, treeZ, new TreeShape.Sink() {
 
-        // Koruna: poloměr a ořezání rohů si každá vrstva nese v datech druhu.
-        // Poslední vrstva leží o blok NAD vrcholem kmene, takže se kmen zavře;
-        // odtud "layers - 2" jako posun první vrstvy.
-        for(int layer = 0; layer < layers; layer++)
-        {
-            int y = top - (layers - 2) + layer;
-            int radius = type.layerRadius[layer];
-            boolean trimCorners = type.layerTrim[layer];
-
-            for(int dx = -radius; dx <= radius; dx++)
+            @Override
+            public void leaves(int x, int y, int z, byte block)
             {
-                for(int dz = -radius; dz <= radius; dz++)
-                {
-                    if(trimCorners && Math.abs(dx) == radius && Math.abs(dz) == radius)
-                    {
-                        continue;
-                    }
-
-                    setIfAir(column, baseX, baseZ, treeX + dx, y, treeZ + dz, type.leaves);
-                }
+                setIfAir(column, baseX, baseZ, x, y, z, block);
             }
-        }
 
-        // Kmen až nakonec, aby přebil listí, které mu vyšlo do cesty.
-        for(int y = ground; y <= top; y++)
-        {
-            set(column, baseX, baseZ, treeX, y, treeZ, type.log);
-        }
+            @Override
+            public void log(int x, int y, int z, byte block)
+            {
+                set(column, baseX, baseZ, x, y, z, block);
+            }
+        });
     }
 
     private static void setIfAir(ChunkColumn column, int baseX, int baseZ,
@@ -758,16 +827,21 @@ public final class TerrainGenerator {
     {
         // Železo se testuje první: je vzácnější, takže by ho uhlí v překryvu
         // hloubek jinak skoro celé přebilo.
-        int ironRarity = biome == Biome.MOUNTAINS ? IRON_RARITY_MOUNTAINS : IRON_RARITY;
+        // ⚠️ Vzácnost je spočítaná dopředu v konstruktoru, ne tady dělením.
+        // oreAt() běží na KAŽDÉM bloku kamene, takže by se dělení počítalo
+        // statisíckrát na sloupec. Nula znamená "tahle ruda v tom biomu
+        // není" a žíla se ani nezkusí.
+        int iron = ironRarity[biome.ordinal()];
+        int coal = coalRarity[biome.ordinal()];
 
-        if(worldY >= IRON_MIN_Y && worldY <= IRON_MAX_Y
-                && vein(worldX, worldY, worldZ, IRON_SALT, ironRarity))
+        if(iron > 0 && worldY >= IRON_MIN_Y && worldY <= IRON_MAX_Y
+                && vein(worldX, worldY, worldZ, IRON_SALT, iron))
         {
             return World.IRON_ORE;
         }
 
-        if(worldY >= COAL_MIN_Y && worldY <= COAL_MAX_Y
-                && vein(worldX, worldY, worldZ, COAL_SALT, COAL_RARITY))
+        if(coal > 0 && worldY >= COAL_MIN_Y && worldY <= COAL_MAX_Y
+                && vein(worldX, worldY, worldZ, COAL_SALT, coal))
         {
             return World.COAL_ORE;
         }
