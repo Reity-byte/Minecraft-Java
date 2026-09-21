@@ -47,6 +47,24 @@ public final class Textures {
     private static final int[] RING_TONES = {0xFFB79668, 0xFFA9885C, 0xFFC4A375, 0xFF9C7B52};
     private static final int[] LEAF_TONES = {0xFF3E7A2C, 0xFF356B26, 0xFF478A33, 0xFF2C5E20};
 
+    // --- biomy ---
+    // Tóny jsou vybrané tak, aby se dřeva a listí daly rozeznat OD SEBE na
+    // první pohled, ne aby byly realistické: bříza je skoro bílá, smrk tmavě
+    // hnědý, prales sytě zelený. Kdyby se od dubu lišily jen o pár procent,
+    // byl by celý biom k nepoznání.
+    private static final int[] SNOW_TONES = {0xFFF2F5F8, 0xFFE8ECF2, 0xFFFAFCFF, 0xFFDFE5EC};
+
+    private static final int[] BIRCH_BARK_TONES = {0xFFD8D2C2, 0xFFCAC3B1, 0xFFE4DFD1, 0xFFBDB5A2};
+    private static final int BIRCH_BARK_MARK    = 0xFF6E6A5E;
+    private static final int[] BIRCH_RING_TONES = {0xFFD9C9A4, 0xFFCDBC95, 0xFFE5D7B5, 0xFFC0AE86};
+    private static final int[] BIRCH_LEAF_TONES = {0xFF6FA344, 0xFF64953C, 0xFF7EB350, 0xFF578534};
+
+    private static final int[] SPRUCE_BARK_TONES = {0xFF4A3524, 0xFF3F2D1E, 0xFF553D2A, 0xFF352518};
+    private static final int[] SPRUCE_RING_TONES = {0xFF8A6D4A, 0xFF7C6141, 0xFF977955, 0xFF6E5538};
+    private static final int[] SPRUCE_LEAF_TONES = {0xFF26502A, 0xFF1F4423, 0xFF2D5C31, 0xFF18391C};
+
+    private static final int[] JUNGLE_LEAF_TONES = {0xFF2F7A22, 0xFF276C1C, 0xFF368A29, 0xFF1E5D16};
+
     private static final int[] TORCH_STICK = {0xFF8A6A3E, 0xFF7B5D35};
     private static final int[] TORCH_FLAME = {0xFFFFD65C, 0xFFFFB030, 0xFFFFF0A0};
 
@@ -116,12 +134,77 @@ public final class Textures {
 
         if(fromFile != null)
         {
+            fillMissingBuiltInTiles(fromFile);
             return new AtlasPixels(fromFile, true);
         }
 
         int[] pixels = blockAtlasPixels();
         markMissingTiles(pixels, BlockRegistry.active());
         return new AtlasPixels(pixels, false);
+    }
+
+    /**
+     * ⚠️ Dlaždice VESTAVĚNÝCH bloků, které v nahraném atlasu úplně chybí,
+     * dokreslí procedurálně.
+     *
+     * Tohle je přesně zrcadlový problém k markMissingTiles() níž. Atlas
+     * uložený z labu je snímek toho, co hra znala V TU CHVÍLI - když pak
+     * přibude nový vestavěný blok (sníh, bříza, smrk, pralesní listí
+     * u biomů), je jeho buňka v tom starém souboru prázdná. A prázdná
+     * znamená průhledná, což se v neprůhledném průchodu vykreslí jako
+     * ČERNÁ KOSTKA. Hráč, který si někdy v labu uložil atlas, by tedy
+     * v nové verzi hry viděl černý sníh a černé břízy - a nic by mu
+     * neřeklo proč.
+     *
+     * Bezpečné je to proto, že se sahá JEN na buňky, ve kterých není ani
+     * jeden neprůhledný pixel. Cokoliv namalovaného (i skoro průhledná voda,
+     * která má alfu 0xC0) zůstává, jak bylo; buňky bloků z labu se netýkají
+     * vůbec, ty končí nad TILE_COUNT. Jediné, co se tím "přepíše", je
+     * vestavěná dlaždice schválně vygumovaná do průhledna - a ta je stejně
+     * ve hře černá kostka, takže vrátit ji je lepší ze dvou možností.
+     */
+    static void fillMissingBuiltInTiles(int[] pixels)
+    {
+        int[] procedural = null;
+
+        for(int tile = 0; tile < BlockAtlas.TILE_COUNT; tile++)
+        {
+            int originX = BlockAtlas.column(tile) * BlockAtlas.TILE_PIXELS;
+            int originY = BlockAtlas.row(tile) * BlockAtlas.TILE_PIXELS;
+
+            boolean empty = true;
+
+            for(int y = 0; y < BlockAtlas.TILE_PIXELS && empty; y++)
+            {
+                for(int x = 0; x < BlockAtlas.TILE_PIXELS; x++)
+                {
+                    if((pixels[(originY + y) * BlockAtlas.ATLAS_PIXELS + originX + x] >>> 24) != 0)
+                    {
+                        empty = false;
+                        break;
+                    }
+                }
+            }
+
+            if(empty)
+            {
+                // Procedurální atlas se počítá až tady a nejvýš jednou -
+                // u souboru, kterému nic nechybí, se nevyrobí vůbec.
+                if(procedural == null)
+                {
+                    procedural = blockAtlasPixels();
+                }
+
+                for(int y = 0; y < BlockAtlas.TILE_PIXELS; y++)
+                {
+                    for(int x = 0; x < BlockAtlas.TILE_PIXELS; x++)
+                    {
+                        int index = (originY + y) * BlockAtlas.ATLAS_PIXELS + originX + x;
+                        pixels[index] = procedural[index];
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -218,6 +301,14 @@ public final class Textures {
             case BlockAtlas.TILE_LOG_SIDE   -> bark(x, y);
             case BlockAtlas.TILE_LOG_TOP    -> logRings(x, y);
             case BlockAtlas.TILE_LEAVES     -> leaves(x, y);
+            case BlockAtlas.TILE_SNOW            -> SNOW_TONES[hash(x, y) & 3];
+            case BlockAtlas.TILE_BIRCH_LOG_SIDE  -> birchBark(x, y);
+            case BlockAtlas.TILE_BIRCH_LOG_TOP   -> rings(x, y, BIRCH_RING_TONES, BIRCH_BARK_TONES);
+            case BlockAtlas.TILE_BIRCH_LEAVES    -> BIRCH_LEAF_TONES[hash(x >> 1, y >> 1) & 3];
+            case BlockAtlas.TILE_SPRUCE_LOG_SIDE -> SPRUCE_BARK_TONES[hash(x, y >> 2) & 3];
+            case BlockAtlas.TILE_SPRUCE_LOG_TOP  -> rings(x, y, SPRUCE_RING_TONES, SPRUCE_BARK_TONES);
+            case BlockAtlas.TILE_SPRUCE_LEAVES   -> SPRUCE_LEAF_TONES[hash(x >> 1, y >> 1) & 3];
+            case BlockAtlas.TILE_JUNGLE_LEAVES   -> JUNGLE_LEAF_TONES[hash(x >> 1, y >> 1) & 3];
             case BlockAtlas.TILE_TORCH      -> torch(x, y);
             case BlockAtlas.TILE_TABLE_SIDE -> planks(x, y);
             case BlockAtlas.TILE_TABLE_TOP  -> tableTop(x, y);
@@ -346,6 +437,15 @@ public final class Textures {
      */
     private static int logRings(int x, int y)
     {
+        return rings(x, y, RING_TONES, BARK_TONES);
+    }
+
+    /**
+     * Letokruhy s vybranou paletou - tentýž vzorec pro dub, břízu i smrk.
+     * Kdyby měl každý druh vlastní kopii, rozešly by se jim poloměry prstenců.
+     */
+    private static int rings(int x, int y, int[] ringTones, int[] barkTones)
+    {
         int size = BlockAtlas.TILE_PIXELS;
 
         float dx = x - (size - 1) / 2f;
@@ -355,10 +455,25 @@ public final class Textures {
         // Okraj je kůra, aby řez nevypadal, že plave ve vzduchu.
         if(radius >= size / 2 - 1)
         {
-            return BARK_TONES[hash(x, y) & 3];
+            return barkTones[hash(x, y) & 3];
         }
 
-        return RING_TONES[(radius + (hash(x, y) & 1)) % RING_TONES.length];
+        return ringTones[(radius + (hash(x, y) & 1)) % ringTones.length];
+    }
+
+    /**
+     * Břízová kůra: světlý podklad s tmavými vodorovnými čárkami. Tmavá zrna
+     * jsou to jediné, co ji na dálku odlišuje od prken - bez nich by byl
+     * březový kmen jen bílý sloup.
+     */
+    private static int birchBark(int x, int y)
+    {
+        if((hash(x >> 1, y) & 15) == 0)
+        {
+            return BIRCH_BARK_MARK;
+        }
+
+        return BIRCH_BARK_TONES[hash(x, y >> 2) & 3];
     }
 
     /**

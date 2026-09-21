@@ -306,6 +306,8 @@ public class TextureLabTest {
 
             Files.write(file, "tohle neni png".getBytes());
             check("poskozeny soubor se odmitne", AtlasImage.load(file) == null, "");
+
+            staleAtlas(file, procedural);
         } finally {
             try (var walk = Files.walk(dir)) {
                 for (Path p : walk.sorted((a, b) -> b.getNameCount() - a.getNameCount()).toList())
@@ -477,14 +479,16 @@ public class TextureLabTest {
         check("prvni nova dlazdice je posledni bunka atlasu (63)", BlockDraft.freeTile(empty) == 63, "");
         check("rezervovana bunka (jina stena navrhu) se preskoci", BlockDraft.freeTile(empty, 63) == 62, "");
 
-        // Pridelovat, dokud to jde: musi vyjit presne volne bunky 27..63.
+        // Pridelovat, dokud to jde: musi vyjit presne bunky od TILE_COUNT do 63
+        // (pred biomy 27..63, po nich 35..63 - osm dlazdic snehu a dreva).
         java.util.List<Integer> taken = new java.util.ArrayList<>();
         int next;
         while ((next = BlockDraft.freeTile(empty, taken.stream().mapToInt(Integer::intValue).toArray())) >= 0
                 && taken.size() < 100) taken.add(next);
         boolean exact = taken.size() == AtlasEditor.tileCount() - BlockAtlas.TILE_COUNT;
         for (int t : taken) exact &= t >= BlockAtlas.TILE_COUNT;
-        check("volnych bunek je 37 (obsazeno 27) a vestavene dlazdice ani praskliny se neprideli",
+        check("volne bunky sedi na (velikost atlasu - obsazene dlazdice)"
+                        + " a vestavene dlazdice ani praskliny se neprideli",
                 exact, taken.size() + " bunek");
         check("plny atlas: freeTile vrati -1, lab ukaze hlasku",
                 BlockDraft.freeTile(empty, taken.stream().mapToInt(Integer::intValue).toArray()) == -1, "");
@@ -1061,5 +1065,82 @@ public class TextureLabTest {
 
         game.shutdown();
         previewWorld.shutdown();
+    }
+
+    /**
+     * STARY atlas.png, ve kterem novy vestaveny blok jeste nema dlazdici.
+     *
+     * Atlas ulozeny z labu je snimek toho, co hra znala v tu chvili. Kdyz pak
+     * pribude vestaveny blok (snih, briza, smrk a pralesni listi u biomu),
+     * je jeho bunka v tom souboru uplne prazdna - a prazdna znamena pruhledna,
+     * tedy v neprusvitnem pruchodu CERNA KOSTKA. Hrac, ktery si kdysi atlas
+     * ulozil, by v nove verzi videl cerny snih a nic by mu nereklo proc.
+     *
+     * Testy na proceduralnim atlasu tohle nechytnou, protoze ten nove dlazdice
+     * vzdycky ma. Tahle kontrola proto stary soubor schvalne vyrobi: vezme
+     * dnesni atlas a vygumuje z nej vsechny dlazdice biomu.
+     */
+    static void staleAtlas(Path file, int[] procedural) throws IOException {
+        int[] stale = procedural.clone();
+
+        int[] biomeTiles = {BlockAtlas.TILE_SNOW, BlockAtlas.TILE_BIRCH_LOG_SIDE,
+                BlockAtlas.TILE_BIRCH_LOG_TOP, BlockAtlas.TILE_BIRCH_LEAVES,
+                BlockAtlas.TILE_SPRUCE_LOG_SIDE, BlockAtlas.TILE_SPRUCE_LOG_TOP,
+                BlockAtlas.TILE_SPRUCE_LEAVES, BlockAtlas.TILE_JUNGLE_LEAVES};
+
+        for (int tile : biomeTiles)
+            for (int y = 0; y < BlockAtlas.TILE_PIXELS; y++)
+                for (int x = 0; x < BlockAtlas.TILE_PIXELS; x++)
+                    stale[AtlasEditor.pixelIndex(tile, x, y)] = 0;
+
+        // Jednu dlazdici naopak ZMENIME, at je videt, ze se dokresluji jen
+        // prazdne bunky a namalovaneho se to nedotkne.
+        int painted = AtlasEditor.pixelIndex(BlockAtlas.TILE_STONE, 4, 4);
+        stale[painted] = 0xFFAB12CD;
+
+        AtlasImage.save(stale, file);
+        Textures.AtlasPixels loaded = Textures.atlasPixels(file);
+
+        check("stary atlas se porad bere ze souboru", loaded.fromFile(), "");
+
+        boolean allFilled = true;
+        String emptyTile = "";
+        for (int tile : biomeTiles) {
+            boolean any = false;
+            for (int y = 0; y < BlockAtlas.TILE_PIXELS; y++)
+                for (int x = 0; x < BlockAtlas.TILE_PIXELS; x++)
+                    if ((loaded.pixels()[AtlasEditor.pixelIndex(tile, x, y)] >>> 24) != 0) any = true;
+            if (!any) { allFilled = false; emptyTile = "" + tile; }
+        }
+        check("chybejici dlazdice vestavenych bloku se dokreslily (jinak cerna kostka)",
+                allFilled, "prazdna dlazdice " + emptyTile);
+
+        boolean sameAsProcedural = true;
+        for (int tile : biomeTiles)
+            for (int y = 0; y < BlockAtlas.TILE_PIXELS; y++)
+                for (int x = 0; x < BlockAtlas.TILE_PIXELS; x++) {
+                    int i = AtlasEditor.pixelIndex(tile, x, y);
+                    if (loaded.pixels()[i] != procedural[i]) sameAsProcedural = false;
+                }
+        check("dokreslene dlazdice jsou presne ty proceduralni", sameAsProcedural, "");
+
+        check("namalovana dlazdice zustala, jak byla (dokresluje se jen prazdne)",
+                loaded.pixels()[painted] == 0xFFAB12CD,
+                String.format("0x%08X", loaded.pixels()[painted]));
+
+        // Voda ma alfu 0xC0, tedy ne nulu - nesmi se povazovat za prazdnou.
+        boolean waterKept = true;
+        for (int y = 0; y < BlockAtlas.TILE_PIXELS; y++)
+            for (int x = 0; x < BlockAtlas.TILE_PIXELS; x++) {
+                int i = AtlasEditor.pixelIndex(BlockAtlas.TILE_WATER, x, y);
+                if (loaded.pixels()[i] != procedural[i]) waterKept = false;
+                if ((loaded.pixels()[i] >>> 24) == 0) waterKept = false;
+            }
+        check("poloprusvitna voda se nepovazuje za prazdnou dlazdici", waterKept, "");
+
+        // Uplny atlas se nesmi zmenit ani o pixel.
+        AtlasImage.save(procedural, file);
+        check("uplny atlas projde beze zmeny",
+                Arrays.equals(Textures.atlasPixels(file).pixels(), procedural), "");
     }
 }

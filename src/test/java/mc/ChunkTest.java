@@ -9,12 +9,14 @@ public class ChunkTest {
     // stejne konstanty jako ve World.generateTerrain
     static final double FREQ = 0.007;
     static final int OCTAVES = 4;
-    static final int AMPLITUDE = 20;
     static final int GROUND = 64;
     static final int SAND_LEVEL = GROUND - 8;
     static final int SOIL_DEPTH = 4;
 
-    /** Nezavisla replika World.fbm() - kdyz se rozejde, test to chytne. */
+    /** Generator vychoziho seedu - stejny svet, na kterem test jede. */
+    static final TerrainGenerator GEN = new TerrainGenerator(World.DEFAULT_SEED);
+
+    /** Nezavisla replika TerrainGenerator.fbm() - kdyz se rozejde, test to chytne. */
     static double fbm(int wx, int wz) {
         double sum = 0, amplitude = 1, frequency = FREQ, total = 0;
         for (int i = 0; i < OCTAVES; i++) {
@@ -31,16 +33,44 @@ public class ChunkTest {
         if (!ok) failures++;
     }
 
+    /**
+     * Nezavisla replika vysky terenu.
+     *
+     * Od zavedeni biomu uz neni zakladni vyska ani amplituda konstanta -
+     * pocitaji se jako VAZENY PRUMER parametru vsech osmi biomu. Replika
+     * proto jde pres Biome.weights() a scita to pole rucne; generator uvnitr
+     * pouziva vytknuty zapis v Biome.surfaceHeight(), takze jsou to dve
+     * ruzne cesty k temuz cislu. Samotne vrstvy sumu (teplota, vlhkost,
+     * relief) si test bere z generatoru - duplikovat sest posunu by uz byly
+     * jen opsane konstanty, ne nezavisla kontrola.
+     */
     static int expectedHeight(int wx, int wz) {
-        return (int) (GROUND + fbm(wx, wz) * AMPLITUDE);
+        double t = GEN.temperatureAt(wx, wz);
+        double h = GEN.humidityAt(wx, wz);
+        double r = GEN.reliefAt(wx, wz);
+
+        double[] w = Biome.weights(t, h, r);
+        double base = 0, amplitude = 0;
+        for (Biome b : Biome.values()) {
+            base += w[b.ordinal()] * b.baseHeight();
+            amplitude += w[b.ordinal()] * b.amplitude();
+        }
+
+        return (int) (base + fbm(wx, wz) * amplitude);
     }
 
-    static byte expectedSurface(int height) {
-        return height < SAND_LEVEL ? World.SAND : World.GRASS;
+    /** Povrch uz nezavisi jen na vysce, ale i na biomu (snih v tundre, pisek v pousti). */
+    static byte expectedSurface(int wx, int wz, int height) {
+        if (height < SAND_LEVEL) return World.SAND;
+
+        Biome biome = GEN.biomeAt(wx, wz);
+        if (biome == Biome.MOUNTAINS && height > Biome.MOUNTAINS.treeLine()) return World.SNOW;
+        return biome.surface();
     }
 
-    static byte expectedSubsurface(int height) {
-        return height < SAND_LEVEL ? World.SAND : World.DIRT;
+    static byte expectedSubsurface(int wx, int wz, int height) {
+        if (height < SAND_LEVEL) return World.SAND;
+        return GEN.biomeAt(wx, wz).subsurface();
     }
 
     /** Co smi byt pod pudni vrstvou: kamen, ruda, nebo vykopana jeskyne. */
@@ -94,7 +124,7 @@ public class ChunkTest {
             // Pod pudni vrstvou uz nesmi byt puda. Kamen to ale byt nemusi:
             // od zavedeni jeskyn a rud tam muze byt i ruda nebo vykopany vzduch.
             // Test hlida poradi vrstev, ne to, ze je podlozi vsude celistve.
-            if (top != expectedSurface(h) || soil != expectedSubsurface(h)
+            if (top != expectedSurface(wx, 8, h) || soil != expectedSubsurface(wx, 8, h)
                     || !isUnderground(deep) || World.isOpaque(above)) {
                 terrainOk = false;
                 bad.append(" x=").append(wx).append("(h=").append(h)
@@ -106,7 +136,9 @@ public class ChunkTest {
         check("vysky se lisi (test neni degenerovany)", heightVaries, "");
 
         // ---------- rozsah vysek FBM pres velkou plochu ----------
-        // Amplituda 20 kolem vysky 64 nesmi nikde vyjet ze sveta (0..128).
+        // Od zavedeni biomu se amplituda lisi biom od biomu (poust 9, hory 42),
+        // takze uz to neni "20 kolem 64" - o to vic musi platit, ze se vysledek
+        // porad vejde do sveta (0..128).
         int minH = Integer.MAX_VALUE, maxH = Integer.MIN_VALUE;
         long sum = 0;
         int samples = 0;

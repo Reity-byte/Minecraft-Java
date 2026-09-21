@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **1499 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **1640 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -65,16 +65,17 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `SwingTest` | Máchnutí rukou: průběh křivky, délka, **držené tlačítko ho nerestartuje** |
 | `MiningTest` | Doba kopání podle tvrdosti, **přepnutí cíle vynuluje postup**, puštění tlačítka, stádia prasklin, kam jde vytěžený blok (inventář, rozdělaná hromádka, **při plném inventáři na zem**), zvuk rozbití podle materiálu ze středu bloku |
 | `MenuTest` | Hit-testing tlačítek: pořadí, kraje, mezery, překlopení y z GLFW, změna velikosti okna |
-| `CaveTest` | Jeskyně (podíl výkopu, **šířka chodeb**, propojenost, netknutý povrch, dno světa) a rudy (četnost, hloubky, shlukování, záporné souřadnice) |
+| `BiomeTest` | Biomy: prahy a data všech osmi, `smoothstep`, **součet vah = přesně 1** a shoda vytknutého `surfaceHeight()` s naivní sumou, `classify()` = biom s největší vahou uvnitř biomu, **determinismus** (opakovaně, po novém načtení, z cizího vlákna, jiný seed = jiné rozložení), podíly biomů a průměrná délka biomu podél přímky, **nekorelovanost tří vrstev šumu**, **plynulost přechodu výšky** (největší skok na hranici proti skoku uvnitř biomu + náběh plání do hor), rozsah výšek a strop, druh stromu podle biomu a hranice lesa, cena `terrainHeight()` a `biomeAt()` |
+| `CaveTest` | Jeskyně (podíl výkopu, **šířka chodeb**, propojenost, netknutý povrch, dno světa) a rudy (četnost, hloubky, shlukování, záporné souřadnice, **změřený poměr železa v horách proti zbytku světa**) |
 | `InventoryTest` | Hromádky, slévání při sběru, přetečení, recepty (i posunuté v mřížce), klikání myší, návrat obsahu při zavření, **shift-klik** (prázdný i plný cíl, přetečení, mřížka, výstup, crafting table), **tažení myší** (rovnoměrně i po jednom, zbytek v ruce, přeskočené sloty, zrušení druhým tlačítkem) |
 | `DroppedItemTest` | Předměty na zemi: dopad, stabilní ležení, tunelování, zeď, tření, voda, **vytlačení z položeného bloku**, vyhození z ruky, **zpoždění a dosah sběru**, slévání při sběru, plný a skoro plný inventář, zánik (`LIFETIME`, zahozený sloupec), mesh relativní ke kameře a jeho světlo |
 | `WaterTest` | Zaplavení po hladinu, suché jeskyně, pravidla viditelnosti stěn (ručně spočítané), suchý spawn, plavání |
-| `SaveTest` | Ukládání: přežití změn přes unload sloupce, round-trip na disk, poškozený soubor, záporné souřadnice, obousměrnost `columnIndex` |
+| `SaveTest` | Ukládání: přežití změn přes unload sloupce, round-trip na disk, poškozený soubor, záporné souřadnice, obousměrnost `columnIndex`, a **svět zapsaný starší `GENERATOR_VERSION`** (načte se, změny bloků i inventář dorazí beze změny, nové chunky už mají biomy) |
 | `AsyncTest` | Async generování: shoda se synchronním blok po bloku, nejhorší `update()` při chůzi, omezený počet sloupců, kritický okruh, `shutdown()` |
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty |
-| `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků**, kmen stojí na zemi, řetěz kmen→prkna→stůl |
+| `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků** (podle tvaru každého druhu), kmen stojí na zemi, řetěz kmen→prkna→stůl pro všechna tři dřeva, vlastní dlaždice každého druhu, a **změřená hustota a druh stromu v každém biomu** |
 | `AtlasTest` | Mapování blok+stěna → dlaždice, UV uvnitř atlasu, půltexelové zúžení, obsah a determinismus textur |
 | `PlayerModelTest` | Animace: rozmach podle rychlosti, **opačná fáze nohou**, ruka proti noze, délka kroku, strop při letu, **nezávislost na FPS**, pohupování, máchnutí z `HandSwing`, držení. Model: rozměry jako hitbox, **pravá ruka vpravo, obličej vepředu**, končetiny v póze, držený blok u pěsti, odstín podle směru ve světě. Skin: každá stěna míří do vybarvené části. **Holá ruka v první osobě:** tytéž UV jako pravá ruka postavy, 4×12×4 px, v klidu vpravo dole před kamerou, při máchnutí u zaměřovače, **zpátky jde níž než tam (oblouk)**, po doběhnutí přesně klid; s blokem v ruce dál blok |
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
@@ -82,7 +83,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `TextureLabTest` | Index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře**, **sledování změněných pixelů** (`DirtyRect` sám o sobě; tah zůstane uvnitř jedné dlaždice a obsahuje všechny změněné pixely; undo hlásí svou dlaždici, import celý atlas), **mapování pixelu na stěnu dílu těla** (obdélníky sedí na UV, která vydává `PlayerModelMesh.unfold()`; round-trip pixel → index → stěna; 1632 pokrytých pixelů; plátno má řádek 0 dole), **editace kůže** (tah jen ve své stěně, kapátko, undo i s návratem výběru), **PNG kůže bez překlápění** a **přesné znění hlášky o rozměru** |
 | `MouseScaleTest` | Přepočet myši z bodů okna na pixely framebufferu: poměr pro 1,0 / 1,5 / 2,0 / 3,0, každá osa zvlášť, ochrana proti dělení nulou — a **simulovaná Retina přes všechny klikací obrazovky** (menu, deset položek Options i konec posuvníku, řádek seznamu světů, pole seedu, dlaždice a pixel plátna v labu, slot hotbaru): co je nakreslené na daném místě, to tam po přepočtu i reaguje. Jedna kontrola schválně hlídá, že bez přepočtu by klik trefil jiné tlačítko |
 | `WorldSavesTest` | Světy na disku: **migrace starého `saves/world.dat`** (bajtová shoda, metadata, `world.dat.migrated`, druhý běh bez duplicity, pád uprostřed, obsazené jméno, poškozený zdroj), očištění jména na složku (zakázané znaky, `CON`/`com1`/`aux.txt`, tečky a mezery na konci), unikátní složka bez ohledu na velikost písmen, metadata tam a zpět (i `Long.MIN_VALUE`), **poškozený `world.json` svět neschová**, řazení podle posledního hraní, mazání jen vlastní složky |
-| `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu změřené před refaktorem** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) |
+| `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) — přeměřené na generátoru s biomy, viz `GENERATOR_VERSION` |
 | `ThumbnailTest` | Náhled: orientace (horní řádek obrazovky = horní řádek obrázku), výřez středu podle poměru stran, zmenšení průměrováním, PNG tam a zpět, odmítnutí příliš velkého obrázku |
 | `WorldScreenTest` | Obrazovky světů: psaní do pole se jménem i seedem, náhled cílové složky (i s `(2)`), Tab/Esc/Enter/Ctrl+V, seznam od naposledy hraného, výběr klikem, **dvojklik hraje**, šipky a rolování, **mazání až po potvrzení**, prázdný seznam, a celá cesta založit → uložit → najít v seznamu → načíst se stejným terénem |
 | `CreativeTest` | Creative mód: přepínač na obrazovce zakládání světa (cyklus, nepřekryje Create/Cancel, `reset()` vrací survival), **okamžitá těžba** (praskne v prvním framu i u železa, ale vzduch, voda, puštěné tlačítko a kurzor mimo blok dál ne), **vytěžený blok mizí** (nic do inventáře, nic na zem, ani s plným inventářem), pokládání neubírá z hotbaru (50 položení, jeden kus vydrží 200), obsah přehledu (přesně jeden záznam na placovatelný vestavěný blok i na každý lab blok, bez `blocks.json` jen vestavěné, determinismus, pořadí), **nekonečný zdroj** (braní kopíruje, shift-klik kopíruje do hotbaru, položení do přehledu zahodí, rolování a klik po odrolování), let (stoupání i klesání, obě klávesy se vyruší, Shift zrychlí, **kolize v letu platí** proti propadnutí s noclipem, po vypnutí letu dopad), dvojstisk mezerníku (**z trojice přepne jen druhý**, reset, běžné skákání ne), mód ve `world.json` (tam a zpět, `touch()` ho zachová, **chybějící klíč i překlep → survival**) — a ke každému pravidlu **kontrola, že survival větev je nezměněná** |
@@ -125,7 +126,8 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `WorldSaves` — světy v `saves/<složka>/`, metadata, migrace starého formátu; **bez GL**
 - `Seeds` — seed z textu (prázdné = náhodný); **bez GL**
 - `GameMode` — survival / creative: jméno, popis a všechna pravidla módu jako pojmenované metody; **bez GL**
-- `TerrainGenerator` — neměnný generátor terénu pro jeden seed (výšky, jeskyně, rudy, stromy, spawn); **bez GL**
+- `TerrainGenerator` — neměnný generátor terénu pro jeden seed (výšky, biomy, jeskyně, rudy, stromy, spawn); **bez GL**
+- `Biome` — osm biomů: parametry terénu, povrch, druh a hustota stromů, prahy výběru a **váhy pro plynulé prolnutí výšky**; čistá data a aritmetika, **bez šumu i bez GL**
 - `Thumbnails` — náhled světa: framebuffer → PNG a zpátky; **bez GL**
 - `BlockRegistry` — bloky z texture labu (id 64–127) nad vestavěnými konstantami, `textures/blocks.json`; **bez GL**
 - `BlockDef` — jeden blok z labu: jméno, tvrdost, pevný, neprůhledný, dlaždice po stěnách
@@ -411,6 +413,158 @@ málo. Teď je to **15,9 ‰ uhlí a 5,5 ‰ železa**. `CaveTest` všechna ta �
 podíl výkopu, rozložení šířek chodeb i četnost rud — takže se po každé změně prahů dají
 přečíst místo odhadovat.
 
+### Biomy
+
+**Osm biomů: pláně, poušť, prales, březový les, tajga, tundra, kopce, hory.**
+Pláně nejsou nový biom — je to ten terén, který hra měla předtím (základní výška 64,
+amplituda 20), takže „původní svět" nezmizel, jen dostal sousedy.
+
+**⚠️ TŘI OSY ŠUMU, NE DVĚ.** Minecraft vybírá biom z teploty a vlhkosti; tady je k nim
+ještě **reliéf**. Kopce a hory totiž nejsou klima, ale tvar krajiny — kdyby se vecpaly
+do matice teplota × vlhkost, znamenalo by to, že hory jsou vždycky studené a suché
+(nebo jakýkoliv jiný jeden kout té matice). Reliéf proto rozhoduje **první**: kde je
+vysoko, je hora nebo kopec bez ohledu na klima, a teprve ve zbytku světa se uplatní
+teplota s vlhkostí. Na biomové mapě je to hned vidět — hory jsou vždycky uvnitř
+prstence kopců, což je i geograficky správně.
+
+Všechny tři vrstvy jedou na TÉŽE permutační tabulce (jeden `SimplexNoise` na svět),
+jen na velkých nekulatých posunech — stejný trik jako u dvou jeskynních polí. `BiomeTest`
+měří jejich korelaci a trvá na tom, že je blízko nule (naměřeno 0,015 / 0,025 / 0,007).
+
+| | práh | frekvence |
+|---|---|---|
+| teplota | studeno < −0,26, teplo > 0,26 | 0,0018 |
+| vlhkost | vlhko > 0,0 | 0,0018 |
+| reliéf | kopce > 0,30, hory > 0,60 | 0,0018 |
+
+**⚠️ VÝŠKA SE NEPOČÍTÁ Z VYBRANÉHO BIOMU, ALE Z VÁŽENÉ SMĚSI VŠECH OSMI.** Hory mají
+amplitudu 42, poušť 9 — kdyby si sloupec vzal parametry svého biomu, byla by na hranici
+svislá zeď. Místo toho se z týchž tří čísel spočítá osm vah, které dávají v součtu
+**přesně jednu** (partition of unity), a výsledná základní výška i amplituda jsou jejich
+váženým průměrem. Přechod je tím plynulý **zadarmo: nestojí to ani jedno volání šumu
+navíc.** Členy vah jsou `smoothstep` (3t² − 2t³), ne lineární rampy — ta má na obou
+koncích zlom v derivaci a ten by byl v terénu vidět jako hrana.
+
+Změřeno na 8000×8000 blocích: **největší skok výšky na hranici biomu jsou 3 bloky,
+uvnitř biomu taky 3** — přechod tedy není horší než obyčejný kopec, a průměrný krok
+na hranici je 0,33 bloku. Přechodový pás vyjde asi 45 bloků široký (`BAND` 0,10 dělená
+gradientem šumu).
+
+**⚠️ BIOM SÁM SE PŘEPÍNÁ OSTŘE.** Plynulá je jen výška; povrchový blok a druh stromu
+se na prahu mění jednou hranou. Je to záměr — blok je buď sníh, nebo tráva, nic mezi
+tím neexistuje, a v Minecraftu to vypadá stejně (písek pouště končí jednou hranou,
+ale kopec pod ní pokračuje spojitě). `Biome.classify()` je proto ostré prahování
+a `Biome.weights()` hladké; `BiomeTest` hlídá, že se uvnitř biomu (dál než `BAND`
+od prahu) shodnou.
+
+**⚠️ Pásma se nesmí překrývat ANI být příliš široká.** Překryv by dal zápornou váhu
+(`temperate = 1 − warm − cold`), takže by „vážený průměr" přestal být průměrem. A mezi
+dvěma sousedními pásy musí naopak zbýt kus, kde má biom váhu přesně 1 — jinak by kopce
+nikdy neměly svou vlastní výšku a byly by pořád jen směsí nížiny a hor. Obojí je
+v `BiomeTest` jako kontrola.
+
+| biom | základ / amplituda | povrch | stromy (z 16 buněk) | změřeno |
+|---|---|---|---|---|
+| Pláně | 64 / 20 | tráva | dub, 5 | 1 strom na 215 bloků |
+| Poušť | 67 / 9 | písek i pod povrchem | **žádné** | — |
+| Prales | 64 / 18 | tráva | pralesní, 16 (kmen 7–11, koruna ⌀7) | 1 na 67 |
+| Březový les | 64 / 18 | tráva | bříza, 10 | 1 na 107 |
+| Tajga | 64 / 16 | tráva | smrk, 10 | 1 na 104 |
+| Tundra | 65 / 11 | **sníh** | smrk, 2 | 1 na 502 |
+| Kopce | 73 / 31 | tráva | dub, 3 | 1 na 356 |
+| Hory | 84 / 42 | tráva, nad 88 **sníh** | dub, 3, jen pod hranicí lesa | 1 na 382 |
+
+Podíly ve světě vyšly 8,6–20,9 % podle seedu (nejvíc kopce, nejmíň hory) a průměrná
+délka jednoho biomu podél přímky je **114 bloků**.
+
+**„Členitost" hor nepotřebuje další oktávu šumu.** `fbm()` sčítá oktávy s klesající
+amplitudou a celý součet se násobí amplitudou biomu — s 42 místo 20 se tedy zvětší
+i ty JEMNÉ oktávy, takže profil není jen vyšší, ale i strmější. Vyjde to zadarmo.
+
+**⚠️ Hranice lesa a sněžná čára v horách jsou JEDNO číslo (88).** Dvě různá by znamenala
+pás dubů se zeleným listím stojících ve sněhu. `TerrainGenerator` si čáru bere přímo
+z `Biome.MOUNTAINS.treeLine()`. Změřeno: přesahuje ji ~30 % hor.
+
+**⚠️ Přibyl strop výšky terénu, a počítá se z NEJVYŠŠÍHO STROMU.** Před biomy nebyl
+potřeba — jedna amplituda 20 kolem výšky 64 se do světa vždycky vešla. Nad terénem
+musí zbýt místo i na tu nejvyšší korunu (pralesní kmen 11 bloků a nad ním ještě vrstva
+listí), takže strop je `WORLD_HEIGHT − 13 − 1 = 114`. Změřeno: trefí se u **0,002 %**
+sloupečků, takže je to opravdu pojistka a ne cesta, po které by vznikaly ploché vrcholky.
+
+**Písek u vody přebíjí biom.** Pravidlo „pod `SAND_LEVEL` je písek" tu bylo před biomy
+a dělá pláže kolem jezer; kdyby ho biom přebil, sahala by v tajze tráva až do vody.
+Poušť je z písku tak jako tak, a to i pod povrchem.
+
+**⚠️ POŘADÍ TESTŮ V `hasTree()` JE VÝKONOVÉ ROZHODNUTÍ.** Nejdřív se ptá, jestli je
+pozice vůbec tím jedním místem ve své buňce 8×8 (dva hashe, zamítne 63 pozic ze 64),
+a teprve pak sahá na biom (tři vzorky šumu) a na výšku terénu (dalších sedm). Před
+biomy se první ptalo na hustotu; kdyby to tak zůstalo, volal by se biomový šum na
+každou pozici v okolí sloupce, tedy stokrát místo pětkrát.
+
+**⚠️ `TREE_REACH` se POČÍTÁ z dat druhů, ne píše ručně.** Prales má korunu o poloměru 3
+(dub jen 2) a kdyby tam zůstala dvojka z časů, kdy byl jediný strom dub, ořezaly by se
+pralesní koruny přesně na švech chunků — a vypadalo by to jako „no tak takhle ten strom
+vyrostl". Tvar koruny je v `Biome.TreeType` jako pole poloměrů po vrstvách, takže nový
+druh znamená řádek dat, ne kopii `placeTree()`.
+
+**Železo v horách je 3× častější, a nic jiného se v rudách nemění.** Mění se jen
+vzácnost (60 → 20 buněk na žílu); hloubkové pásmo zůstává y 3–42, takže té rudy je
+víc, ne výš — pod horou se k ní musí dokopat stejně hluboko jako jinde. Uhlí se nemění
+vůbec. **Změřeno `CaveTest`em: 20,0 ‰ v horách proti 6,6 ‰ jinde, tedy 3,01×;** uhlí
+12,3 ‰ proti 12,7 ‰. Trojnásobek je volený tak, aby nezapadl do rozptylu mezi oblastmi
+(dvojnásobek by zapadl) a aby se železo v horách nestalo běžnou rudou (pětinásobek).
+
+**Vedlejší efekt dělitelnosti:** 60 je dělitelné 20, takže `cell % 20 == 0` je
+nadmnožina `cell % 60 == 0` — žíly, které by na daném místě byly tak jako tak, se
+biomem **neposunou**, na hranici hor jen některé další přibudou. `CaveTest` tu
+dělitelnost hlídá.
+
+**Cena:** tři vzorky šumu na sloupeček navíc (7 místo 4 pro výšku). Změřeno A/B na témže
+stroji, nejlepší z patnácti běhů po stu sloupcích: **generování sloupce 0,92 ms proti
+0,84 ms** před biomy, tedy **+8 %**. `biomeAt()` samotné stojí 76 ns, celá výška 204 ns.
+
+**Nové vestavěné bloky: sníh, březová kůra a listí, smrkové dřevo a listí, pralesní
+listí** (`World.SNOW`, `BIRCH_LOG`, `BIRCH_LEAVES`, `SPRUCE_LOG`, `SPRUCE_LEAVES`,
+`JUNGLE_LEAVES`; id 15–20). Nic víc — prales si vystačí s dubovým kmenem a vlastním
+tmavým listím, kaktus ani led biomy k odlišení nepotřebují.
+
+**⚠️ MUSÍ TO BÝT VESTAVĚNÉ BLOKY, NE BLOKY Z LABU.** Generátor na nich závisí a
+`blocks.json` je nepovinný soubor — na čisté instalaci nebo po jeho smazání by se
+generování rozbilo. Platí to i naopak: jejich dlaždice jsou v `BlockAtlas` a kreslí
+je `Textures`, ne data.
+
+**Sníh má tvrdost 0,5 jako hlína, ne 0,2 jako v Minecraftu.** Tvrdost tady určuje
+i materiál zvuku (`Sound.Material.byHardness`) a sníh, který by šustil jako listí,
+by zněl špatně. `SoundTest` na tom trvá: co má stejnou tvrdost, zní stejně.
+
+**Bříza a smrk dávají tatáž prkna.** Bez receptu by hráč, který začne v tajze nebo
+v březovém lese, neměl na prkna ŽÁDNÝ zdroj — pravidlo „řetěz receptů musí být
+dosažitelný z terénu" platí i pro biomy. Vlastní druhy prken by znamenaly další bloky,
+a ty biomy k odlišení nepotřebují.
+
+**⚠️ STARÝ `textures/atlas.png` BY NOVÉ BLOKY VYKRESLIL ČERNĚ.** Atlas uložený z labu
+je snímek toho, co hra znala v tu chvíli; buňky nových vestavěných dlaždic jsou v něm
+prázdné, tedy průhledné — a průhledná dlaždice se v neprůhledném průchodu vykreslí
+jako černá kostka. `Textures.fillMissingBuiltInTiles()` proto po načtení souboru
+dokreslí procedurálně každou **vestavěnou** buňku, ve které není ani jeden neprůhledný
+pixel. Sahá jen na úplně prázdné buňky, takže nic namalovaného nepřepíše (voda má
+alfu 0xC0, ne nulu) a buněk bloků z labu se netýká vůbec. Je to zrcadlový případ
+k `markMissingTiles()`, která naopak vyplňuje buňky bloků z labu v procedurálním atlasu.
+
+**Zpětná kompatibilita: `GENERATOR_VERSION` 4 → 5.** Neukládá se svět, ale rozdíl proti
+generátoru, takže se terén při načtení dopočítá ZNOVU — a to novým generátorem.
+**Ve starém světě proto po biomech vypadá krajina jinak i tam, kde už hráč byl; co
+zůstane beze změny, jsou jeho vlastní změny bloků (stavby, vykopané díry) a inventář.**
+Je to ta samá cena, jakou stálo zavedení jeskyní, vody i stromů, a verze v hlavičce je
+tu právě proto, aby se o tom aspoň napsalo na konzoli. `SaveTest` čte soubor zapsaný
+ve verzi 4 a ověřuje, že se načte a že všechny změny bloků i inventář dorazí beze změny.
+
+**Terén u počátku se přitom nehnul ani o blok.** Okolí spawnu je u výchozího seedu
+biom PLAINS a ten má schválně přesně původní parametry, takže `spawn` (5,5) i výška
+u něj (53) vyšly stejně jako před biomy. `SeedTest` to kontroluje výslovně.
+
+---
+
 ### Asynchronní generování
 
 **Worker DOSTÁVÁ souřadnice a VRACÍ hotové sloupce, na mapu `columns` nesahá.** Dělba práce
@@ -463,9 +617,17 @@ a mapa změn se za běhu mění (hráč pořád něco boří), takže by ji work
 se zápisem. Nasazují se proto až v `insert()`, když sloupec vstupuje mezi načtené.
 
 **`GENERATOR_VERSION` v hlavičce souboru.** Když se přeladí generátor (výšky, prahy jeskyní,
-četnost rud), starý uložený svět bude mít pod hráčovými stavbami jiný terén. Při neshodě
-se hlásí varování, ale **svět se i tak načte** — přijít o postavené věci je horší než
-posunutý terén. Zvýšit při každé změně, která posune terén.
+četnost rud, biomy), starý uložený svět bude mít pod hráčovými stavbami jiný terén. Při
+neshodě se hlásí varování, ale **svět se i tak načte** — přijít o postavené věci je horší
+než posunutý terén. Zvýšit při každé změně, která posune terén. Historie: 1 = holý terén,
+2 = jeskyně a rudy, 3 = voda, 4 = stromy, **5 = biomy**.
+
+⚠️ **Co „zpětná kompatibilita" v tomhle modelu znamená a co ne.** Zůstávají hráčovy
+změny bloků a inventář — ty jsou v souboru. Krajina kolem nich se dopočítá znovu, tedy
+novým generátorem, takže se posune i tam, kde už hráč byl; sloupec, který se zrovna
+neukládá, se nemá z čeho obnovit v původní podobě. Držet obojí naráz by znamenalo
+ukládat celé chunky místo rozdílu, což je přesně ten kompromis, kvůli kterému tenhle
+formát vznikl (64 bajtů na tři změny).
 
 **Chyby ukládání hru nepoloží.** `save()` vrací `false`, `load()` vrací `null` a obojí
 napíše důvod na stderr. Poškozený nebo cizí soubor tedy skončí založením nového světa,
@@ -737,10 +899,16 @@ na které stojí rudné žíly.
 
 **Jeden strom na buňku 8×8, na hashované pozici uvnitř ní.** Buňka zaručí rozestupy; kdyby
 se házelo mincí pro každý blok zvlášť, stromy by rostly ve shlucích jeden na druhém.
-Změřeno: jeden strom na 109 bloků povrchu.
+Před biomy to vycházelo na jeden strom na 109 bloků povrchu v celém světě; teď se
+hustota i druh berou z biomu (viz **Biomy**) a sahá to od 1 na 67 v pralese po 1 na 502
+v tundře, v poušti žádný.
 
 **Kmen se razítkuje AŽ PO listí**, aby přebil listí, které mu vyšlo do cesty. Listí naopak
 zapisuje jen do vzduchu, takže neprožere terén ani sousední strom.
+
+**Tvar koruny je DATA, ne kód.** `Biome.TreeType` nese poloměr a ořezání rohů pro každou
+vrstvu zvlášť, takže dub, bříza, smrk (kužel) i pralesní strom jdou jedním `placeTree()`.
+Kdyby měl každý biom vlastní kopii, rozešly by se jim tvary při první opravě.
 
 **Listí je NEPRŮHLEDNÉ.** Průhledné by znamenalo řešit, kdy se kreslí stěna mezi dvěma listy,
 a průhledný průchod by u každé koruny znásobil počet stěn. Minecraft na nízké nastavení
@@ -1839,11 +2007,13 @@ se tlačítko na hraně samo chytalo a pouštělo dokola.
 | Stavba meshe | **0,71 ms** na sekci (0,36 před plynulým osvětlením) |
 | Naplnění dohledu | ~600 ms, rozložené do rozpočtu 4 ms/frame (12 ms při loadingu) |
 | Přestavba po rozbití bloku | 1–4 sekce ≈ 1,5 ms |
-| Generování sloupce | ~0,9–1,5 ms na worker vlákně; s nasvícením ~3,7 ms |
+| Generování sloupce | **0,92 ms** na worker vlákně (0,84 ms před biomy, tedy +8 %); s nasvícením ~3,7 ms |
 | `World.update()` při letu | medián 2,1 ms, p99 **3,3 ms** (synchronně to bylo ~22 ms) |
 | Paměť sekce | 4 KB bloky + 4 KB světlo, oboje líně |
 | Paměť | ~32 KB na sloupec |
-| Výšky terénu | min 48, max 79, průměr 63 (24 000 vzorků přes 6000×6000 bloků) |
+| Výšky terénu | min 48, max 114, průměr 68 (biomy; před nimi 48–79 / 63) |
+| Výška jednoho sloupečku | 204 ns (7 vzorků šumu), samotné `biomeAt()` 76 ns |
+| Skok výšky na hranici biomu | **3 bloky** — stejně jako uvnitř biomu, průměr 0,33 |
 | Frame texture labu | **1,0 ms** (před dávkováním 2,2 ms; RTX 2050, okno 1600×1000, medián z 600 framů) |
 | Draw cally labu | **8** na frame (před dávkováním 422) |
 | Nahrání atlasu při tahu štětcem | 1 KB (dlaždice 16×16) místo 64 KB celého atlasu |
@@ -1894,11 +2064,11 @@ pixelové písmo, izometrické kostky v hotbaru, dlaždicované pozadí. Další
 změna `Palette` a konstant v GUI pixelech v `Hud`/`Menu`, ne nový kód.
 
 **Texture atlas — hotovo.** Mřížka 8×8 dlaždic po 16×16, tedy atlas 128×128 (`BlockAtlas`);
-obsazených je 27 buněk (16 dlaždic bloků, neznámý blok a 10 stádií prasklin). Textury generuje
+obsazených je 35 buněk (16 dlaždic bloků, neznámý blok, 10 stádií prasklin a 8 dlaždic biomů). Textury generuje
 procedurálně `Textures.blockAtlasPixels()`. Tráva má jinou texturu shora, z boku i zespodu.
 Přidat vestavěný blok = konstanta ve `World` (id do 63), dlaždice v `BlockAtlas` (odspodu),
 její kresba v `Textures` a case ve switchích. Plná kostka jde přidat i bez kódu, v labu
-(„Bloky z labu"). Volných je 37 buněk.
+(„Bloky z labu"). Obsazených je 35 buněk (po biomech), volných **29**.
 
 **Ruční textury místo procedurálních — hotovo, přes texture lab.** Upravený atlas se uloží
 do `textures/atlas.png` a hra ho při startu načte místo procedurálního; viz sekce Texture lab.
@@ -1912,8 +2082,15 @@ atlasu a zakládání nových bloků (plná kostka) do `textures/blocks.json`. Z
 resource packy, úpravy a mazání bloků z labu, vlastní tvary, recepty pro bloky z labu,
 průsvitné bloky, animované textury.
 
-**Jeskyně a rudy — hotovo.** 3D šum, uhlí a železo s vlastními hloubkami. Přidat další rudu
-= konstanta ve `World`, řádek v `oreAt()`, dlaždice v `BlockAtlas` a `Textures`.
+**Jeskyně a rudy — hotovo.** 3D šum, uhlí a železo s vlastními hloubkami, v horách 3× víc
+železa. Přidat další rudu = konstanta ve `World`, řádek v `oreAt()`, dlaždice
+v `BlockAtlas` a `Textures`.
+
+**Biomy — hotovo.** Osm biomů ze tří vrstev šumu (teplota, vlhkost, reliéf), terén se
+mezi nimi plynule prolíná vážením parametrů, stromy a povrch se mění podle biomu, hory
+mají víc železa. Zbývá: led a zamrzlá jezera v tundře, kaktusy v poušti, liány a bambus
+v pralese, biomy v oceánu, plynulý přechod i u povrchového bloku (dnes je ostrý) a
+zobrazení biomu v ladicím výpisu F3.
 
 **Asynchronní generování — hotovo.** Generování běží na worker vlákně, hlavní vlákno jen
 předává souřadnice a přebírá hotové sloupce. Změřeno při chůzi přes 25 hranic chunku:
@@ -1947,8 +2124,9 @@ z ruky na Q / Ctrl+Q. Co se při těžbě nevejde do inventáře, vypadne na zem
 (klik mimo panel, Q nad slotem). Truhla by byla jen další `Container` a další tovární metoda
 v `ContainerScreen`; shift-klik by pak přesouval mezi truhlou a inventářem.
 
-**Stromy — hotovo.** Dub s kmenem 4–6 bloků a korunou ze čtyř vrstev, jeden na buňku 8×8,
-jen na trávě nad hladinou. Kmen dává 4 prkna.
+**Stromy — hotovo.** Čtyři druhy podle biomu — dub, bříza, smrk a pralesní strom —
+s vlastní výškou kmene i tvarem koruny, jeden na buňku 8×8, jen na trávě nad hladinou.
+Každý kmen dává 4 prkna. Zbývá: keře a sazenice, ovoce, stromy z víc než jednoho kmene.
 
 **Tvary bloků — hotovo.** `BlockModels` jako kvádrový systém, pochodeň a plot jako první
 dva nekrychlové bloky. Postavené tak, aby na tom stály schody, desky a další.

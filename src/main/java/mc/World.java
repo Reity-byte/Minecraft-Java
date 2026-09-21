@@ -55,6 +55,25 @@ public class World {
     public static final byte FENCE = 14;
 
     /**
+     * Bloky biomů. Přibyly jen ty, bez kterých by se dva biomy nedaly od sebe
+     * poznat - sníh pro tundru a dvě další dřeva s listím pro březový les
+     * a tajgu. Prales si vystačí s dubovým kmenem a vlastním tmavým listím.
+     *
+     * ⚠️ MUSÍ TO BÝT VESTAVĚNÉ BLOKY, ne bloky z texture labu. Generátor na
+     * nich závisí, a blocks.json je nepovinný soubor - na čisté instalaci
+     * nebo po jeho smazání by se generování rozbilo.
+     */
+    public static final byte SNOW = 15;
+
+    public static final byte BIRCH_LOG    = 16;
+    public static final byte BIRCH_LEAVES = 17;
+
+    public static final byte SPRUCE_LOG    = 18;
+    public static final byte SPRUCE_LEAVES = 19;
+
+    public static final byte JUNGLE_LEAVES = 20;
+
+    /**
      * Největší obsazené id vestavěného bloku.
      *
      * ⚠️ Zvýšit při přidání konstanty výš. Je to jediné místo, kde je napsané,
@@ -62,7 +81,7 @@ public class World {
      * to nepoznají, mají default větev. Ptá se na to creative přehled
      * (CreativeInventory), aby v něm nebyly prázdné položky.
      */
-    public static final byte LAST_BUILT_IN = FENCE;
+    public static final byte LAST_BUILT_IN = JUNGLE_LEAVES;
 
     /** Výška světa v blocích. 128 = 8 sekcí po 16. */
     public static final int WORLD_HEIGHT = 128;
@@ -747,9 +766,12 @@ public class World {
         return switch(blockId)
         {
             case TORCH -> 0.05f;
-            case LEAVES -> 0.2f;
-            case GRASS, DIRT, SAND -> 0.5f;
-            case PLANKS, LOG, FENCE, CRAFTING_TABLE -> 0.8f;
+            case LEAVES, BIRCH_LEAVES, SPRUCE_LEAVES, JUNGLE_LEAVES -> 0.2f;
+            // Sníh je 0,5 jako hlína, ne 0,2 jako v Minecraftu: tvrdost tady
+            // určuje i materiál zvuku (Sound.Material.byHardness) a sníh, který
+            // by šustil jako listí, by zněl špatně.
+            case GRASS, DIRT, SAND, SNOW -> 0.5f;
+            case PLANKS, LOG, BIRCH_LOG, SPRUCE_LOG, FENCE, CRAFTING_TABLE -> 0.8f;
             case STONE, STONE_BRICKS -> 1.8f;
             case COAL_ORE -> 2.5f;
             case IRON_ORE -> 3.0f;

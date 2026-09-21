@@ -46,10 +46,19 @@ public final class WorldStorage {
 
     /**
      * Zvýšit při každé změně generátoru, která posune terén.
-     * Historie: 1 = holý terén, 2 = jeskyně a rudy, 3 = voda, 4 = stromy.
-     * (Pochodeň a plot terén neposouvají, takže verzi nezvyšují.)
+     * Historie: 1 = holý terén, 2 = jeskyně a rudy, 3 = voda, 4 = stromy,
+     * 5 = biomy. (Pochodeň a plot terén neposouvají, takže verzi nezvyšují.)
+     *
+     * ⚠️ CO TO PRO STARÝ SVĚT ZNAMENÁ, PŘESNĚ. Neukládá se svět, ale rozdíl
+     * proti generátoru, takže se terén při načtení dopočítá ZNOVU - a to
+     * novým generátorem. Ve starém světě tedy po biomech vypadá krajina jinak
+     * i tam, kde už hráč byl; co zůstane beze změny, jsou jeho vlastní změny
+     * bloků (stavby, vykopané díry) a inventář, protože ty jsou v souboru.
+     * Je to ta samá cena, jakou stálo zavedení jeskyní, vody i stromů; verze
+     * v hlavičce je tu proto, aby se o tom aspoň napsalo. SaveTest to ověřuje
+     * čtením souboru zapsaného ve verzi 4.
      */
-    public static final int GENERATOR_VERSION = 4;
+    public static final int GENERATOR_VERSION = 5;
 
     /** Co všechno se ukládá. changes je mapa ze World.changes(). */
     public record Save(float x, float y, float z,

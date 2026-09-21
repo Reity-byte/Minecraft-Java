@@ -72,6 +72,13 @@ public final class Recipes {
         // je dosažitelná bez oklikou přes kámen.
         SHAPELESS.add(new Recipe(0, 0, new byte[]{World.LOG}, World.PLANKS, 4));
 
+        // Bříza a smrk dávají tatáž prkna. Bez toho by hráč, který začne
+        // v tajze nebo v březovém lese, neměl na prkna ŽÁDNÝ zdroj - pravidlo
+        // "řetěz receptů musí být dosažitelný z terénu" platí i pro biomy.
+        // Vlastní druhy prken by znamenaly další bloky, a ty biomy nepotřebují.
+        SHAPELESS.add(new Recipe(0, 0, new byte[]{World.BIRCH_LOG}, World.PLANKS, 4));
+        SHAPELESS.add(new Recipe(0, 0, new byte[]{World.SPRUCE_LOG}, World.PLANKS, 4));
+
         // Pochodeň: prkno a uhlí. V Minecraftu je to klacek místo prkna -
         // klacek je ale PŘEDMĚT, ne blok, a předměty zatím neexistují
         // (ItemStack drží id bloku). Až přibudou, recept se opraví.

@@ -190,6 +190,8 @@ public class SaveTest {
                 }
         check("columnIndex jde rozlozit zpatky pro celou vysku sveta", indexOk, "");
 
+        oldGeneratorVersion(dir);
+
         w.shutdown();
         restored.shutdown();
         clean.shutdown();
@@ -202,5 +204,124 @@ public class SaveTest {
     static int topSolid(World w, int x, int z) {
         for (int y = World.WORLD_HEIGHT - 1; y >= 0; y--) if (w.isSolid(x, y, z)) return y;
         return -1;
+    }
+
+    // ==================================================================
+    // svet z nizsi GENERATOR_VERSION
+    // ==================================================================
+
+    /**
+     * Svet ulozeny STARSIM generatorem se musi nacist, ne zahodit.
+     *
+     * Presne to, co zadani nazyva "zpetna kompatibilita": po zvyseni
+     * GENERATOR_VERSION (biomy = 5) musi stary svet (4) dal jit otevrit,
+     * hlavicka se precte, vsechny zmeny bloku i inventar dorazi beze zmeny
+     * a na konzoli se o neshode verzi jen napise.
+     *
+     * ⚠️ CO SE NAOPAK ZMENI, A JE TO ZAMER. Nacteni je "vygeneruj a prepis
+     * zmeny", takze teren pod stavbami se dopocita NOVYM generatorem a s biomy
+     * vypada jinak. Zustavaji stavby, ne krajina - stejne jako u jeskyni, vody
+     * a stromu drive. Test to overuje primo: postaveny blok je po nacteni na
+     * svem miste, i kdyz se pod nim teren posunul.
+     */
+    static void oldGeneratorVersion(Path dir) throws IOException {
+        System.out.println();
+
+        Path file = dir.resolve("old-version.dat");
+
+        // Soubor se zapise rucne, bajt po bajtu, s verzi 4 v hlavicce -
+        // tedy presne tak, jak ho zapsala hra pred biomy. Volat save() by
+        // neslo: ta zapisuje aktualni verzi.
+        java.util.Map<Long, java.util.Map<Integer, Byte>> changes = new java.util.HashMap<>();
+        java.util.Map<Integer, Byte> column = new java.util.HashMap<>();
+        column.put(World.columnIndex(4, 70, 6), World.PLANKS);
+        column.put(World.columnIndex(4, 71, 6), World.STONE_BRICKS);
+        column.put(World.columnIndex(5, 70, 6), World.AIR);       // vykopana dira
+        changes.put(World.key(0, 0), column);
+
+        ItemStack[] inventory = new ItemStack[Inventory.SIZE];
+        inventory[0] = ItemStack.of(World.IRON_ORE, 7);
+
+        try (java.io.DataOutputStream out = new java.io.DataOutputStream(
+                new java.io.BufferedOutputStream(Files.newOutputStream(file)))) {
+            out.writeInt(0x4D435732);        // MAGIC "MCW2"
+            out.writeInt(4);                 // ⚠️ STARA verze generatoru
+            out.writeFloat(8);  out.writeFloat(70); out.writeFloat(8);
+            out.writeFloat(1.5f); out.writeFloat(-0.25f);
+            out.writeBoolean(true);
+            out.writeInt(3);
+
+            out.writeInt(changes.size());
+            for (Map.Entry<Long, Map<Integer, Byte>> c : changes.entrySet()) {
+                out.writeLong(c.getKey());
+                out.writeInt(c.getValue().size());
+                for (Map.Entry<Integer, Byte> b : c.getValue().entrySet()) {
+                    out.writeInt(b.getKey());
+                    out.writeByte(b.getValue());
+                }
+            }
+
+            out.writeInt(inventory.length);
+            for (ItemStack stack : inventory) {
+                ItemStack safe = stack == null ? ItemStack.EMPTY : stack;
+                out.writeByte(safe.block());
+                out.writeInt(safe.count());
+            }
+        }
+
+        check("verze v hlavicce se opravdu lisi od dnesni",
+                WorldStorage.GENERATOR_VERSION > 4, "" + WorldStorage.GENERATOR_VERSION);
+        check("biomy zvysily GENERATOR_VERSION na 5", WorldStorage.GENERATOR_VERSION == 5,
+                "" + WorldStorage.GENERATOR_VERSION);
+
+        System.out.println("  (nize ocekavana hlaska o neshode verzi generatoru)");
+        WorldStorage.Save loaded = WorldStorage.load(file);
+
+        check("svet ze stare verze generatoru se NACTE, nezahodi", loaded != null, "");
+        if (loaded == null) return;
+
+        check("poloha a pohled prezily beze zmeny",
+                loaded.x() == 8 && loaded.y() == 70 && loaded.z() == 8
+                        && loaded.yaw() == 1.5f && loaded.pitch() == -0.25f
+                        && loaded.flying() && loaded.selectedSlot() == 3, "");
+
+        check("inventar prezil beze zmeny",
+                loaded.inventory()[0].block() == World.IRON_ORE
+                        && loaded.inventory()[0].count() == 7, "");
+
+        Map<Integer, Byte> restoredColumn = loaded.changes().get(World.key(0, 0));
+        check("vsechny tri zmeny bloku prisly beze zmeny",
+                restoredColumn != null && restoredColumn.size() == 3
+                        && restoredColumn.get(World.columnIndex(4, 70, 6)) == World.PLANKS
+                        && restoredColumn.get(World.columnIndex(4, 71, 6)) == World.STONE_BRICKS
+                        && restoredColumn.get(World.columnIndex(5, 70, 6)) == World.AIR,
+                restoredColumn == null ? "sloupec chybi" : "" + restoredColumn.size());
+
+        // A ted to hlavni: nasadit stare zmeny na NOVY generator.
+        World world = new World();
+        world.loadRadius = 1;
+        world.unloadRadius = 3;
+        world.restoreChanges(loaded.changes());
+        world.updateBlocking(8f, 8f);
+
+        check("stavby ze stareho sveta stoji i po zvyseni verze generatoru",
+                world.getBlock(4, 70, 6) == World.PLANKS
+                        && world.getBlock(4, 71, 6) == World.STONE_BRICKS,
+                world.getBlock(4, 70, 6) + " / " + world.getBlock(4, 71, 6));
+        check("i vykopana dira zustala vykopana", world.getBlock(5, 70, 6) == World.AIR,
+                "" + world.getBlock(5, 70, 6));
+
+        // Novy teren za hranici prozkoumaneho sveta uz biomy ma - to je ta
+        // druha pulka zadani. Staci ukazat, ze se ve svete s tymz seedem
+        // vyskytuje vic nez jeden biom a aspon jeden z novych povrchu.
+        TerrainGenerator gen = world.generator();
+        java.util.Set<Biome> seen = new java.util.HashSet<>();
+        for (int x = -3000; x <= 3000; x += 97)
+            for (int z = -3000; z <= 3000; z += 97) seen.add(gen.biomeAt(x, z));
+
+        check("nove chunky tehoz sveta uz maji biomy", seen.size() == Biome.values().length,
+                seen.size() + " z " + Biome.values().length);
+
+        world.shutdown();
     }
 }

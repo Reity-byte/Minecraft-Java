@@ -41,6 +41,10 @@ public class AllTests {
         AtlasTest.main(args);
         failures += AtlasTest.failures;
 
+        System.out.println(NEWLINE + "========== BiomeTest ==========");
+        BiomeTest.main(args);
+        failures += BiomeTest.failures;
+
         System.out.println(NEWLINE + "========== CaveTest ==========");
         CaveTest.main(args);
         failures += CaveTest.failures;

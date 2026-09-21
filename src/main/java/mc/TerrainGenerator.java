@@ -11,12 +11,12 @@ package mc;
  * stav, kdy hlavní vlákno čte rozdělaná data. Oddělení od World to drží
  * konstrukčně: generátor na mapu sloupců ani na změny hráče nevidí.
  *
- * ⚠️ SE SEEDEM World.DEFAULT_SEED MUSÍ VYJÍT BIT PO BITU TENTÝŽ TERÉN JAKO
- * PŘED ZAVEDENÍM SEEDŮ. Staré uložené světy mají pod stavbami terén z toho
- * seedu a GENERATOR_VERSION se kvůli tomu nesmí zvyšovat. Proto je míchání
- * seedu do hashů udělané tak, aby u výchozího seedu nebylo vidět:
- * seedMix je pro něj nula a XOR nulou nic nezmění. SeedTest to hlídá
- * kontrolním součtem změřeným na kódu před refaktorem.
+ * ⚠️ MÍCHÁNÍ SEEDU DO HAŠŮ JE U VÝCHOZÍHO SEEDU NEVIDITELNÉ. Zavedení seedů
+ * GENERATOR_VERSION nezvyšovalo, takže muselo se seedem World.DEFAULT_SEED
+ * vyjít bit po bitu totéž co předtím: seedMix je pro něj nula a XOR nulou nic
+ * nezmění. Zůstává to tak, i když biomy terén posunuly - ta změna se ohlásila
+ * řádně zvýšením GENERATOR_VERSION na 5 a SeedTest má součty přeměřené.
+ * Bez toho pravidla by dva různé seedy daly tentýž vzor stromů a žil.
  * ---------------------------------------------------------------------------
  *
  * Nesahá na GL.
@@ -25,7 +25,6 @@ public final class TerrainGenerator {
 
     // --- parametry generování terénu ---
     private static final double TERRAIN_FREQUENCY = 0.007;
-    private static final int    TERRAIN_AMPLITUDE = 20;
     private static final int    GROUND_HEIGHT     = 64;
 
     /** Kolik oktáv se sečte ve fbm(). Víc = víc detailu, ale i víc volání noise. */
@@ -36,6 +35,73 @@ public final class TerrainGenerator {
 
     /** Kolik vrstev hlíny je pod trávou, než začne kámen. */
     private static final int SOIL_DEPTH = 4;
+
+    /**
+     * ⚠️ Strop a dno výšky terénu.
+     *
+     * Před biomy nebyl potřeba: jedna amplituda 20 kolem výšky 64 se do světa
+     * vždycky vešla. Hory mají amplitudu 42 nad základní výškou 84, takže
+     * extrémní hodnota šumu by mohla přerůst WORLD_HEIGHT.
+     *
+     * Strop se POČÍTÁ Z NEJVYŠŠÍHO STROMU, ne napsaný ručně: nad terénem musí
+     * zbýt místo i na tu nejvyšší korunu (pralesní kmen 11 bloků a nad ním
+     * ještě vrstva listí), jinak by se strom tiše neumístil. Změřeno: strop
+     * se trefí u 0,001 % sloupečků, takže je to opravdu jen pojistka a ne
+     * cesta, po které by vznikaly ploché vrcholky hor.
+     */
+    private static final int MAX_TERRAIN_HEIGHT =
+            World.WORLD_HEIGHT - maxTreeHeight() - 1;
+    private static final int MIN_TERRAIN_HEIGHT = 4;
+
+    private static int maxTreeHeight()
+    {
+        int max = 0;
+
+        for(Biome.TreeType type : Biome.TreeType.values())
+        {
+            max = Math.max(max, type.totalHeight());
+        }
+
+        return max;
+    }
+
+    // --- biomy ---
+
+    /**
+     * Frekvence biomové mapy: 0,0018 znamená rys šumu asi 550 bloků, tedy
+     * biomy velké stovky bloků. Nižší frekvence = větší biomy, ale taky delší
+     * chůze, než hráč nějaký druhý najde; vyšší = mozaika, ve které se biom
+     * nepozná. Změřeno v BiomeTest (průměrná délka jednoho biomu podél přímky).
+     */
+    private static final double BIOME_FREQUENCY = 0.0018;
+
+    /**
+     * ⚠️ POSUNY TŘÍ BIOMOVÝCH VRSTEV. Všechny tři vrstvy jedou na TÉŽE
+     * permutační tabulce (jeden SimplexNoise na svět), takže bez posunu by
+     * teplota, vlhkost i reliéf byly jedna a ta samá funkce - dostal by se
+     * z toho jen jeden pruhovaný svět, ne matice biomů. Posuny jsou velké
+     * a nekulaté, ze stejného důvodu jako u jeskyní. BiomeTest měří korelaci
+     * těch tří vrstev a trvá na tom, že je blízko nule.
+     */
+    private static final double TEMPERATURE_OFFSET_X = 1731.7;
+    private static final double TEMPERATURE_OFFSET_Z = -908.3;
+    private static final double HUMIDITY_OFFSET_X = -4127.9;
+    private static final double HUMIDITY_OFFSET_Z = 3312.1;
+    private static final double RELIEF_OFFSET_X = 8815.3;
+    private static final double RELIEF_OFFSET_Z = -6204.7;
+
+    /**
+     * Nad touhle výškou je v horách povrch zasněžený.
+     *
+     * Není to nový blok ani nový mechanismus - je to týž sníh jako v tundře
+     * a jediná podmínka. Bez něj jsou hory jen zelené jehly a z dálky se
+     * nepoznají od kopců.
+     *
+     * ⚠️ JE TO TÁŽ ČÁRA JAKO HRANICE LESA, a schválně: kdyby byly dvě, vznikl
+     * by mezi nimi pás dubů se zeleným listím stojících ve sněhu. Bere se
+     * proto přímo z dat biomu, ne jako vlastní konstanta.
+     */
+    private static final int MOUNTAIN_SNOW_LINE = Biome.MOUNTAINS.treeLine();
 
     // --- jeskyně ---
 
@@ -91,6 +157,18 @@ public final class TerrainGenerator {
     private static final int COAL_RARITY = 30;
     private static final int IRON_RARITY = 60;
 
+    /**
+     * Železo v horách. Trojnásobek množství = třetina vzácnosti, protože
+     * rarity je "jedna buňka z tolika nese žílu" - hustota žil je 1/rarity.
+     *
+     * Proč právě 3x: dvojnásobek by v měření zapadl do rozptylu mezi
+     * jednotlivými oblastmi (železo je vzácné, takže i na tisících bloků
+     * kamene se počty houpou), pětinásobek by v horách udělal ze železa
+     * běžnou rudu a přestalo by být za co lezt. CaveTest ten poměr MĚŘÍ
+     * a vypisuje, takže se po každé změně dá přečíst.
+     */
+    private static final int IRON_RARITY_MOUNTAINS = IRON_RARITY / 3;
+
     // Odlišují hashe jednotlivých rud, jinak by ležely na stejných místech.
     private static final int COAL_SALT = 0x51ED;
     private static final int IRON_SALT = 0x2F19;
@@ -101,22 +179,33 @@ public final class TerrainGenerator {
     private static final int TREE_CELL_BITS = 3;
     private static final int TREE_CELL_MASK = (1 << TREE_CELL_BITS) - 1;
 
-    /** V kolika buňkách z pěti strom vyroste. Změřeno v TreeTest. */
-    private static final int TREE_DENSITY = 3;
-
     private static final int TREE_SALT = 0x7A31;
-
-    private static final int TRUNK_MIN = 4;
-    private static final int TRUNK_VARIANTS = 3;   // 4 až 6 bloků
 
     /**
      * ⚠️ Jak daleko od sloupce se ještě musí hledat kmeny.
      *
-     * Koruna je široká 5 bloků, takže strom stojící až dva bloky ZA hranicí
-     * chunku do něj pořád zasahuje listím. Kdyby se procházel jen vlastní
-     * sloupec, byly by na každé hranici chunku useknuté koruny.
+     * Koruna je široká 2·poloměr + 1 bloku, takže strom stojící až o poloměr
+     * ZA hranicí chunku do něj pořád zasahuje listím. Kdyby se procházel jen
+     * vlastní sloupec, byly by na každé hranici chunku useknuté koruny.
+     *
+     * ⚠️ POČÍTÁ SE Z DAT, ne napsané ručně. Prales má korunu o poloměru 3
+     * (dub jen 2) a kdyby tady zůstala dvojka, ořezaly by se pralesní koruny
+     * přesně na švech chunků - a vypadalo by to jako "no tak takhle ten strom
+     * vyrostl". Nový druh stromu s ještě širší korunou tím dosah zvětší sám.
      */
-    private static final int TREE_REACH = 2;
+    private static final int TREE_REACH = maxTreeRadius();
+
+    private static int maxTreeRadius()
+    {
+        int max = 0;
+
+        for(Biome.TreeType type : Biome.TreeType.values())
+        {
+            max = Math.max(max, type.maxRadius());
+        }
+
+        return max;
+    }
 
     /** Generátor výchozího seedu - dokud si hra seed nepamatuje, jede na něm. */
     static final TerrainGenerator DEFAULT = new TerrainGenerator(World.DEFAULT_SEED);
@@ -169,13 +258,19 @@ public final class TerrainGenerator {
                 int wx = (cx << Chunk.BITS) + lx;
                 int wz = (cz << Chunk.BITS) + lz;
 
-                int height = (int) (GROUND_HEIGHT + fbm(wx, wz) * TERRAIN_AMPLITUDE);
+                // ⚠️ Biom a výška se počítají JEDNOU na sloupeček a pak se
+                // předávají dál. Šum pro biom stojí tři vzorky; kdyby se na
+                // biom ptal každý blok (třeba rudy kvůli železu v horách),
+                // bylo by to tisíckrát za sloupeček místo jednou.
+                double temperature = temperatureAt(wx, wz);
+                double humidity    = humidityAt(wx, wz);
+                double relief      = reliefAt(wx, wz);
 
-                // V nížinách je povrch písčitý - levný způsob, jak dostat
-                // do světa nějakou barevnou různorodost bez biomů.
-                boolean sandy = height < SAND_LEVEL;
-                byte surface    = sandy ? World.SAND : World.GRASS;
-                byte subsurface = sandy ? World.SAND : World.DIRT;
+                Biome biome = Biome.classify(temperature, humidity, relief);
+                int height = heightFrom(wx, wz, temperature, humidity, relief);
+
+                byte surface    = surfaceBlock(biome, height);
+                byte subsurface = subsurfaceBlock(biome, height);
 
                 for(int y = 0; y < height; y++)
                 {
@@ -204,7 +299,7 @@ public final class TerrainGenerator {
                             continue;   // nic se nenastaví, zůstane vzduch
                         }
 
-                        block = oreAt(wx, y, wz);
+                        block = oreAt(wx, y, wz, biome);
                     }
 
                     column.set(lx, y, lz, block);
@@ -264,11 +359,104 @@ public final class TerrainGenerator {
      * Výška terénu na dané pozici, tedy počet bloků odspodu.
      *
      * Čistá funkce šumu - nepotřebuje vygenerovaný sloupec, takže se dá volat
-     * i na místa, kam se hráč teprve chystá. Používá to hledání spawnu.
+     * i na místa, kam se hráč teprve chystá. Používá to hledání spawnu
+     * i razítkování stromů ze sousedních sloupců.
+     *
+     * Stojí SEDM vzorků šumu: čtyři oktávy fbm a tři biomové vrstvy. Před
+     * biomy to byly čtyři. Naměřeno v BiomeTest, kolik to udělá na sloupec.
      */
     public int terrainHeight(int worldX, int worldZ)
     {
-        return (int) (GROUND_HEIGHT + fbm(worldX, worldZ) * TERRAIN_AMPLITUDE);
+        return heightFrom(worldX, worldZ,
+                temperatureAt(worldX, worldZ),
+                humidityAt(worldX, worldZ),
+                reliefAt(worldX, worldZ));
+    }
+
+    /**
+     * Výška, když už jsou hodnoty klimatu spočítané. Existuje proto, aby
+     * generateColumn() nemusel tři biomové vzorky dělat dvakrát.
+     */
+    private int heightFrom(int worldX, int worldZ,
+                           double temperature, double humidity, double relief)
+    {
+        double height = Biome.surfaceHeight(temperature, humidity, relief,
+                fbm(worldX, worldZ));
+
+        return Math.max(MIN_TERRAIN_HEIGHT, Math.min(MAX_TERRAIN_HEIGHT, (int) height));
+    }
+
+    // ------------------------------------------------------------------
+    // biomová mapa
+    // ------------------------------------------------------------------
+
+    /**
+     * Který biom leží na dané pozici.
+     *
+     * Čistá funkce souřadnic a seedu, přesně jako terrainHeight(), hasTree()
+     * a rudné žíly - a ze stejného důvodu: sloupec se musí dát vygenerovat
+     * nezávisle na sousedech a na kterémkoliv vlákně. Stejný seed proto dává
+     * stejné rozložení biomů při každém načtení světa.
+     */
+    public Biome biomeAt(int worldX, int worldZ)
+    {
+        return Biome.classify(
+                temperatureAt(worldX, worldZ),
+                humidityAt(worldX, worldZ),
+                reliefAt(worldX, worldZ));
+    }
+
+    /** Teplota: nízkofrekvenční vrstva šumu, zhruba <-1; 1>. */
+    public double temperatureAt(int worldX, int worldZ)
+    {
+        return noise.sample(worldX * BIOME_FREQUENCY + TEMPERATURE_OFFSET_X,
+                            worldZ * BIOME_FREQUENCY + TEMPERATURE_OFFSET_Z);
+    }
+
+    /** Vlhkost: druhá vrstva, jiný posun. */
+    public double humidityAt(int worldX, int worldZ)
+    {
+        return noise.sample(worldX * BIOME_FREQUENCY + HUMIDITY_OFFSET_X,
+                            worldZ * BIOME_FREQUENCY + HUMIDITY_OFFSET_Z);
+    }
+
+    /** Reliéf: třetí vrstva - rozhoduje o kopcích a horách bez ohledu na klima. */
+    public double reliefAt(int worldX, int worldZ)
+    {
+        return noise.sample(worldX * BIOME_FREQUENCY + RELIEF_OFFSET_X,
+                            worldZ * BIOME_FREQUENCY + RELIEF_OFFSET_Z);
+    }
+
+    // ------------------------------------------------------------------
+    // povrchové vrstvy
+    // ------------------------------------------------------------------
+
+    /**
+     * Blok na samém povrchu.
+     *
+     * ⚠️ PÍSEK U VODY PŘEBÍJÍ BIOM. Pravidlo "pod SAND_LEVEL je písek" tu bylo
+     * před biomy a dělá pláže kolem jezer; kdyby ho biom přebil, sahala by
+     * v tajze tráva až do vody a pás písku nad hladinou (viz SEA_LEVEL
+     * o jedna níž) by zmizel. Poušť je z písku tak jako tak.
+     */
+    private static byte surfaceBlock(Biome biome, int height)
+    {
+        if(height < SAND_LEVEL)
+        {
+            return World.SAND;
+        }
+
+        if(biome == Biome.MOUNTAINS && height > MOUNTAIN_SNOW_LINE)
+        {
+            return World.SNOW;
+        }
+
+        return biome.surface();
+    }
+
+    private static byte subsurfaceBlock(Biome biome, int height)
+    {
+        return height < SAND_LEVEL ? World.SAND : biome.subsurface();
     }
 
     /**
@@ -331,9 +519,11 @@ public final class TerrainGenerator {
         {
             for(int tz = baseZ - TREE_REACH; tz < baseZ + Chunk.SIZE + TREE_REACH; tz++)
             {
-                if(hasTree(tx, tz))
+                Biome.TreeType type = treeTypeAt(tx, tz);
+
+                if(type != null)
                 {
-                    placeTree(column, baseX, baseZ, tx, tz);
+                    placeTree(column, baseX, baseZ, tx, tz, type);
                 }
             }
         }
@@ -351,15 +541,25 @@ public final class TerrainGenerator {
      */
     boolean hasTree(int worldX, int worldZ)
     {
+        return treeTypeAt(worldX, worldZ) != null;
+    }
+
+    /**
+     * Jaký strom na téhle pozici stojí, nebo null, když žádný.
+     *
+     * ⚠️ POŘADÍ TESTŮ JE VÝKONOVÉ ROZHODNUTÍ. Nejdřív se ptá, jestli je pozice
+     * vůbec tím jedním místem ve své buňce 8×8 (dva hashe, zamítne 63 pozic
+     * ze 64), a teprve pak se sahá na biom (tři vzorky šumu) a na výšku terénu
+     * (další sedm). Před biomy se první ptalo na hustotu; kdyby to tak zůstalo,
+     * volal by se biomový šum na každou pozici v okolí sloupce, tedy stokrát
+     * místo pětkrát.
+     */
+    Biome.TreeType treeTypeAt(int worldX, int worldZ)
+    {
         int cellX = worldX >> TREE_CELL_BITS;
         int cellZ = worldZ >> TREE_CELL_BITS;
 
         int cell = hash(cellX, 0, cellZ, TREE_SALT);
-
-        if(cell % 5 >= TREE_DENSITY)
-        {
-            return false;
-        }
 
         int offsetX = (cell >> 8) & TREE_CELL_MASK;
         int offsetZ = (cell >> 12) & TREE_CELL_MASK;
@@ -367,20 +567,47 @@ public final class TerrainGenerator {
         if(worldX != (cellX << TREE_CELL_BITS) + offsetX
                 || worldZ != (cellZ << TREE_CELL_BITS) + offsetZ)
         {
-            return false;
+            return null;
+        }
+
+        Biome biome = biomeAt(worldX, worldZ);
+        Biome.TreeType type = biome.treeType();
+
+        if(type == Biome.TreeType.NONE)
+        {
+            return null;
+        }
+
+        // Hustota z JINÝCH BITŮ hashe než pozice v buňce - jinak by v hustém
+        // biomu byly stromy jen v jednom koutu každé buňky.
+        if(((cell >> 16) & 15) >= biome.treeDensity())
+        {
+            return null;
         }
 
         // Jen na trávě: pod SAND_LEVEL je povrch písčitý a pod SEA_LEVEL navíc
         // pod vodou. Strom v jezeře ani na pláži nechceme.
         int height = terrainHeight(worldX, worldZ);
 
-        return height >= SAND_LEVEL
-                && height + TRUNK_MIN + TRUNK_VARIANTS + 2 < World.WORLD_HEIGHT;
+        if(height < SAND_LEVEL)
+        {
+            return null;
+        }
+
+        // Hranice lesa: v horách nad ní už nic neroste.
+        if(height > biome.treeLine())
+        {
+            return null;
+        }
+
+        // A nad korunou musí zbýt místo ve světě.
+        return height + type.totalHeight() < World.WORLD_HEIGHT ? type : null;
     }
 
-    private int trunkHeight(int worldX, int worldZ)
+    private int trunkHeight(int worldX, int worldZ, Biome.TreeType type)
     {
-        return TRUNK_MIN + (hash(worldX, 1, worldZ, TREE_SALT) % TRUNK_VARIANTS);
+        return type.trunkMin
+                + (hash(worldX, 1, worldZ, TREE_SALT) % type.trunkVariants);
     }
 
     /**
@@ -390,18 +617,22 @@ public final class TerrainGenerator {
      * dvě široké 5x5 s useknutými rohy, nad nimi 3x3 a špička.
      */
     private void placeTree(ChunkColumn column, int baseX, int baseZ,
-                           int treeX, int treeZ)
+                           int treeX, int treeZ, Biome.TreeType type)
     {
         int ground = terrainHeight(treeX, treeZ);
-        int trunk = trunkHeight(treeX, treeZ);
+        int trunk = trunkHeight(treeX, treeZ, type);
         int top = ground + trunk - 1;
 
-        // Koruna: pro každou vrstvu její poloměr a jestli se ořezávají rohy.
-        for(int layer = 0; layer < 4; layer++)
+        int layers = type.layerRadius.length;
+
+        // Koruna: poloměr a ořezání rohů si každá vrstva nese v datech druhu.
+        // Poslední vrstva leží o blok NAD vrcholem kmene, takže se kmen zavře;
+        // odtud "layers - 2" jako posun první vrstvy.
+        for(int layer = 0; layer < layers; layer++)
         {
-            int y = top - 2 + layer;
-            int radius = layer < 2 ? 2 : 1;
-            boolean trimCorners = layer < 2 || layer == 3;
+            int y = top - (layers - 2) + layer;
+            int radius = type.layerRadius[layer];
+            boolean trimCorners = type.layerTrim[layer];
 
             for(int dx = -radius; dx <= radius; dx++)
             {
@@ -412,7 +643,7 @@ public final class TerrainGenerator {
                         continue;
                     }
 
-                    setIfAir(column, baseX, baseZ, treeX + dx, y, treeZ + dz, World.LEAVES);
+                    setIfAir(column, baseX, baseZ, treeX + dx, y, treeZ + dz, type.leaves);
                 }
             }
         }
@@ -420,7 +651,7 @@ public final class TerrainGenerator {
         // Kmen až nakonec, aby přebil listí, které mu vyšlo do cesty.
         for(int y = ground; y <= top; y++)
         {
-            set(column, baseX, baseZ, treeX, y, treeZ, World.LOG);
+            set(column, baseX, baseZ, treeX, y, treeZ, type.log);
         }
     }
 
@@ -506,13 +737,31 @@ public final class TerrainGenerator {
         return CAVE_THRESHOLD_DEEP + (CAVE_THRESHOLD_SHALLOW - CAVE_THRESHOLD_DEEP) * t;
     }
 
-    /** Jaký kámen tu leží - obyčejný, nebo rudný. */
+    /**
+     * Jaký kámen tu leží - obyčejný, nebo rudný. Pohodlná varianta, která si
+     * biom dohledá sama; generateColumn() používá tu s biomem, aby se šum
+     * pro biom nepočítal na každý blok znovu.
+     */
     byte oreAt(int worldX, int worldY, int worldZ)
+    {
+        return oreAt(worldX, worldY, worldZ, biomeAt(worldX, worldZ));
+    }
+
+    /**
+     * Jaký kámen tu leží, když už je biom známý.
+     *
+     * ⚠️ Biom mění JEN vzácnost železa, nic jiného. Hloubkové pásmo zůstává
+     * stejné (y 3-42), takže žíla navíc v horách leží stejně hluboko jako
+     * všude jinde - je jí víc, ne výš. Uhlí se nemění vůbec.
+     */
+    byte oreAt(int worldX, int worldY, int worldZ, Biome biome)
     {
         // Železo se testuje první: je vzácnější, takže by ho uhlí v překryvu
         // hloubek jinak skoro celé přebilo.
+        int ironRarity = biome == Biome.MOUNTAINS ? IRON_RARITY_MOUNTAINS : IRON_RARITY;
+
         if(worldY >= IRON_MIN_Y && worldY <= IRON_MAX_Y
-                && vein(worldX, worldY, worldZ, IRON_SALT, IRON_RARITY))
+                && vein(worldX, worldY, worldZ, IRON_SALT, ironRarity))
         {
             return World.IRON_ORE;
         }

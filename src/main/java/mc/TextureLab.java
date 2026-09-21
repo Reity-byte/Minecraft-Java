@@ -1884,6 +1884,12 @@ public class TextureLab {
             case World.STONE_BRICKS -> "Stone bricks";
             case World.LOG -> "Log";
             case World.LEAVES -> "Leaves";
+            case World.SNOW -> "Snow";
+            case World.BIRCH_LOG -> "Birch log";
+            case World.BIRCH_LEAVES -> "Birch leaves";
+            case World.SPRUCE_LOG -> "Spruce log";
+            case World.SPRUCE_LEAVES -> "Spruce leaves";
+            case World.JUNGLE_LEAVES -> "Jungle leaves";
             case World.TORCH -> "Torch";
             case World.FENCE -> "Fence";
             default -> "Block " + block;

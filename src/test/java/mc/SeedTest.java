@@ -6,28 +6,46 @@ import java.util.zip.CRC32;
 /**
  * Overuje seed: cteni z textu a generovani terenu podle nej.
  *
- * ⚠️ Nejdulezitejsi je tady SHODA S PUVODNIM TERENEM. Ulozene svety maji pod
- * stavbami teren ze seedu 12345 a GENERATOR_VERSION se kvuli seedum nezvysoval,
- * takze vychozi seed musi davat bit po bitu tytez bloky jako kod pred
- * refaktorem. Kontrolni soucty nize jsou zmerene na TOM kodu; kdyz se rozejdou,
- * neni to chyba testu, ale posunuty teren ve vsech starych svetech.
+ * ⚠️ KONTROLNI SOUCTY TERENU JSOU PRIPINACEK, NE DOGMA - a je dulezite vedet,
+ * ktery zrovna drzi.
+ *
+ * Puvodne sem byly zmerene na kodu PRED zavedenim seedu: refaktor na seedy
+ * GENERATOR_VERSION nezvysoval, takze vychozi seed musel davat bit po bitu
+ * tytez bloky, jinak by se vsem ulozenym svetum posunul teren pod stavbami.
+ *
+ * BIOMY tohle poprve zmenily zamerne: posouvaji teren, a proto zvysily
+ * GENERATOR_VERSION ze 4 na 5 - presne to je ten mechanismus, kterym se takova
+ * zmena ohlasi (WorldStorage o neshode napise a svet nacte i tak). Soucty nize
+ * jsou proto PREMERENE na generatoru s biomy a jejich role se tim otocila:
+ * uz nehlidaji shodu s minulosti, ale to, ze se teren nehne NEPOZOROVANE.
+ * Kdyz se rozejdou a GENERATOR_VERSION se nezvysil, je to chyba.
+ *
+ * Historicke hodnoty pred biomy, kdyby je nekdo hledal:
+ *   oblasti 0xC384CE02, 0x438B9FEE, 0xC13BBED5, vysky 0x3B3F14B2.
+ *
+ * Co se NEZMENILO: spawn (5,5) a vyska terenu u nej (53). Okoli pocatku je
+ * u vychoziho seedu biom PLAINS a ten ma schvalne presne puvodni parametry
+ * (zakladni vyska 64, amplituda 20), takze tam vychazi tentyz teren jako driv.
  */
 public class SeedTest {
 
     static int failures = 0;
 
-    /** CRC32 vsech bloku oblasti chunku, zmerene pred zavedenim seedu. */
+    /** CRC32 vsech bloku oblasti chunku, premerene na generatoru s biomy (verze 5). */
     static final int[][] REGIONS = {
             {-2, -2, 1, 1},          // pres nulu, tedy i zaporne souradnice
             {40, -63, 42, -61},
             {-250, 120, -248, 122},
     };
-    static final long[] REGION_CRC = {0xC384CE02L, 0x438B9FEEL, 0xC13BBED5L};
+    static final long[] REGION_CRC = {0xE0386A4CL, 0xE80F3826L, 0x9D5EFDD8L};
 
-    /** CRC32 vysek terenu na mrizce 6000 x 6000 bloku, taky pred refaktorem. */
-    static final long HEIGHTS_CRC = 0x3B3F14B2L;
+    /** CRC32 vysek terenu na mrizce 6000 x 6000 bloku, taky na verzi 5. */
+    static final long HEIGHTS_CRC = 0x08D8083AL;
 
-    /** Co vracel spawn a vyska terenu pred refaktorem. */
+    /**
+     * Co vracel spawn a vyska terenu pred refaktorem - a co vraci porad,
+     * protoze okoli pocatku je PLAINS s puvodnimi parametry terenu.
+     */
     static final int SPAWN_X = 5, SPAWN_Z = 5, HEIGHT_AT_8_8 = 53;
 
     static void check(String name, boolean ok, String detail) {
@@ -103,7 +121,7 @@ public class SeedTest {
             int[] r = REGIONS[i];
             long crc = regionCrc(World.DEFAULT_SEED, r[0], r[1], r[2], r[3]);
 
-            check("oblast " + r[0] + "," + r[1] + " je bit po bitu jako pred zavedenim seedu",
+            check("oblast " + r[0] + "," + r[1] + " sedi na premereny soucet (verze generatoru 5)",
                     crc == REGION_CRC[i],
                     String.format("0x%08X vs 0x%08X", crc, REGION_CRC[i]));
         }
@@ -121,6 +139,14 @@ public class SeedTest {
 
         check("vyska u spawnu sedi", gen.terrainHeight(8, 8) == HEIGHT_AT_8_8,
                 "" + gen.terrainHeight(8, 8));
+
+        // Proc vyska u spawnu prezila i biomy: okoli pocatku je PLAINS a ten
+        // ma schvalne presne puvodni parametry. Kdyby se PLAINS preladily,
+        // padne tahle kontrola drive nez cokoliv jineho a bude videt proc.
+        check("spawn vychoziho sveta lezi v planich s puvodnimi parametry",
+                gen.biomeAt(8, 8) == Biome.PLAINS
+                        && Biome.PLAINS.baseHeight() == 64 && Biome.PLAINS.amplitude() == 20,
+                "" + gen.biomeAt(8, 8));
 
         int[] spawn = gen.findLandSpawn(8, 8, 64);
         check("spawn vychoziho sveta sedi", spawn[0] == SPAWN_X && spawn[1] == SPAWN_Z,

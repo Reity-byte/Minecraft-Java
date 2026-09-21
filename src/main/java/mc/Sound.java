@@ -97,9 +97,12 @@ public enum Sound {
             return switch(block)
             {
                 case World.AIR, World.WATER -> null;
-                case World.LEAVES -> PLANT;
-                case World.GRASS, World.DIRT, World.SAND -> EARTH;
-                case World.PLANKS, World.LOG, World.FENCE, World.CRAFTING_TABLE, World.TORCH -> WOOD;
+                case World.LEAVES, World.BIRCH_LEAVES,
+                     World.SPRUCE_LEAVES, World.JUNGLE_LEAVES -> PLANT;
+                // Sníh zní jako zem, ne jako listí - viz tvrdost ve World.
+                case World.GRASS, World.DIRT, World.SAND, World.SNOW -> EARTH;
+                case World.PLANKS, World.LOG, World.BIRCH_LOG, World.SPRUCE_LOG,
+                     World.FENCE, World.CRAFTING_TABLE, World.TORCH -> WOOD;
                 case World.STONE, World.STONE_BRICKS, World.COAL_ORE, World.IRON_ORE -> STONE;
                 // Stejně jako tvrdost: neznámý blok se chová jako hlína.
                 default -> EARTH;

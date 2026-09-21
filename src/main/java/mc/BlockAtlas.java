@@ -61,7 +61,18 @@ public final class BlockAtlas {
     /** Křiklavá dlaždice pro "zapomněls case" - stejná role jako magenta v colorFor(). */
     public static final int TILE_UNKNOWN    = 15;
 
-    public static final int TILE_COUNT = TILE_CRACK_FIRST + CRACK_STAGES;
+    // Dlaždice biomů. Leží ZA prasklinami (od 27), protože nové vestavěné
+    // dlaždice se berou odspodu a lab si bere buňky od konce atlasu (63, 62...).
+    public static final int TILE_SNOW             = 27;
+    public static final int TILE_BIRCH_LOG_SIDE   = 28;
+    public static final int TILE_BIRCH_LOG_TOP    = 29;
+    public static final int TILE_BIRCH_LEAVES     = 30;
+    public static final int TILE_SPRUCE_LOG_SIDE  = 31;
+    public static final int TILE_SPRUCE_LOG_TOP   = 32;
+    public static final int TILE_SPRUCE_LEAVES    = 33;
+    public static final int TILE_JUNGLE_LEAVES    = 34;
+
+    public static final int TILE_COUNT = TILE_JUNGLE_LEAVES + 1;
 
     /**
      * Půl texelu dovnitř dlaždice.
@@ -110,6 +121,13 @@ public final class BlockAtlas {
             case World.WATER    -> TILE_WATER;
             case World.STONE_BRICKS -> TILE_BRICKS;
             case World.LEAVES -> TILE_LEAVES;
+            case World.SNOW   -> TILE_SNOW;
+            case World.BIRCH_LEAVES  -> TILE_BIRCH_LEAVES;
+            case World.SPRUCE_LEAVES -> TILE_SPRUCE_LEAVES;
+            case World.JUNGLE_LEAVES -> TILE_JUNGLE_LEAVES;
+            // Bříza i smrk mají letokruhy na řezu a kůru z boku, stejně jako dub.
+            case World.BIRCH_LOG  -> face == FACE_SIDE ? TILE_BIRCH_LOG_SIDE : TILE_BIRCH_LOG_TOP;
+            case World.SPRUCE_LOG -> face == FACE_SIDE ? TILE_SPRUCE_LOG_SIDE : TILE_SPRUCE_LOG_TOP;
             case World.TORCH -> TILE_TORCH;
             // Plot je ze dřeva, takže si prostě bere dlaždici prken.
             case World.FENCE -> TILE_PLANKS;

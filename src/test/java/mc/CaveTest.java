@@ -22,14 +22,41 @@ public class CaveTest {
     /** Rozsah, ve kterem se prochazi svet. Mensi nez loadRadius, at je test rychly. */
     static final int RADIUS = 3;
 
-    /** Nejvyssi blok TERENU - stromy se preskoci. */
+    /** Hloubkove pasmo zeleza - stejne jako v TerrainGenerator. Biom ho nemeni. */
+    static final int IRON_BAND_MIN = 3, IRON_BAND_MAX = 42;
+
+    /**
+     * Nejvyssi blok TERENU - stromy se preskoci.
+     *
+     * ⚠️ Od zavedeni biomu je druhu dreva a listi vic (briza, smrk, prales).
+     * Kdyby se tu vyjmenovaly jen dub a dubove listi, vratila by funkce jako
+     * "povrch" brezovy kmen a kontrola souvislosti pudy by padala na necem,
+     * co je ve skutecnosti strom. Seznam se proto bere z dat druhu stromu.
+     */
+    static boolean isTreeBlock(byte b) {
+        for (Biome.TreeType type : Biome.TreeType.values()) {
+            if (type == Biome.TreeType.NONE) continue;
+            if (b == type.log || b == type.leaves) return true;
+        }
+        return false;
+    }
+
     static int terrainTop(World w, int x, int z) {
         for (int y = World.WORLD_HEIGHT - 1; y >= 0; y--) {
             byte b = w.getBlock(x, y, z);
-            if (b == World.LOG || b == World.LEAVES || !w.isSolid(x, y, z)) continue;
+            if (isTreeBlock(b) || !w.isSolid(x, y, z)) continue;
             return y;
         }
         return -1;
+    }
+
+    /** Co smi byt na povrchu: zalezi na biomu (trava, pisek, snih). */
+    static boolean isSurfaceBlock(byte b) {
+        if (b == World.SAND) return true;              // plaze pod SAND_LEVEL i poust
+        for (Biome biome : Biome.values()) {
+            if (b == biome.surface()) return true;
+        }
+        return b == World.SNOW;                        // zasnezene vrcholky hor
     }
 
     public static void main(String[] args) {
@@ -175,7 +202,7 @@ public class CaveTest {
                 if (top < 0) { holes++; continue; }
 
                 byte surface = w.getBlock(x, top, z);
-                if (surface != World.GRASS && surface != World.SAND) holes++;
+                if (!isSurfaceBlock(surface)) holes++;
 
                 // Pod povrchem musi byt souvisla pudni vrstva. Pudni vrstva ma
                 // 4 bloky VCETNE povrchu (SOIL_DEPTH), takze se kontroluji tri
@@ -263,6 +290,65 @@ public class CaveTest {
             }
         }
         check("rudy nevystupuji do pudni vrstvy", oreInSoil == 0, oreInSoil + " nalezu");
+
+        // ---------- zelezo v horach ----------
+        // Jediny zasah biomu do rud: v horach je zelezna zila castejsi.
+        // Meri se PRES GENERATOR, ne pres nacteny svet - okruh RADIUS=3 kolem
+        // pocatku nemusi vubec zadnou horu obsahovat, a nahodile poloha hor by
+        // z toho udelala test, ktery jednou projde a podruhe ne.
+        long mountainStone = 0, mountainIron = 0, mountainCoal = 0;
+        long otherStone = 0, otherIron = 0, otherCoal = 0;
+
+        for (int x = -900; x <= 900; x++) {
+            for (int z = -900; z <= 900; z += 7) {
+                boolean mountains = gen.biomeAt(x, z) == Biome.MOUNTAINS;
+
+                for (int y = IRON_BAND_MIN; y <= IRON_BAND_MAX; y++) {
+                    if (gen.isCave(x, y, z)) continue;
+
+                    byte b = gen.oreAt(x, y, z);
+
+                    if (mountains) {
+                        mountainStone++;
+                        if (b == World.IRON_ORE) mountainIron++;
+                        else if (b == World.COAL_ORE) mountainCoal++;
+                    } else {
+                        otherStone++;
+                        if (b == World.IRON_ORE) otherIron++;
+                        else if (b == World.COAL_ORE) otherCoal++;
+                    }
+                }
+            }
+        }
+
+        double mountainIronRate = 1000.0 * mountainIron / Math.max(1, mountainStone);
+        double otherIronRate = 1000.0 * otherIron / Math.max(1, otherStone);
+        double mountainCoalRate = 1000.0 * mountainCoal / Math.max(1, mountainStone);
+        double otherCoalRate = 1000.0 * otherCoal / Math.max(1, otherStone);
+        double ratio = mountainIronRate / otherIronRate;
+
+        System.out.printf("Zelezo v horach %.2f na 1000 kamene, jinde %.2f -> %.2fx%n",
+                mountainIronRate, otherIronRate, ratio);
+        System.out.printf("Uhli v horach %.2f, jinde %.2f (nemelo by se lisit)%n",
+                mountainCoalRate, otherCoalRate);
+
+        check("v horach je zelezo znatelne castejsi", ratio > 2.5,
+                String.format("%.2fx", ratio));
+        check("ale ne tak caste, aby prestalo byt rudou", ratio < 4.0,
+                String.format("%.2fx", ratio));
+        check("uhli biom nemeni", Math.abs(mountainCoalRate - otherCoalRate) < 1.0,
+                String.format("%.2f vs %.2f", mountainCoalRate, otherCoalRate));
+        check("test zeleza neni degenerovany (hory se v oblasti vyskytly)",
+                mountainStone > 100_000 && otherStone > 100_000,
+                mountainStone + " / " + otherStone);
+
+        // ⚠️ Vzacnost v horach DELI vzacnost jinde beze zbytku, takze
+        // "cell % 20 == 0" je nadmnozina "cell % 60 == 0". Dusledek: zily,
+        // ktere by v pouzitem miste byly tak jako tak, se biomem neposunou -
+        // na hranici hor jen nektere dalsi pribudou. Kdyby se delitelnost
+        // porusila, zily by na hranici biomu skakaly.
+        check("horska zila je nadmnozina bezne (zily se na hranici neposouvaji)",
+                60 % 20 == 0, "");
 
         // ---------- zaporne souradnice ----------
         // Zilne bunky se pocitaji posunem >>, ne delenim. S delenim by bunka
