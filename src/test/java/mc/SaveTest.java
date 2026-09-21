@@ -17,6 +17,9 @@ public class SaveTest {
 
     static int failures = 0;
 
+    /** Denni doba, kterou testy ukladaji - schvalne jina nez START_TIME. */
+    static final float DAY_TIME = 321.5f;
+
     static void check(String name, boolean ok, String detail) {
         System.out.println((ok ? "  OK   " : "  FAIL ") + name + (detail.isEmpty() ? "" : "  -> " + detail));
         if (!ok) failures++;
@@ -80,7 +83,8 @@ public class SaveTest {
         for (int i = 0; i < Inventory.SIZE; i++) snapshot[i] = packed.get(i);
 
         WorldStorage.Save save = new WorldStorage.Save(
-                12.5f, 70.25f, -34.75f, 123.5f, -12.25f, true, 3, w.changes(), snapshot);
+                12.5f, 70.25f, -34.75f, 123.5f, -12.25f, true, 3, w.changes(), snapshot,
+                DAY_TIME);
 
         check("ulozeni projde", WorldStorage.save(file, save), "");
         check("po ulozeni soubor existuje", WorldStorage.exists(file), "");
@@ -150,7 +154,8 @@ public class SaveTest {
 
         Path emptyFile = dir.resolve("empty.dat");
         WorldStorage.save(emptyFile, new WorldStorage.Save(
-                0, 0, 0, 0, 0, false, 0, clean.changes(), new ItemStack[Inventory.SIZE]));
+                0, 0, 0, 0, 0, false, 0, clean.changes(), new ItemStack[Inventory.SIZE],
+                DayCycle.START_TIME));
         WorldStorage.Save emptyLoaded = WorldStorage.load(emptyFile);
         check("prazdny svet se nacte", emptyLoaded != null && emptyLoaded.changes().isEmpty(), "");
 
@@ -166,7 +171,8 @@ public class SaveTest {
 
         Path negFile = dir.resolve("neg.dat");
         WorldStorage.save(negFile, new WorldStorage.Save(
-                -100, 70, -100, 0, 0, false, 0, neg.changes(), new ItemStack[Inventory.SIZE]));
+                -100, 70, -100, 0, 0, false, 0, neg.changes(), new ItemStack[Inventory.SIZE],
+                DayCycle.START_TIME));
 
         WorldStorage.Save negLoaded = WorldStorage.load(negFile);
         World negRestored = new World();

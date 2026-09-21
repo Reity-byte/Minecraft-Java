@@ -41,7 +41,7 @@ public class Main {
 
     private final Camera camera = new Camera();
     private final Player player = new Player();
-    private World world = new World(); // nahrazuje se při vytvoření nového světa
+    World world = new World(); // nahrazuje se při vytvoření nového světa
 
     /**
      * Zvuk. Žije stejně jako svět: při založení nebo načtení světa se zavře
@@ -60,8 +60,15 @@ public class Main {
 
     private GameState state = GameState.MAIN_MENU;
 
-    /** Denní doba. Běží jen ve hře, v menu i v inventáři stojí. */
-    private final DayCycle day = new DayCycle();
+    /**
+     * Denní doba. Běží jen ve hře, v menu i v inventáři stojí.
+     *
+     * ⚠️ Balíčkově viditelné schválně: patří mezi stav, který se při výměně
+     * světa musí resetovat (viz resetPlayerState()), a `MainStateTest` ho
+     * na tom kontroluje. Totéž platí pro inventory, crafting mřížky
+     * a selectedSlot níž.
+     */
+    final DayCycle day = new DayCycle();
 
     // Texty UI jsou anglicky schválně: atlas fontu pokrývá jen ASCII 32-126,
     // takže česká diakritika by se vykreslila jako otazníky.
@@ -98,15 +105,15 @@ public class Main {
     private final Mining mining = new Mining();
     private boolean miningHeld = false;
 
-    private int selectedSlot = 0;
+    int selectedSlot = 0;
 
     // --- inventář ---
-    private final Inventory inventory = new Inventory();
+    final Inventory inventory = new Inventory();
 
     /** Malá mřížka u inventáře a velká na crafting table; výsledek je sdílený. */
-    private final Container craftingSmall = new Container(4);
-    private final Container craftingLarge = new Container(9);
-    private final Container craftingResult = new Container(1);
+    final Container craftingSmall = new Container(4);
+    final Container craftingLarge = new Container(9);
+    final Container craftingResult = new Container(1);
 
     /** Vytváří se až po GL kontextu, proto ne u deklarace. */
     private Texture blockAtlas;
@@ -967,7 +974,7 @@ public class Main {
         spawnDone = false;   // hráče postaví na terén až updateCreatingWorld
     }
 
-    private void restore(WorldStorage.Save save) {
+    void restore(WorldStorage.Save save) {
 
         // Změny se musí nasadit PŘED prvním update(), aby si je sloupce
         // vzaly rovnou při generování a nikdy nebyly vidět bez nich.
@@ -990,6 +997,11 @@ public class Main {
             inventory.set(i, save.inventory()[i]);
         }
 
+        // Denní doba je uložená se světem (formát MCW3). Soubor ze starší
+        // verze ji nemá a WorldStorage za něj dosadí DayCycle.START_TIME,
+        // takže se otevře dopoledne - přesně to, co dělal dosud.
+        day.setTime(save.dayTime());
+
         loadingTitle = "Loading world";
         worldCenterX = player.x;
         worldCenterZ = player.z;
@@ -997,11 +1009,32 @@ public class Main {
 
     }
 
-    /** Společný začátek nového i načteného světa. */
+    /**
+     * Společný začátek nového i načteného světa.
+     *
+     * ---------------------------------------------------------------------
+     * ⚠️ RESETUJE SE I STAV, KTERÝ NENÍ VE `World`. Tohle je celá příčina
+     * dvou chyb, které tu byly: inventář, crafting mřížky, vybraný slot ani
+     * denní doba nejsou součástí `World` - jsou to samostatná pole v `Main`,
+     * která přežijí výměnu světa. `freshWorld()` vyměnil `World`, `SoundEngine`,
+     * `WorldRenderer` a položky na zemi, ale na tyhle čtyři se zapomnělo, takže
+     * si nový svět bral inventář i denní dobu po tom předchozím v témže běhu hry.
+     *
+     * Pravidlo pro příští pole: co drží `Main` a co se vztahuje ke KONKRÉTNÍMU
+     * světu, patří sem. `MainStateTest` prochází tenhle seznam a kdyby se sem
+     * přidalo pole a zapomnělo na reset, spadne.
+     *
+     * Načtený svět si potom svoje hodnoty vrátí v `restore()` - resetuje se
+     * VŽDYCKY a přepisuje se až potom, aby nebyl rozdíl mezi "nový svět"
+     * a "načtený svět, jehož soubor tu položku ještě nemá".
+     * ---------------------------------------------------------------------
+     */
     private void freshWorld(long seed) {
         // Starý svět musí zastavit svoje generující vlákno, jinak by běžela dvě.
         world.shutdown();
         world = new World(seed);
+
+        resetPlayerState();
 
         // Zvuk symetricky se světem: nový svět nezdědí nic, co ještě hraje
         // ze starého. Změřeno: zavření ~30 ms, nové otevření 55-150 ms.
@@ -1019,6 +1052,31 @@ public class Main {
         loadingFrames = 0;
         columnsTotal = 0;
         meshesTotal = 0;
+    }
+
+    /**
+     * Stav hráče, který nepatří světu, ale sezení - vrátit na výchozí.
+     *
+     * Je to vlastní metoda, a ne pár řádků uvnitř `freshWorld()`, aby šla
+     * zavolat z testu bez GL, GLFW i OpenAL. `MainStateTest` na ní ověřuje
+     * obě opravené chyby.
+     */
+    void resetPlayerState() {
+        // Nový svět = nový začátek. Bez tohohle ukázal inventář věci
+        // ze světa, ve kterém hráč byl před chvílí.
+        inventory.clear();
+        selectedSlot = 0;
+
+        // Crafting mřížky jsou trvalé kontejnery (co v nich zůstane, je tam
+        // i při dalším otevření), takže se musí vyprázdnit taky - jinak by
+        // v novém světě ležely v mřížce suroviny z minulého.
+        craftingSmall.clear();
+        craftingLarge.clear();
+        craftingResult.clear();
+
+        // Denní doba je pole Main, ne World - bez resetu začne nový svět
+        // v tu dobu, ve kterou skončil ten předchozí.
+        day.reset();
     }
 
     /**
@@ -1133,7 +1191,7 @@ public class Main {
                 player.x, player.y, player.z,
                 camera.yaw, camera.pitch,
                 player.flying, selectedSlot,
-                world.changes(), inventorySnapshot()));
+                world.changes(), inventorySnapshot(), day.time()));
 
         // Poslední hraní se posune až po uložení - seznam světů se podle něj řadí.
         currentWorld = WorldSaves.touch(currentWorld, System.currentTimeMillis());

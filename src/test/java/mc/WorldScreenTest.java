@@ -265,7 +265,7 @@ public class WorldScreenTest {
 
             check("svet se ulozi do sve slozky",
                     WorldStorage.save(info.worldFile(), new WorldStorage.Save(8, surface + 2, 8, 0, 0, false, 0,
-                            world.changes(), inventory))
+                            world.changes(), inventory, DayCycle.START_TIME))
                             && Files.isRegularFile(root.resolve("Cave Base").resolve("world.dat")), "");
 
             WorldSaves.WorldInfo touched = WorldSaves.touch(info, now + 5000);

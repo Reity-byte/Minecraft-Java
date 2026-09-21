@@ -57,6 +57,10 @@ public class AllTests {
         AsyncTest.main(args);
         failures += AsyncTest.failures;
 
+        System.out.println(NEWLINE + "========== MainStateTest ==========");
+        MainStateTest.main(args);
+        failures += MainStateTest.failures;
+
         System.out.println(NEWLINE + "========== SaveTest ==========");
         SaveTest.main(args);
         failures += SaveTest.failures;

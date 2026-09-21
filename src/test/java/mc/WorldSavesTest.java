@@ -706,7 +706,7 @@ public class WorldSavesTest {
 
         Files.createDirectories(file.getParent());
         WorldStorage.save(file, new WorldStorage.Save(1.5f, 70.25f, -2.5f, 33f, -11f, false, 2,
-                w.changes(), inventory));
+                w.changes(), inventory, DayCycle.START_TIME));
         w.shutdown();
 
         Files.setLastModifiedTime(file, java.nio.file.attribute.FileTime.fromMillis(LEGACY_TIME));

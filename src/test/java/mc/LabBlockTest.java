@@ -367,7 +367,8 @@ public class LabBlockTest {
 
             Path file = dir.resolve("world.dat");
             check("svet s bloky z labu se ulozi",
-                    WorldStorage.save(file, new WorldStorage.Save(8, Y + 1, 8, 0, 0, false, 0, w.changes(), inv)), "");
+                    WorldStorage.save(file, new WorldStorage.Save(8, Y + 1, 8, 0, 0, false, 0, w.changes(), inv,
+                            DayCycle.START_TIME)), "");
             WorldStorage.Save back = WorldStorage.load(file);
 
             check("po nacteni je mramor porad mramor",
@@ -390,9 +391,11 @@ public class LabBlockTest {
             plainInv[3] = ItemStack.of(World.STONE, 12);
             Map<Long, Map<Integer, Byte>> changes = plain.changes();
             Path a = dir.resolve("a.dat"), b = dir.resolve("b.dat");
-            WorldStorage.save(a, new WorldStorage.Save(1, 2, 3, 4, 5, false, 2, changes, plainInv));
+            WorldStorage.save(a, new WorldStorage.Save(1, 2, 3, 4, 5, false, 2, changes, plainInv,
+                    DayCycle.START_TIME));
             BlockRegistry.activate(BlockRegistry.empty());
-            WorldStorage.save(b, new WorldStorage.Save(1, 2, 3, 4, 5, false, 2, changes, plainInv));
+            WorldStorage.save(b, new WorldStorage.Save(1, 2, 3, 4, 5, false, 2, changes, plainInv,
+                    DayCycle.START_TIME));
             WorldStorage.Save plainBack = WorldStorage.load(b);
             BlockRegistry.activate(REGISTRY);
             check("svet bez bloku z labu: soubor je bajt po bajtu stejny s registrem i bez nej",

@@ -38,11 +38,18 @@ public final class WorldStorage {
      * První čtyři bajty souboru, aby se poznal cizí nebo poškozený soubor.
      *
      * ⚠️ MAGIC nese i verzi FORMÁTU, ne jen značku. "MCW1" je starší soubor
-     * bez inventáře; "MCW2" ho už má. Číst se umí obojí - jinak by přidání
-     * inventáře smazalo každému rozehraný svět.
+     * bez inventáře; "MCW2" ho už má; "MCW3" k němu přidává denní dobu.
+     * Číst se umí všechny - jinak by přidání inventáře (a teď času) smazalo
+     * každému rozehraný svět.
+     *
+     * ⚠️ NOVÁ POLOŽKA SE PŘIDÁVÁ NA KONEC a čte se jen u novějšího MAGIC.
+     * Formát je poziční binárka bez délek, takže vložit pole doprostřed by
+     * znamenalo, že starší soubor od toho místa čte úplně jiná čísla - a to
+     * by se neprojevilo výjimkou, ale nesmyslnou polohou hráče.
      */
     private static final int MAGIC_V1 = 0x4D435731;
     private static final int MAGIC_V2 = 0x4D435732;
+    private static final int MAGIC_V3 = 0x4D435733;
 
     /**
      * Zvýšit při každé změně generátoru, která posune terén.
@@ -60,13 +67,20 @@ public final class WorldStorage {
      */
     public static final int GENERATOR_VERSION = 5;
 
-    /** Co všechno se ukládá. changes je mapa ze World.changes(). */
+    /**
+     * Co všechno se ukládá. changes je mapa ze World.changes().
+     *
+     * dayTime je poloha v denním cyklu v sekundách (viz DayCycle). Soubory
+     * z verze 1 a 2 ji nemají a dostanou DayCycle.START_TIME, takže se
+     * otevřou dopoledne jako nový svět.
+     */
     public record Save(float x, float y, float z,
                        float yaw, float pitch,
                        boolean flying,
                        int selectedSlot,
                        Map<Long, Map<Integer, Byte>> changes,
-                       ItemStack[] inventory) {}
+                       ItemStack[] inventory,
+                       float dayTime) {}
 
     private WorldStorage() {}
 
@@ -92,7 +106,7 @@ public final class WorldStorage {
             try(DataOutputStream out = new DataOutputStream(
                     new BufferedOutputStream(Files.newOutputStream(path))))
             {
-                out.writeInt(MAGIC_V2);
+                out.writeInt(MAGIC_V3);
                 out.writeInt(GENERATOR_VERSION);
 
                 out.writeFloat(save.x());
@@ -126,6 +140,9 @@ public final class WorldStorage {
                     out.writeByte(safe.block());
                     out.writeInt(safe.count());
                 }
+
+                // Denní doba, až úplně na konci - viz poznámka u MAGIC.
+                out.writeFloat(save.dayTime());
             }
 
             return true;
@@ -148,7 +165,7 @@ public final class WorldStorage {
         {
             int magic = in.readInt();
 
-            if(magic != MAGIC_V1 && magic != MAGIC_V2)
+            if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3)
             {
                 System.err.println("Ulozeny svet ma cizi format: " + path);
                 return null;
@@ -205,7 +222,7 @@ public final class WorldStorage {
             ItemStack[] inventory = new ItemStack[0];
 
             // Starší soubor inventář nemá - načte se prázdný a hráč začne s ničím.
-            if(magic == MAGIC_V2)
+            if(magic == MAGIC_V2 || magic == MAGIC_V3)
             {
                 int slots = in.readInt();
 
@@ -225,7 +242,18 @@ public final class WorldStorage {
                 }
             }
 
-            Save save = new Save(x, y, z, yaw, pitch, flying, selectedSlot, changes, inventory);
+            // Soubor bez denní doby (verze 1 a 2) se otevře dopoledne jako
+            // nový svět - to je přesně to, co dělal dosud, protože čas se
+            // neukládal vůbec.
+            float dayTime = DayCycle.START_TIME;
+
+            if(magic == MAGIC_V3)
+            {
+                dayTime = in.readFloat();
+            }
+
+            Save save = new Save(x, y, z, yaw, pitch, flying, selectedSlot,
+                    changes, inventory, dayTime);
 
             // Stejná opatrnost jako u GENERATOR_VERSION: varovat, nepadat.
             // Svět s bloky z labu, které blocks.json nezná (soubor zmizel nebo

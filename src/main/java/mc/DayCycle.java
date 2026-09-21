@@ -41,14 +41,66 @@ public class DayCycle {
     private static final float[] SKY_DAY   = {0.53f, 0.81f, 0.92f};
     private static final float[] SKY_NIGHT = {0.02f, 0.03f, 0.08f};
 
+    /**
+     * Čas, na kterém začíná každý NOVĚ ZALOŽENÝ svět: 0,15 cyklu, tedy
+     * dopoledne (hours() vydá 9,6).
+     *
+     * Dopoledne, a ne přesně poledne ani svítání: vanilla Minecraft začíná
+     * ráno a nechává hráči celý první den na to, aby si postavil přístřešek,
+     * než přijde noc. Tady je den dlouhý 600 s, takže 0,15 nechává do soumraku
+     * (0,46 cyklu) ještě zhruba tři minuty herního dne. Svítání by znamenalo
+     * začínat v šeru, poledne by ubralo půlku prvního dne.
+     */
+    public static final float START_TIME = DAY_LENGTH * 0.15f;
+
     /** Uplynulý čas v rámci cyklu, v sekundách. */
-    private float time = DAY_LENGTH * 0.15f;   // start dopoledne, ne za svítání
+    private float time = START_TIME;   // start dopoledne, ne za svítání
 
     private final float[] skyColor = new float[3];
 
     public void advance(float dt)
     {
         time = (time + dt) % DAY_LENGTH;
+    }
+
+    /** Čas v cyklu, v sekundách. Ukládá se do světa. */
+    public float time()
+    {
+        return time;
+    }
+
+    /**
+     * Nastaví čas v cyklu.
+     *
+     * ⚠️ MUSÍ TO ZVLÁDNOUT I NESMYSL Z POŠKOZENÉHO SOUBORU. Záporné číslo,
+     * NaN nebo nekonečno by se přes modulo protáhly dál a daylight() by pak
+     * vracela NaN - obloha i celý svět by zčernaly a nic by neřeklo proč.
+     * Mimo rozsah se proto ořízne na START_TIME, stejný přístup jako
+     * u hodnot mimo meze v Options.
+     */
+    public void setTime(float seconds)
+    {
+        if(!Float.isFinite(seconds) || seconds < 0f || seconds >= DAY_LENGTH)
+        {
+            this.time = START_TIME;
+            return;
+        }
+
+        this.time = seconds;
+    }
+
+    /**
+     * Vrátí cyklus na začátek dne.
+     *
+     * ⚠️ Volá se při zakládání i načítání světa. Bez toho denní doba
+     * PŘEŽÍVÁ mezi světy: hráč odejde ze světa v noci, založí nový a ten
+     * začne taky v noci, protože DayCycle je jedna instance v Main a ta se
+     * nikdy nevynulovala. Je to ta samá třída chyby jako inventář, který
+     * si nový svět bral po starém.
+     */
+    public void reset()
+    {
+        this.time = START_TIME;
     }
 
     /** Posune čas o zlomek cyklu. Pro ladění - jinak se na noc čeká minuty. */
