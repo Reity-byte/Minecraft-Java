@@ -74,8 +74,13 @@ public class Main {
     // takže česká diakritika by se vykreslila jako otazníky.
     // Světy jsou v saves/<složka>/ a vybírají se na vlastní obrazovce, takže
     // hlavní menu má jen "Singleplayer" a nemusí se skládat znovu.
-    private final Menu mainMenu = new Menu("Minecraft Base", "Singleplayer", "Options", "Lab", "Quit");
-    private final Menu pauseMenu = new Menu("Paused", "Resume", "Options", "Save and Quit to Title");
+    static final Menu MAIN_MENU_LABELS =
+            new Menu("Minecraft Base", "Singleplayer", "Options", "Lab", "Quit");
+    static final Menu PAUSE_MENU_LABELS =
+            new Menu("Paused", "Resume", "Options", "Save and Quit to Title");
+
+    private final Menu mainMenu = MAIN_MENU_LABELS;
+    private final Menu pauseMenu = PAUSE_MENU_LABELS;
 
     // mouse look state
     private double lastX, lastY;
@@ -1536,12 +1541,12 @@ public class Main {
                 return;
             }
 
-            // Rozhoduje popisek, ne index - pořadí tlačítek se může měnit.
-            switch (mainMenu.label(index)) {
-                case "Singleplayer" -> openSelectWorld();
-                case "Options" -> openOptions();
-                case "Texture Lab" -> openTextureLab();
-                default -> glfwSetWindowShouldClose(window, true);
+            switch (mainMenuAction(mainMenu.label(index))) {
+                case SINGLEPLAYER -> openSelectWorld();
+                case OPTIONS -> openOptions();
+                case LAB -> openTextureLab();
+                case QUIT -> glfwSetWindowShouldClose(window, true);
+                case NONE -> unhandled("hlavniho menu", mainMenu.label(index));
             }
 
             sound.play(Sound.CLICK);
@@ -1550,18 +1555,65 @@ public class Main {
 
         int index = hoveredButton(pauseMenu);
 
-        switch (pauseMenu.label(index)) {
-            case "Resume" -> setState(GameState.PLAYING);
-            case "Options" -> openOptions();
+        switch (pauseMenuAction(pauseMenu.label(index))) {
+            case RESUME -> setState(GameState.PLAYING);
+            case OPTIONS -> openOptions();
             // Odchod do menu svět zahazuje, takže se musí uložit teď -
             // i s náhledem, který se pak ukazuje v seznamu světů.
-            case "Save and Quit to Title" -> quitToTitle();
-            default -> { }
+            case SAVE_AND_QUIT -> quitToTitle();
+            case NONE -> {
+                if (index >= 0) {
+                    unhandled("pauzy", pauseMenu.label(index));
+                }
+            }
         }
 
         if (index >= 0) {
             sound.play(Sound.CLICK);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // co dělají tlačítka menu
+    //
+    // ⚠️ ROZHODUJE POPISEK, NE INDEX - pořadí tlačítek se může měnit. Cena
+    // za to je, že přejmenování tlačítka rozpojí jeho akci, a to TIŠE: dokud
+    // tu byla větev `default -> zavri okno`, znamenalo přejmenování
+    // "Texture Lab" na "Lab", že tlačítko Lab ukončilo hru s návratovým
+    // kódem 0 - žádná výjimka, žádná hláška, jen zavřené okno.
+    //
+    // Proto je převod popisku na akci VYTAŽENÝ do čisté funkce: `MenuTest`
+    // projde všechna tlačítka obou menu a trvá na tom, že žádné nespadne na
+    // NONE. Přejmenování tlačítka tak shodí test, ne hru. A NONE už nic
+    // nedělá - zavření okna je vlastní větev QUIT, aby se na něj nedalo
+    // spadnout omylem.
+    // ------------------------------------------------------------------
+
+    enum MainMenuAction { SINGLEPLAYER, OPTIONS, LAB, QUIT, NONE }
+
+    enum PauseMenuAction { RESUME, OPTIONS, SAVE_AND_QUIT, NONE }
+
+    static MainMenuAction mainMenuAction(String label) {
+        return switch (label) {
+            case "Singleplayer" -> MainMenuAction.SINGLEPLAYER;
+            case "Options" -> MainMenuAction.OPTIONS;
+            case "Lab" -> MainMenuAction.LAB;
+            case "Quit" -> MainMenuAction.QUIT;
+            default -> MainMenuAction.NONE;
+        };
+    }
+
+    static PauseMenuAction pauseMenuAction(String label) {
+        return switch (label) {
+            case "Resume" -> PauseMenuAction.RESUME;
+            case "Options" -> PauseMenuAction.OPTIONS;
+            case "Save and Quit to Title" -> PauseMenuAction.SAVE_AND_QUIT;
+            default -> PauseMenuAction.NONE;
+        };
+    }
+
+    private static void unhandled(String menu, String label) {
+        System.err.println("Tlacitko " + menu + " \"" + label + "\" nema akci - nic se nestalo");
     }
 
     /**

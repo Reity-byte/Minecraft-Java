@@ -112,6 +112,79 @@ public class MenuTest {
         check("jedno tlacitko je vycentrovane svisle",
                 Math.abs(only[1] - H / 2.0) <= 1.0, "y=" + only[1]);
 
+        actions();
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+
+    /**
+     * Kazde tlacitko obou menu musi mit akci.
+     *
+     * ⚠️ TOHLE JE REGRESNI TEST NA SKUTECNOU CHYBU. Akce se vybira podle
+     * POPISKU tlacitka, ne podle indexu (poradi se muze menit). Prejmenovani
+     * tlacitka "Texture Lab" na "Lab" proto rozpojilo jeho akci - a protoze
+     * tehdejsi switch mel vetev `default -> zavri okno`, tlacitko Lab
+     * UKONCILO HRU s navratovym kodem 0. Zadna vyjimka, zadna hlaska, jen
+     * zavrene okno; z logu to vypadalo jako normalni konec.
+     *
+     * Od te doby je prevod popisku na akci cista funkce a NONE uz nic nedela.
+     * Kdyz se tlacitko prejmenuje a zapomene se na switch, spadne tenhle test,
+     * ne hra.
+     */
+    static void actions() {
+        System.out.println();
+
+        boolean allHandled = true;
+        String orphan = "";
+
+        for (int i = 0; i < Main.MAIN_MENU_LABELS.buttonCount(); i++) {
+            String label = Main.MAIN_MENU_LABELS.label(i);
+            if (Main.mainMenuAction(label) == Main.MainMenuAction.NONE) {
+                allHandled = false;
+                orphan = label;
+            }
+        }
+        check("kazde tlacitko hlavniho menu ma akci", allHandled, orphan);
+
+        for (int i = 0; i < Main.PAUSE_MENU_LABELS.buttonCount(); i++) {
+            String label = Main.PAUSE_MENU_LABELS.label(i);
+            if (Main.pauseMenuAction(label) == Main.PauseMenuAction.NONE) {
+                allHandled = false;
+                orphan = label;
+            }
+        }
+        check("kazde tlacitko pauzy ma akci", allHandled, orphan);
+
+        // Kazde tlacitko dela NECO JINEHO - dve tlacitka na tutez akci by
+        // znamenala, ze jedno z nich je slepe.
+        java.util.Set<Main.MainMenuAction> seen = new java.util.HashSet<>();
+        boolean distinct = true;
+        for (int i = 0; i < Main.MAIN_MENU_LABELS.buttonCount(); i++) {
+            distinct &= seen.add(Main.mainMenuAction(Main.MAIN_MENU_LABELS.label(i)));
+        }
+        check("zadna dve tlacitka hlavniho menu nedelaji totez", distinct, seen.toString());
+
+        // Tlacitko Lab opravdu otevira lab, ne neco jineho.
+        check("tlacitko Lab otevira lab",
+                Main.mainMenuAction("Lab") == Main.MainMenuAction.LAB, "");
+        check("tlacitko Quit ukoncuje hru",
+                Main.mainMenuAction("Quit") == Main.MainMenuAction.QUIT, "");
+
+        // ⚠️ A hlavne: NEZNAMY popisek uz hru NEUKONCUJE. Presne tahle vetev
+        // z prejmenovaneho tlacitka udelala tichy konec hry.
+        check("neznamy popisek hlavniho menu nic nedela (uz neukoncuje hru)",
+                Main.mainMenuAction("Texture Lab") == Main.MainMenuAction.NONE
+                        && Main.mainMenuAction("") == Main.MainMenuAction.NONE
+                        && Main.mainMenuAction("neco uplne jineho") == Main.MainMenuAction.NONE, "");
+        check("neznamy popisek pauzy taky nic",
+                Main.pauseMenuAction("Quit") == Main.PauseMenuAction.NONE
+                        && Main.pauseMenuAction("") == Main.PauseMenuAction.NONE, "");
+
+        // Index mimo rozsah da prazdny popisek, ten padne na NONE - klik
+        // vedle tlacitka tedy nesmi nic spustit.
+        check("klik mimo tlacitko nic nespusti",
+                Main.mainMenuAction(Main.MAIN_MENU_LABELS.label(-1)) == Main.MainMenuAction.NONE
+                        && Main.mainMenuAction(Main.MAIN_MENU_LABELS.label(99))
+                                == Main.MainMenuAction.NONE, "");
     }
 }

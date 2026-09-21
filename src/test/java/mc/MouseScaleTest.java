@@ -100,7 +100,11 @@ public class MouseScaleTest {
     }
 
     static void menuClicks() {
-        Menu menu = new Menu("Minecraft Base", "Singleplayer", "Options", "Texture Lab", "Quit");
+        // ⚠️ SKUTECNE hlavni menu, ne kopie jeho popisku. Kopie se rozejde
+        // pri prvnim prejmenovani tlacitka a test pak meri neco jineho, nez
+        // co hra kresli - presne to se stalo pri prejmenovani "Texture Lab"
+        // na "Lab".
+        Menu menu = Main.MAIN_MENU_LABELS;
 
         for (double scale : SCALES) {
             int fbW = (int) (WINDOW_W * scale), fbH = (int) (WINDOW_H * scale);

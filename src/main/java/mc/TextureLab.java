@@ -1829,18 +1829,18 @@ public class TextureLab {
         if(skinMode())
         {
             label(layout, 8, TextureLabLayout.TITLE_Y,
-                    fit("Texture Lab   skin: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
+                    fit("Lab   skin: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
             drawSkinInfo(layout);
         }
         else if(draft == null)
         {
             label(layout, 8, TextureLabLayout.TITLE_Y,
-                    fit("Texture Lab   atlas: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
+                    fit("Lab   atlas: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
             drawTileInfo(layout);
         }
         else
         {
-            label(layout, 8, TextureLabLayout.TITLE_Y, fit("Texture Lab   new block, id "
+            label(layout, 8, TextureLabLayout.TITLE_Y, fit("Lab   new block, id "
                     + baseRegistry.nextId() + "   atlas: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
             drawFormTexts(layout);
         }

@@ -1841,6 +1841,21 @@ teď `Lab`, protože už to není jen o texturách. **Třídy ani soubory se
 nepřejmenovaly** — `TextureLab`, `TextureLabLayout` a `TextureLabTest` si nechaly
 jména; přejmenovat je by byl stostránkový diff za nic.
 
+**⚠️ AKCE TLAČÍTEK MENU SE VYBÍRÁ PODLE POPISKU, NE PODLE INDEXU** (pořadí tlačítek
+se může měnit). Cena za to je, že přejmenování tlačítka rozpojí jeho akci — a dělá
+to TIŠE. Když se „Texture Lab" přejmenoval na „Lab" a ve switchi zůstal starý
+popisek, spadl klik na větev `default -> zavři okno`: **tlačítko Lab ukončilo hru
+s návratovým kódem 0**, bez výjimky a bez hlášky, takže to z logu vypadalo jako
+normální konec.
+
+Opraveno dvěma věcmi naráz. Převod popisku na akci je vytažený do čisté funkce
+(`Main.mainMenuAction()` / `pauseMenuAction()`), takže `MenuTest` projde všechna
+tlačítka obou menu a trvá na tom, že žádné nespadne na `NONE` — přejmenování teď
+shodí test, ne hru. A `NONE` už **nic nedělá**: zavření okna je vlastní větev
+`QUIT`, aby se na něj nedalo spadnout omylem. `MouseScaleTest` si navíc bere
+`Main.MAIN_MENU_LABELS` místo vlastní kopie popisků, aby se nemohl rozejít s tím,
+co hra kreslí.
+
 **⚠️ ZÁLOŽKY BLOCKS / SKIN NAHRADIL BOČNÍ PANEL, A JE TO KVŮLI TŘETÍMU MÓDU.**
 Dva režimy se přepínaly dvěma natvrdo napsanými tlačítky (`MODE_BLOCKS`,
 `MODE_SKIN`) a rozlišovaly příznakem `skinMode()`. Třetí mód by znamenal třetí
