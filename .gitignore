@@ -44,3 +44,6 @@ saves/
 # Nastavení je vázané na konkrétní stroj (rozlišení, fullscreen) a mění se
 # při každém posunutí posuvníku - ze stejného důvodu jako saves/.
 options.json
+# Spouštěcí skript má natvrdo cestu ke konkrétní instalaci JDK, takže platí
+# jen na jednom stroji - ze stejného důvodu jako options.json.
+run.bat
