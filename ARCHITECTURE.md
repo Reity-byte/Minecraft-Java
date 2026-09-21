@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **1740 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **1914 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -72,6 +72,8 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `WaterTest` | Zaplavení po hladinu, suché jeskyně, pravidla viditelnosti stěn (ručně spočítané), suchý spawn, plavání |
 | `MainStateTest` | Stav, který nepatří `World`, ale přežije výměnu světa: **reset inventáře, obou crafting mřížek, výsledkového slotu a vybraného slotu**, reset denní doby, meze `DayCycle.setTime` (NaN, nekonečno, mimo rozsah), čas tam a zpět přes `world.dat` a **soubor ze starší verze formátu bez času**, a celá cesta svět A → svět B → načtení A zpátky |
 | `RecipeLabTest` | Recepty z labu: kontrola hodnot, **ořez vzoru na nejmenší obdélník**, `recipes.json` tam a zpět (i bajtová stabilita druhého zápisu), poškozený a chybějící soubor, **přeskočení jednoho vadného receptu a záloha `.bak`**, novější `format`, **recept z labu se chová jako vestavěný** (hledá se kdekoliv v mřížce, surovina navíc ho vyřadí, vestavěný má přednost), platnost **hned bez restartu** a logika módu (co se uloží a proč se to někdy odmítne) |
+| `KeybindTest` | Přebindování kláves: **výchozí klávesy = to, co měl `Main` natvrdo** (kontrolované proti GLFW konstantám, ne proti enumu), výchozí nastavení bez kolize, jména kláves tam a zpět včetně neznámého kódu jako `#kód`, **kolize nespustí ANI JEDNU akci** (`actionFor` null, `effectiveKey` NONE, ale `key` zůstává, aby šla opravit), tři akce na jedné klávese = jeden řádek, nepřiřazené akce nejsou kolize, `keybinds.json` tam a zpět (i bajtová stabilita druhého zápisu), sedm druhů poškozeného souboru → výchozí klávesy, jedna vadná položka shodí jen sebe, ruční kolize v souboru, `.bak`, **platnost hned po Save** i po „restartu", a mezistav výměny dvou kláves |
+| `BiomeTuningTest` | Ore/Biome Tuner: **výchozí tuning dá 25 sloupců blok po bloku stejně** jako bez něj a strop terénu vyjde na dnešních 114, výchozí čísla se čtou z `Biome` a jsou už oříznutá, hodnoty mimo meze (přehozený rozsah se **prohodí**, NaN, nulová hustota), `biome_tuning.json` tam a zpět, poškozený a chybějící soubor, `.bak`, **násobky rud** (3× v horách trefí dnešní `IRON_RARITY_MOUNTAINS`, nula = ruda v biomu není — ověřeno i přes generátor), **rozsah opravdu losuje** (měří počet různých výšek kmene i poloměrů koruny přes desítky tisíc vzorků), **výška kmene není spřažená s poloměrem koruny**, jednoprvkový rozsah dá pořád tu jednu hodnotu, **determinismus** (týž seed a souřadnice, i záporné; jiný seed = jiné stromy; kmen nikdy pod minimem), natuněný terén se opravdu zvedne, nulová hustota vypne stromy, větší koruna zvětší dosah razítkování, a **náhled staví týž strom, jaký razítkuje generátor** |
 | `SaveTest` | Ukládání: přežití změn přes unload sloupce, round-trip na disk, poškozený soubor, záporné souřadnice, obousměrnost `columnIndex`, a **svět zapsaný starší `GENERATOR_VERSION`** (načte se, změny bloků i inventář dorazí beze změny, nové chunky už mají biomy) |
 | `AsyncTest` | Async generování: shoda se synchronním blok po bloku, nejhorší `update()` při chůzi, omezený počet sloupců, kritický okruh, `shutdown()` |
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
@@ -134,6 +136,8 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `BlockRegistry` — bloky z texture labu (id 64–127) nad vestavěnými konstantami, `textures/blocks.json`; **bez GL**
 - `BlockDef` — jeden blok z labu: jméno, tvrdost, pevný, neprůhledný, dlaždice po stěnách
 - `Json` — malý čtenář a zapisovač JSON pro `blocks.json` (žádná nová závislost)
+- `BiomeTuning` — čísla generátoru po biomech (výšky, hustoty, rozsahy velikosti stromu, násobky rud), `biome_tuning.json`; **bez GL**
+- `TreeShape` — tvar jednoho stromu jako čistá funkce; razítkuje z něj generátor i náhled v labu; **bez GL**
 
 **Render**
 - `WorldRenderer` — shader, cache meshů, fronta přestaveb, obrys bloku
@@ -154,6 +158,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 
 **Nastavení a obrazovky**
 - `Options` — hodnoty nastavení, meze a `options.json`; **bez GL**
+- `Keybinds` — akce, jejich klávesy, detekce kolizí a `keybinds.json`; **bez GL**
 - `OptionsScreen` — obrazovka Options ve dvou sloupcích; hit-testy a hodnoty **bez GL**
 - `ScreenLayout` — rozvržení obrazovky v GUI pixelech a hit-testy; **bez GL**
 - `Widgets` — tlačítko, posuvník, zapuštěné pole a texty pro nové obrazovky
@@ -190,6 +195,9 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `LabMode` — rozhraní jednoho módu labu: jméno, ikona, kreslení a vstup; **přidat mód = třída + řádek v seznamu**
 - `LabSidebar` — rozvržení a hit-testy bočního pruhu, čistá aritmetika nad POČTEM módů; **bez GL**
 - `RecipeLab` — mód Recipes: mřížka 3×3, výběr bloků, výsledek a počet, ukládání
+- `KeybindLab` — mód Keys: seznam akcí ve dvou sloupcích, čekání na novou klávesu, kolize
+- `BiomeTunerLab` — mód Biomes: záložky biomů, devět čísel s `-`/`+`, náhled stromu a Reroll
+- `TreePreview` — živý strom: `TreeShape` → skutečný malý svět → `ChunkMesh` → světový shader
 - `RecipeBook` — recepty z `textures/recipes.json` nad vestavěnými, neměnný a s aktivním seznamem; **bez GL**
 - `TextureLabLayout` — rozvržení v GUI pixelech a hit-testy obou režimů; **bez GL**
 - `PixelEditor` — společný základ obou editorů: barva, tah štětcem, undo, `DirtyRect`, palety; **bez GL**
@@ -469,16 +477,31 @@ dvěma sousedními pásy musí naopak zbýt kus, kde má biom váhu přesně 1 �
 nikdy neměly svou vlastní výšku a byly by pořád jen směsí nížiny a hor. Obojí je
 v `BiomeTest` jako kontrola.
 
-| biom | základ / amplituda | povrch | stromy (z 16 buněk) | změřeno |
-|---|---|---|---|---|
-| Pláně | 64 / 20 | tráva | dub, 5 | 1 strom na 215 bloků |
-| Poušť | 67 / 9 | písek i pod povrchem | **žádné** | — |
-| Prales | 64 / 18 | tráva | pralesní, 16 (kmen 7–11, koruna ⌀7) | 1 na 67 |
-| Březový les | 64 / 18 | tráva | bříza, 10 | 1 na 107 |
-| Tajga | 64 / 16 | tráva | smrk, 10 | 1 na 104 |
-| Tundra | 65 / 11 | **sníh** | smrk, 2 | 1 na 502 |
-| Kopce | 73 / 31 | tráva | dub, 3 | 1 na 356 |
-| Hory | 84 / 42 | tráva, nad 88 **sníh** | dub, 3, jen pod hranicí lesa | 1 na 382 |
+**⚠️ VŠECHNA ČÍSLA V TÉHLE TABULCE JSOU OD ZAVEDENÍ TUNERU JEN VÝCHOZÍ HODNOTY.**
+Čte je `BiomeTuning.defaults()` přímo z enumu `Biome`, takže se s ním nemůžou
+rozejít, a `biome_tuning.json` je smí přepsat. **Bloky přepsat nejdou** — povrch
+a druh stromu zůstávají v kódu, mění se jen čísla kolem nich (viz „Ore/Biome
+Tuner"). Chybějící soubor = přesně tahle tabulka.
+
+| biom | základ / amplituda | povrch | stromy (z 16 buněk) | kmen | koruna ⌀ | rudy | změřeno |
+|---|---|---|---|---|---|---|---|
+| Pláně | 64 / 20 | tráva | dub, 5 | 4–6 | 5 | — | 1 strom na 215 bloků |
+| Poušť | 67 / 9 | písek i pod povrchem | **žádné** | — | — | — | — |
+| Prales | 64 / 18 | tráva | pralesní, 16 | 7–11 | 7 | — | 1 na 67 |
+| Březový les | 64 / 18 | tráva | bříza, 10 | 5–7 | 5 | — | 1 na 107 |
+| Tajga | 64 / 16 | tráva | smrk, 10 | 6–9 | 5 | — | 1 na 104 |
+| Tundra | 65 / 11 | **sníh** | smrk, 2 | 6–9 | 5 | — | 1 na 502 |
+| Kopce | 73 / 31 | tráva | dub, 3 | 4–6 | 5 | — | 1 na 356 |
+| Hory | 84 / 42 | tráva, nad 88 **sníh** | dub, 3, jen pod hranicí lesa | 4–6 | 5 | **železo ×3** | 1 na 382 |
+
+**Jak se ta čísla čtou: kmen je ROZSAH, koruna byla do zavedení tuneru PEVNÁ.**
+Výška kmene se odjakživa losuje hashem pozice v rozsahu druhu (dub 4–6, bříza
+5–7, smrk 6–9, prales 7–11) — „rozsah má jen prales" platilo o tabulce, ne
+o kódu. Co pevné doopravdy bylo, je **koruna**: `TreeType.layerRadius` je jedno
+pole poloměrů na druh, takže dva duby vedle sebe měly korunu blok po bloku
+totožnou a lišily se jen výškou kmene. Tuner přidává rozsah i na ni
+(`crownMin`–`crownMax`) a výchozí hodnota je jednoprvková, takže se terén
+nehnul. Viz **Ore/Biome Tuner**.
 
 Podíly ve světě vyšly 8,6–20,9 % podle seedu (nejvíc kopce, nejmíň hory) a průměrná
 délka jednoho biomu podél přímky je **114 bloků**.
@@ -641,6 +664,13 @@ se zápisem. Nasazují se proto až v `insert()`, když sloupec vstupuje mezi na
 neshodě se hlásí varování, ale **svět se i tak načte** — přijít o postavené věci je horší
 než posunutý terén. Zvýšit při každé změně, která posune terén. Historie: 1 = holý terén,
 2 = jeskyně a rudy, 3 = voda, 4 = stromy, **5 = biomy**.
+
+⚠️ **`biome_tuning.json` verzi NEZVYŠUJE, a je to záměr.** Výchozí tuning dává
+tentýž terén jako kód před tunerem (ověřeno blok po bloku), takže samotné
+zavedení souboru nic neposunulo. Když si uživatel čísla přepíše, posune si terén
+existujících světů úplně stejně, jako by přepsal kód generátoru — jen o tom ví,
+protože to udělal sám a lab mu to řekne. Verze v hlavičce je pro změny, které
+přijdou s novým buildem a hráč o nich neví.
 
 ⚠️ **Co „zpětná kompatibilita" v tomhle modelu znamená a co ne.** Zůstávají hráčovy
 změny bloků a inventář — ty jsou v souboru. Krajina kolem nich se dopočítá znovu, tedy
@@ -1471,7 +1501,9 @@ a měřítko texture labu.
 Max Framerate, Render Distance, Simulation Distance, FOV, Brightness, GUI Scale,
 Sensitivity, Invert Mouse. Vynechané jsou věci, které by musel nejdřív umět engine
 (hlasitost je mimo zadání, plynulé osvětlení jde zapnout jen přestavbou všech meshů,
-mraky a částice nejsou, přebindování kláves je mimo rozsah).
+mraky a částice nejsou). **Přebindování kláves nakonec vzniklo, ale v labu**
+(viz „Keybind Lab") — je to editor se seznamem a detekcí kolizí, ne řádek
+v Options.
 
 **⚠️ Render distance nikdy není větší než simulation distance.** Simulation distance
 je, kam se sloupce NAČÍTAJÍ (generují, svítí, drží změny a předměty na zemi); render
@@ -1871,7 +1903,9 @@ módů a ikonu si kreslí každý mód sám.
 modes.add(new PixelMode(Mode.BLOCKS, "Blocks", "…"));
 modes.add(new PixelMode(Mode.SKIN,   "Skin",   "…"));
 modes.add(recipeLab);
-// příští: modes.add(new KeybindLab(…));
+modes.add(keybindLab);   // Keys
+modes.add(biomeLab);     // Biomes
+// příští: modes.add(new SoundLab(…));
 ```
 
 **⚠️ ŠÍŘKA PRUHU 32 GUI PIXELŮ JE SPOČÍTANÁ, NE ODHADNUTÁ.** Lab bere největší
@@ -1906,9 +1940,14 @@ větvemi, protože sdílí plátno, paletu, HSV, hex i undo — rozdělit je na 
 by znamenalo dělat každou opravu malování dvakrát. Navenek jsou to přesto dva
 samostatné `LabMode`, takže se panel nemusí ptát, jestli jsou „vlastně jeden".
 
-**Klávesa F6 se nezměnila**, otevírá a zavírá celý lab jako dřív. Kolečko myši
-teď jde do aktivního módu (Recipes jím roluje přehledem bloků); ostatní módy ho
-ignorují.
+**Klávesa F6 se nezměnila**, otevírá a zavírá celý lab jako dřív — jen už je
+přebindovatelná jako všechno ostatní (viz **Keybind Lab**), takže se `TextureLab`
+ptá `Keybinds`, ne konstanty. Kolečko myši jde do aktivního módu (Recipes jím
+roluje přehledem bloků, Biomes přepíná biom); ostatní módy ho ignorují.
+
+**Módů je teď pět** — Blocks, Skin, Recipes, Keys, Biomes — a do pruhu se jich
+vejde osm (`LabSidebar.capacity(300)`). `LabSidebar` ani jeho test se kvůli
+dvěma novým nezměnily ani o řádek, což je přesně to, co ten refaktor sliboval.
 
 ### Recipe Lab a `textures/recipes.json`
 
@@ -1977,6 +2016,218 @@ z labu se nedá upravit ani smazat jinak než ručním zásahem do souboru,
 suroviny jsou vždycky po jednom kuse (recept „devět cihel" jde, „tři kameny
 z jednoho slotu" ne, protože tak crafting nefunguje), a výsledkem je blok —
 předměty pořád neexistují.
+
+### Keybind Lab a `keybinds.json`
+
+**Čtvrtý mód labu: přebindování kláves.** Dvacet sedm pojmenovaných akcí ve
+dvou sloupcích, u každé tlačítko s aktuální klávesou. Klik na tlačítko ho
+přepne do „stiskni novou klávesu" (zezelená), další stisk klávesu nastaví.
+Save zapíše soubor a zároveň klávesy aktivuje.
+
+**Co všechno bylo natvrdo v `Main`** — a je to celý seznam, ne výběr: pohyb
+`WASD`, skok `Space`, sprint `LShift`, plížení a klesání v letu `LCtrl`,
+inventář `E`, vyhození `Q` (s `Ctrl` celá hromádka), pauza `Esc`, pohled `F5`,
+ladicí výpis `F3`, lab `F6`, celá obrazovka `F11`, vsync `V`, posun času `T`,
+let `F`, noclip `C` a devět slotů hotbaru `1`–`9`.
+
+**⚠️ PLÍŽENÍ A KLESÁNÍ V LETU JSOU JEDNA AKCE, NE DVĚ.** V `Main` to byly dva
+řádky nad toutéž klávesou (`inputSneak` i `inputDescend` z `LCtrl`). Dvě
+samostatné akce se stejnou výchozí klávesou by znamenaly, že hra **startuje
+s kolizí**, tedy s nefunkčním Ctrl. Jedna akce, dva efekty — co z toho platí,
+rozhodne `Player` jako dosud.
+
+**⚠️ KOLIZE ZNAMENÁ, ŽE KLÁVESA NEDĚLÁ NIC.** `actionFor()` vrátí `null`, když
+klávesu nemá žádná akce **i když ji mají dvě**, a `effectiveKey()` vrátí `NONE`.
+Obě alternativy jsou horší: spustit obě akce znamená, že jeden stisk otevře
+inventář a zároveň vypne vsync, a spustit „tu první" znamená, že o chování
+rozhoduje pořadí v enumu, které uživatel nevidí.
+
+**⚠️ KOLIZE SE HLÁSÍ V UI, NE NA KONZOLI.** Kolidující tlačítko zčervená **a pod
+seznamem stojí věta** „E = Inventory + Toggle VSync — neither one fires".
+Samotná barva by nestačila: na tmavém pozadí se ztratí a barvoslepému uživateli
+neřekne nic. **Save kolizi odmítne uložit** a řekne proč — nastavení, ve kterém
+dvě klávesy nefungují, by byla past, na kterou se přijde až ve hře. Přiřadit
+kolizi ale jde: mezistav výměny dvou kláves je vždycky kolize, takže bránit jí
+už při přiřazení by znamenalo, že prohodit dvě klávesy nejde vůbec.
+
+**⚠️ ESCAPE ZAVÍRÁ VŽDYCKY, i když je `PAUSE` přebindovaná jinam nebo v kolizi.**
+Je to jediná klávesa, kterou se zavírá inventář, pauza i lab; bez téhle pojistky
+by stačil jeden překlep v `keybinds.json` a hráč by se z otevřené obrazovky
+nedostal jinak než zabitím procesu. `Main` to má jako vlastní větev vedle akce.
+Přiřadit `Esc` jinam jde jen ruční úpravou souboru — v labu ho čekání na klávesu
+bere jako „zrušit", protože uživatel, který v tom režimu mačká Esc, z něj skoro
+jistě chce utéct.
+
+**⚠️ PŘI ČEKÁNÍ NA KLÁVESU SI MÓD BERE ÚPLNĚ VŠECHNY.** Jinak by se klávesa labu
+(`F6`) místo přiřazení chytla jako „zavři lab" a přiřadit ji by nešlo.
+
+**Soubor `keybinds.json` v pracovním adresáři** (vedle `options.json`, ne
+v `textures/` — klávesy jsou nastavení stroje, ne data k texturám), stejným
+vzorem jako `options.json`: atomický zápis přes `.tmp`, záloha do `.bak`,
+chybějící soubor = vestavěné klávesy mlčky, jedna vadná položka shodí jen sebe
+(ta akce zůstane na výchozí klávese), novější `format` se načte s varováním.
+
+```json
+{
+  "format": 1,
+  "keys": {
+    "forward": "W",
+    "jump": "SPACE",
+    "sneak": "LEFT CTRL",
+    "lab": "F6",
+    "hotbar1": "1"
+  }
+}
+```
+
+**⚠️ V souboru je JMÉNO klávesy, ne kód.** „F6" jde v ručně upraveném souboru
+přečíst, 295 ne — tentýž důvod, proč je vzor receptu pole čísel bloků po
+řádcích. Klávesa, kterou tabulka jmen nezná, se zapíše jako `"#295"` a tak se
+i přečte, takže je převod tam a zpět úplný i pro ni. `"NONE"` je akce bez
+klávesy. ⚠️ `GLFW_KEY_UNKNOWN` je −1, tedy totéž číslo jako naše `NONE`, takže
+se takový stisk zahodí — jinak by se z „nerozpoznaná klávesa" stalo „žádná
+klávesa" a akce by tiše zmizela.
+
+**Platí hned po Save, bez restartu.** `Main` se ptá `Keybinds.active()`, ne
+souboru; pořadí je „zapsat, pak aktivovat", jako u receptů.
+
+**⚠️ Při tom se opravila záměna konvence u `LabMode.key()`.** Rozhraní říká
+„vrací true, když mód klávesu spotřeboval", ale `Main` návratovou hodnotu bral
+jako „zavři lab". `PixelMode` se řídil Mainem (vracel true na Esc a F6),
+`RecipeLab` rozhraním (vracel true na Delete) — takže **Delete v módu Recipes
+vymazal mřížku A ZAVŘEL LAB, kdežto Esc v něm lab nezavíral vůbec**. Teď
+rozhoduje o zavření hub (`TextureLab.key`) a mód jen hlásí, jestli si klávesu
+vzal; Keybind Lab na tom stojí, protože při čekání na klávesu si musí vzít
+všechno.
+
+**Meze:** jedna klávesa na akci (žádné alternativní bindy), bez modifikátorů
+(`Ctrl+Q` na vyhození celé hromádky zůstává natvrdo jako varianta `Q`), tlačítka
+myši se přebindovat nedají a klávesy obrazovek mimo hru (psaní do polí, Enter,
+šipky v seznamu světů) taky ne — ty nejsou herní akce.
+
+### Ore/Biome Tuner a `biome_tuning.json`
+
+**Pátý mód labu: čísla generátoru po biomech.** Nahoře záložka na každý z osmi
+biomů, vlevo devět čísel s `-` a `+`, vpravo živý 3D náhled jednoho stromu toho
+biomu a pod ním `Reroll`. Čísla: základní výška, amplituda, hustota stromů
+(z 16 buněk), **rozsah výšky kmene** (min/max), **rozsah poloměru koruny**
+(min/max) a **násobky hustoty železa a uhlí**.
+
+**⚠️ TUNER MĚNÍ JEN ČÍSLA, NIKDY BLOKY.** Nejde v něm vybrat, co se má pokládat
+— dub zůstane dub a sníh sníh. Je to tatáž hranice, kvůli které musí být bloky
+generátoru vestavěné a ne z `blocks.json`: **generátor musí fungovat i bez
+nepovinného souboru**, takže se na něj nesmí vázat ničím, co by z něj udělalo
+zdroj pravdy. Chybějící `biome_tuning.json` znamená dnešní pevné hodnoty
+z kódu, bit po bitu — ověřeno v `BiomeTuningTest` porovnáním 25 sloupců blok po
+bloku.
+
+**⚠️ GENERÁTOR SI TUNING VEZME PŘI SVÉM VZNIKU, NE PŘI KAŽDÉM SLOUPCI.**
+`TerrainGenerator` je neměnná třída a na té neměnnosti stojí generování bez
+zámku na worker vlákně. Kdyby četl `BiomeTuning.active()` za běhu, mohly by se
+parametry změnit uprostřed světa a **sousední sloupce by na sebe přestaly
+navazovat** — na švu chunků by vznikla svislá zeď. Snapshot v konstruktoru to
+řeší konstrukčně.
+
+**Co to udělá s existujícím světem — ověřeno, a sedí to na dosavadní mechanismus.**
+Ukládá se rozdíl proti generátoru, takže se terén při načtení dopočítá znovu,
+a to generátorem s aktuálním tuningem. **Změna čísel proto posune krajinu i tam,
+kde už hráč byl, přesně jako by se změnil kód generátoru; hráčovy stavby
+a inventář zůstanou.** Je to táž cena, jakou stálo zavedení jeskyní, vody,
+stromů i biomů, takže se nemuselo ošetřovat nijak zvlášť — jen se o tom píše
+v labu rovnou pod tlačítky („applies to the next world you create or load, not
+this one"). **`GENERATOR_VERSION` se nezvyšovalo**: výchozí tuning dává tentýž
+terén jako dřív a verze v hlavičce je pro změny kódu, ne pro uživatelova čísla.
+Kdo si natuní vlastní hodnoty, mění si terén vědomě.
+
+**Randomizace velikosti stromu: co bylo a co přibylo.** Výška kmene se
+odjakživa losuje hashem pozice v rozsahu druhu — `trunkMin + hash % trunkVariants`
+— takže dub roste 4–6, bříza 5–7, smrk 6–9 a prales 7–11. Nové jsou dvě věci:
+
+1. **Rozsah si nese BIOM, ne druh stromu.** Smrk v tajze a smrk v tundře můžou
+   mít každý jiný rozsah, aniž by přibyl druh stromu.
+2. **Poloměr koruny se losuje taky.** Tohle je ta změna, kvůli které přestanou
+   stromy jednoho druhu vypadat jako kopie: `TreeType.layerRadius` je pevné pole
+   poloměrů, takže dva duby vedle sebe měly korunu blok po bloku totožnou.
+   Tuner dá rozsah (`crownMin`–`crownMax`) a generátor z něj vylosuje poloměr;
+   **delta se přičte ke KAŽDÉ vrstvě**, takže se koruna zvětší celá a ne jen
+   nejširší patro.
+
+**⚠️ VRSTVA S POLOMĚREM 0 ZŮSTÁVÁ NULOVÁ.** Smrk má špičku jako jeden blok
+a kdyby ji delta zvětšila, přestal by být kužel a stal by se z něj další dub
+s useknutým vrškem — rozsahem velikosti se má měnit velikost druhu, ne jeho
+silueta.
+
+**⚠️ KORUNA LOSUJE Z JINÉ SOUŘADNICE HASHE NEŽ KMEN** (`y = 2` proti `y = 1`).
+Se stejnou by byl vysoký kmen vždycky spřažený se širokou korunou a les by
+vypadal jako řada zvětšenin jednoho stromu. A protože se `y = 2` dosud nikde
+nepoužívalo, nemohl tenhle hash změnit ani jedno z dosavadních čísel.
+`BiomeTuningTest` obojí měří: že rozsah pokryje všechny hodnoty (ne že se
+randomizace tiše nepoužije) a že spřažené nejsou.
+
+**⚠️ PŘI JEDNOPRVKOVÉM ROZSAHU SE HASH VŮBEC NEVOLÁ.** Není to úspora — je to
+záruka, že se na výchozím tuningu dá terén porovnat bit po bitu s tím, co hra
+dělala před tunerem.
+
+**⚠️ DOSAH RAZÍTKOVÁNÍ I STROP TERÉNU SE POČÍTAJÍ Z TUNINGU.** `TREE_REACH` byl
+statický a odvozený z dat druhů; teď je instanční a bere se z největšího
+povoleného poloměru koruny, jinak by se natuněné koruny ořezaly přesně na švech
+chunků. Totéž strop terénu: počítá se z nejvyššího kmene, jaký v tomhle tuningu
+může vyrůst, aby se nad terén vždycky vešla koruna. S výchozími hodnotami vyjde
+na dnešních 114.
+
+**Násobky rud místo jedné konstanty.** `ironDensity` a `coalDensity` jsou
+násobky MNOŽSTVÍ, ne vzácnosti: 3 znamená třikrát víc žil. ⚠️ Hustota žil je
+1/vzácnost, takže se násobkem **dělí** — a výchozí hory to musí trefit přesně:
+`60 / 3 = 20`, což je dnešní `IRON_RARITY_MOUNTAINS` (`CaveTest`
+i `BiomeTuningTest` to porovnávají). **Vzácnost se počítá dopředu
+v konstruktoru do pole po biomech**, protože `oreAt()` běží na každém bloku
+kamene a dělení by se počítalo statisíckrát na sloupec. Nula znamená „ruda
+v tom biomu není" a žíla se ani nezkusí — dělením by jinak vyšlo nekonečno.
+Uhlí je takhle tunable „zadarmo", takže rozšíření na další rudu je řádek dat,
+ne nový systém.
+
+**⚠️ Meze nejsou kosmetika.** Základ 8–110, amplituda 0–60, hustota stromů 0–16,
+kmen 1–16, poloměr koruny 0–6, násobek rudy 0–8. Poloměr 7 by dal korunu širší
+než chunk a strom by se musel hledat o dva sloupce dál. **Přehozený rozsah se
+PROHODÍ, ne ořeže na jedno číslo**: „min 9, max 4" je skoro jistě překlep
+a srovnat obojí na 9 by tiše zahodilo půlku rozsahu a strom by se přestal měnit.
+
+**⚠️ Výchozí hodnoty se čtou z `Biome`, neopisují se.** Vlastní kopie čísel by
+se s enumem rozešla při první změně tam a „chybějící soubor = dnešní hra" by
+přestalo platit, aniž by to někdo poznal. Při psaní testu to rovnou chytlo, že
+poušť (`TreeType.NONE`) má v datech kmen 0, což je mimo meze — výchozí hodnoty
+proto procházejí `clamped()`, jinak by uložený a znovu načtený výchozí tuning
+vyšel jinak než výchozí.
+
+**Živý náhled: JEDEN STROM, ne kus krajiny.** Náhled celého terénu by znamenal
+generovat a mešovat stovky sloupců při každém kliknutí na `+` — a na malém
+obrázku by se stejně nepoznalo, že se amplituda změnila o dva. Jeden strom je
+naopak přesně to, co jde na rozsazích vidět. Jde celou cestou jako hra, stejně
+jako náhled bloku: `TreeShape.stamp()` — **tentýž kód, jakým razítkuje
+generátor** — do skutečného malého světa, světlo spočítá `LightEngine`, sekce
+postaví `ChunkMesh.build()` a kreslí je světový shader s týmž atlasem. Výšku
+kmene i poloměr koruny si náhled **nevymýšlí `Random`em**, ptá se
+`TerrainGenerator.trunkHeight()` a `crownDelta()`, takže je každý ukázaný strom
+doopravdy někde ve světě.
+
+**⚠️ ZMĚNA PARAMETRU PŘESTAVÍ NÁHLED, ALE NEPŘELOSUJE HO — TO DĚLÁ AŽ REROLL.**
+Zvoleno takhle, a ne „přegenerovat s novým vzorkem": kdyby se s každým
+kliknutím losovalo znovu, nešlo by poznat, jestli se strom změnil kvůli té
+úpravě, nebo kvůli kostce — a to je přesně ta chvíle, kdy se na něj uživatel
+dívá. Při pevném vzorku je jediná proměnná ta úprava. Rozsah je ale k tomu, aby
+se stromy lišily, takže se musí dát podívat i na jiné losování; od toho je
+`Reroll`, což je posun souřadnic vzorku o velké nekulaté kroky (sousední
+souřadnice by daly podobný hash a „reroll" by občas nic neudělal).
+
+**⚠️ Náhled uklízí PŘESNĚ TY BLOKY, KTERÉ POLOŽIL**, ne kvádr kolem stromu.
+Vyčistit celý kvádr by znamenalo tisíce změn bloku s přepočtem světla u každé;
+takhle je jich tolik, kolik má strom. Poušť ukáže plošinku z písku bez stromu,
+což je pravda o tom biomu.
+
+**Meze:** biom se v tuneru nedá založit ani smazat, prahy výběru biomu
+(teplota/vlhkost/reliéf, `BAND`) tunable nejsou — kdyby šly, dala by se pásma
+překrýt a váhy by vyšly záporné (viz **Biomy**) — a jeskyně, hloubková pásma
+rud ani frekvence šumu se nemění.
 
 ### Bloky z labu (datově řízené)
 
@@ -2223,7 +2474,9 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | F3 | ladicí výpis vlevo nahoře — schovat / ukázat (výchozí: ukázaný) |
 | F11 | okno / celá obrazovka (uloží se do `options.json`) |
 | F6 | lab (znovu F6 nebo Esc zavře); taky z hlavního menu „Lab" |
-| v labu: boční panel vlevo | módy Blocks / Skin / Recipes — ikona přepíná, najetí myší řekne jméno |
+| v labu: boční panel vlevo | módy Blocks / Skin / Recipes / Keys / Biomes — ikona přepíná, najetí myší řekne jméno |
+| v labu Keys: klik na klávesu | čeká na nový stisk (Esc zruší); kolize červeně a Save ji odmítne |
+| v labu Biomes: záložky / `-` `+` / kolečko | biom / číslo generátoru / přepnutí biomu; Reroll losuje nový strom |
 | v labu Recipes: LMB / PMB / kolečko | položit vybraný blok do mřížky / vymazat buňku / rolovat přehledem bloků |
 | v labu: New block / Import PNG | nový blok z labu (Esc zruší) / načíst `textures/import.png` (atlas 128×128, kůže 64×64); PNG přetažené do okna se naimportuje hned |
 | v labu: F3 | měření vykreslení labu — čas fází a počet draw callů |
@@ -2237,6 +2490,11 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | LMB / PMB | těžit / položit |
 | F / C | let / noclip — **ladicí klávesy, platí v obou módech** |
 | V / Esc | vsync / pauza |
+
+⚠️ **Všechny herní klávesy v téhle tabulce jsou VÝCHOZÍ hodnoty** a dají se
+přebindovat v labu (mód Keys, soubor `keybinds.json`). Escape platí vždycky,
+i kdyby byla pauza přebindovaná jinam. Klávesy obrazovek mimo hru (psaní do
+polí, Enter, šipky v seznamu světů) přebindovat nejdou.
 
 Hráč: hitbox 0,6 × 1,8, oči 1,62, chůze 4,3 b/s, gravitace 28 b/s², skok **1,19 bloku**
 (vyskočí na jednoblokový schod, ne na dvoublokový).
@@ -2268,7 +2526,18 @@ export i import PNG, paleta celého atlasu, zakládání nových bloků do `text
 a skládání receptů do `textures/recipes.json`. **Přidat další mód je třída a jeden řádek
 v seznamu** — viz „Lab jako hub s bočním panelem". Zbývá: víc atlasů / resource packy, úpravy
 a mazání bloků i receptů z labu, vlastní tvary, průsvitné bloky, animované textury.
-Nápady na další módy: Keybind Lab, Ore / Biome Tuner, prefab nástroj, sound lab.
+Nápady na další módy: prefab nástroj, sound lab.
+
+**Přebindování kláves — hotovo.** Mód Keys píše `keybinds.json`; 27 akcí,
+kolize se hlásí v UI a Save je odmítne uložit, platí hned bez restartu. Zbývá:
+alternativní bindy, modifikátory a tlačítka myši.
+
+**Ore / Biome Tuner — hotovo.** Mód Biomes píše `biome_tuning.json`: základní
+výška, amplituda, hustota stromů, rozsah výšky kmene i poloměru koruny
+a násobky hustoty železa a uhlí, pro každý z osmi biomů. Živý náhled jednoho
+stromu přes skutečnou geometrii generátoru a tlačítko Reroll. **Jen čísla,
+nikdy bloky.** Zbývá: prahy výběru biomu, hloubková pásma rud, jeskyně
+a náhled kusu terénu.
 
 **Jeskyně a rudy — hotovo.** 3D šum, uhlí a železo s vlastními hloubkami, v horách 3× víc
 železa. Přidat další rudu = konstanta ve `World`, řádek v `oreAt()`, dlaždice
@@ -2318,7 +2587,11 @@ v `ContainerScreen`; shift-klik by pak přesouval mezi truhlou a inventářem.
 
 **Stromy — hotovo.** Čtyři druhy podle biomu — dub, bříza, smrk a pralesní strom —
 s vlastní výškou kmene i tvarem koruny, jeden na buňku 8×8, jen na trávě nad hladinou.
-Každý kmen dává 4 prkna. Zbývá: keře a sazenice, ovoce, stromy z víc než jednoho kmene.
+Každý kmen dává 4 prkna. **Velikost se losuje v rozsahu, který si nese biom** —
+výška kmene odjakživa, poloměr koruny nově (viz „Ore/Biome Tuner"), takže dva
+stromy téhož druhu vedle sebe už nejsou kopie. Tvar razítkuje `TreeShape`,
+z něhož si bere i živý náhled v labu. Zbývá: keře a sazenice, ovoce, stromy
+z víc než jednoho kmene.
 
 **Tvary bloků — hotovo.** `BlockModels` jako kvádrový systém, pochodeň a plot jako první
 dva nekrychlové bloky. Postavené tak, aby na tom stály schody, desky a další.
@@ -2353,8 +2626,9 @@ a mraky.
 
 **Správa světů a nastavení — hotovo.** Výběr z víc světů s náhledy, zakládání se jménem
 a seedem, mazání s potvrzením, obrazovka Options s okamžitým účinkem a `options.json`.
-Zbývá: přejmenování světa, volby při zakládání nad rámec seedu (typ světa, bonusová truhla),
-přebindování kláves a hlasitost.
+Zbývá: přejmenování světa, volby při zakládání nad rámec seedu (typ světa, bonusová truhla)
+a hlasitost. **Přebindování kláves je hotové** — ne v Options, ale v labu (viz
+„Keybind Lab"): je to editor jako Recipe Lab, ne deset posuvníků.
 
 **Známé zjednodušení u vody:** neteče a nešíří se — je to jen statická výplň pod hladinou.
 Jezero se dá zasypat, ale ne vypustit ani přelít. Chybí i utopení a bubliny.
