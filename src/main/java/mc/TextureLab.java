@@ -400,9 +400,29 @@ public class TextureLab {
         current().release();
     }
 
+    /**
+     * Klávesa. Vrací true, když se má lab ZAVŘÍT.
+     *
+     * ⚠️ O ZAVŘENÍ ROZHODUJE HUB, NE MÓD. Mód jen řekne, jestli si klávesu
+     * vzal (`LabMode.key`); zavírá se, až když si ji nevzal nikdo a je to
+     * Esc nebo klávesa labu. Dřív vracel mód rovnou "zavři" a dvě jeho
+     * implementace si to vyložily opačně - `PixelMode` vracel true na Esc
+     * (tedy "zavři"), `RecipeLab` na Delete (chtěl říct "spotřebováno"),
+     * takže Delete v módu Recipes vymazal mřížku A ZAVŘEL LAB, kdežto Esc
+     * v něm lab nezavíral vůbec. Tady je ta otázka jen jedna a ptá se na
+     * ni jedno místo.
+     */
     public boolean key(int key, int mods)
     {
-        return current().key(key, mods);
+        if(current().key(key, mods))
+        {
+            return false;
+        }
+
+        // Klávesa labu zavírá lab, ať je přebindovaná kamkoliv; Esc platí
+        // vždycky, aby se z labu šlo dostat i s rozbitým keybinds.json.
+        return key == GLFW_KEY_ESCAPE
+                || Keybinds.active().actionFor(key) == Keybinds.Action.LAB;
     }
 
     public void typed(int codepoint)
@@ -1217,6 +1237,12 @@ public class TextureLab {
      * Klávesa. Vrací true, když se má lab zavřít (Esc, F6).
      * Při psaní hexu nebo jména patří klávesy poli, ne zkratkám.
      */
+    /**
+     * Klávesy módů Blocks a Skin. Vrací true = KLÁVESU JSEM SI VZAL, takže
+     * ji hub už nemá brát jako "zavři lab" (viz TextureLab.key). Při psaní
+     * do hexu nebo do jména bloku si mód bere všechno, jinak by Esc uprostřed
+     * psaní zavřel celý lab místo toho, aby zrušil rozepsané pole.
+     */
     private boolean keyPixel(int key, int mods)
     {
         boolean ctrl = (mods & GLFW_MOD_CONTROL) != 0;
@@ -1244,7 +1270,7 @@ public class TextureLab {
                     hexInput.append(digit);
                 }
             }
-            return false;
+            return true;
         }
 
         if(editingName)
@@ -1259,7 +1285,7 @@ public class TextureLab {
                 draft.name = draft.name.substring(0, draft.name.length() - 1);
             }
             // Písmena přijdou přes typed(); zkratky se při psaní nespouští.
-            return false;
+            return true;
         }
 
         // F3 jako ladicí výpis ve hře: čas fází vykreslení labu a draw cally.
@@ -1267,7 +1293,7 @@ public class TextureLab {
         {
             profiler.toggle();
             say(profiler.enabled() ? "Frame timing on" : "Frame timing off");
-            return false;
+            return true;
         }
 
         if(ctrl && key == GLFW_KEY_Z)
@@ -1278,13 +1304,13 @@ public class TextureLab {
             {
                 refreshPreview();
             }
-            return false;
+            return true;
         }
 
         if(ctrl && key == GLFW_KEY_S)
         {
             save();
-            return false;
+            return true;
         }
 
         // Esc v novém bloku ruší blok, ne celý lab - rozepsaná práce se tak
@@ -1294,10 +1320,10 @@ public class TextureLab {
             cancelBlock();
             refreshPreview();
             say("New block cancelled");
-            return false;
+            return true;
         }
 
-        return key == GLFW_KEY_ESCAPE || key == GLFW_KEY_F6;
+        return false;
     }
 
     private void commitHex()

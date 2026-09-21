@@ -383,17 +383,27 @@ public class Main {
         });
 
         glfwSetKeyCallback(window, (win, key, scancode, action, mods) -> {
+            // ⚠️ VŠECHNY KLÁVESY HRY JDOU PŘES Keybinds, ŽÁDNÁ UŽ NENÍ
+            // NAPEVNO. actionFor() vrátí null, když klávesa nikomu nepatří
+            // NEBO když ji mají dvě akce - kolize tedy nespustí ani jednu,
+            // místo aby tiše spustila obě (viz Keybinds).
+            Keybinds.Action bound = Keybinds.active().actionFor(key);
+
             // Q vyhodí z ruky jeden kus, Ctrl+Q celou hromádku - jako v Minecraftu.
             // Držené Q sype dál po jednom, proto se bere i opakování klávesy.
-            if (key == GLFW_KEY_Q && state == GameState.PLAYING
+            if (bound == Keybinds.Action.DROP && state == GameState.PLAYING
                     && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
                 dropFromHand((mods & GLFW_MOD_CONTROL) != 0);
                 return;
             }
 
             // Lab dostává i opakování klávesy - držené Backspace nebo Ctrl+Z.
-            // Zavírá se ale jen stiskem: podržené F6 by jinak lab otevřelo
-            // a opakováním hned zase zavřelo.
+            // Zavírá se ale jen stiskem: podržená klávesa labu by ho jinak
+            // otevřela a opakováním hned zase zavřela.
+            //
+            // ⚠️ Lab dostává SUROVÝ kód klávesy, ne akci. Keybind Lab totiž
+            // potřebuje zachytit i tu klávesu, na kterou se zrovna něco
+            // přebindovává - a ta v tu chvíli žádnou akci znamenat nemá.
             if (state == GameState.TEXTURE_LAB) {
                 if (action != GLFW_RELEASE && lab.key(key, mods) && action == GLFW_PRESS) {
                     closeTextureLab();
@@ -405,8 +415,8 @@ public class Main {
             // v poli se jménem), zavírají se ale jen stiskem.
             if (state == GameState.OPTIONS || state == GameState.SELECT_WORLD
                     || state == GameState.CREATE_WORLD) {
-                if (action == GLFW_RELEASE || key == GLFW_KEY_F11) {
-                    // F11 propadne dolů k přepnutí fullscreenu.
+                if (action == GLFW_RELEASE || bound == Keybinds.Action.FULLSCREEN) {
+                    // Fullscreen propadne dolů k přepnutí celé obrazovky.
                     if (action != GLFW_PRESS) {
                         return;
                     }
@@ -420,23 +430,27 @@ public class Main {
                 return;
             }
 
-            // F11 přepíná celou obrazovku odkudkoliv, jako v Minecraftu.
-            if (key == GLFW_KEY_F11) {
+            // Fullscreen se přepíná odkudkoliv, jako v Minecraftu.
+            if (bound == Keybinds.Action.FULLSCREEN) {
                 options.setFullscreen(!options.fullscreen());
                 applyOptions();
                 saveOptions();
                 return;
             }
 
-            // F6 otevře texture lab ze hry i z hlavního menu. Volná klávesa:
-            // Minecraft ji nepoužívá, F3 je ladicí výpis a F5 pohled.
-            if (key == GLFW_KEY_F6 && (state == GameState.PLAYING || state == GameState.MAIN_MENU)) {
+            // Lab jde otevřít ze hry i z hlavního menu.
+            if (bound == Keybinds.Action.LAB
+                    && (state == GameState.PLAYING || state == GameState.MAIN_MENU)) {
                 openTextureLab();
                 return;
             }
 
-            // Escape už hru nezavírá - přepíná pauzu. Zavřít jde z menu.
-            if (key == GLFW_KEY_ESCAPE) {
+            // ⚠️ ESCAPE ZAVÍRÁ VŽDYCKY, i když je akce PAUSE přebindovaná
+            // jinam nebo je v kolizi. Je to jediná klávesa, kterou se dá
+            // zavřít inventář a vyvolat pauza; bez téhle pojistky by stačil
+            // jeden překlep v keybinds.json a hráč by se z otevřené
+            // obrazovky nedostal jinak než zabitím procesu.
+            if (key == GLFW_KEY_ESCAPE || bound == Keybinds.Action.PAUSE) {
                 if (state == GameState.CONTAINER) {
                     closeContainer();
                     return;
@@ -449,9 +463,9 @@ public class Main {
                 return;
             }
 
-            // E zavírá otevřený kontejner. Musí být před testem na PLAYING,
-            // protože ve stavu CONTAINER se hra nehýbe.
-            if (key == GLFW_KEY_E) {
+            // Inventář zavírá otevřený kontejner. Musí být před testem na
+            // PLAYING, protože ve stavu CONTAINER se hra nehýbe.
+            if (bound == Keybinds.Action.INVENTORY) {
                 if (state == GameState.CONTAINER) {
                     closeContainer();
                 } else if (state == GameState.PLAYING) {
@@ -464,40 +478,39 @@ public class Main {
                 return;
             }
 
-            // ⚠️ C a F jsou LADICÍ klávesy a zůstávají jimi: platí v obou
-            // módech a obcházejí pravidla schválně, stejně jako T (posun času).
-            // C = noclip (proletět čímkoliv), F = volný let (bez gravitace).
-            // Jsou to dvě různé věci: v letu kolize pořád platí, a právě proto
-            // se C do creativu nehodí - creative let v Minecraftu koliduje.
-            if (key == GLFW_KEY_C) {
+            // ⚠️ NOCLIP a FLY jsou LADICÍ klávesy a zůstávají jimi: platí
+            // v obou módech a obcházejí pravidla schválně, stejně jako
+            // posun času. Jsou to dvě různé věci: v letu kolize pořád platí,
+            // a právě proto se noclip do creativu nehodí - creative let
+            // v Minecraftu koliduje.
+            if (bound == Keybinds.Action.NOCLIP) {
                 player.noclip = !player.noclip;
             }
-            if (key == GLFW_KEY_F) {
+            if (bound == Keybinds.Action.FLY) {
                 toggleFlight();
             }
 
-            // Herní přepnutí letu: dvojstisk mezerníku, jen v creative.
-            if (key == GLFW_KEY_SPACE && mode.canFly() && flyTap.tap(glfwGetTime())) {
+            // Herní přepnutí letu: dvojstisk skoku, jen v creative.
+            if (bound == Keybinds.Action.JUMP && mode.canFly() && flyTap.tap(glfwGetTime())) {
                 toggleFlight();
             }
-            // F3 schová a zase ukáže ladicí výpis.
-            if (key == GLFW_KEY_F3) {
+            if (bound == Keybinds.Action.DEBUG) {
                 showDebug = !showDebug;
             }
-            // F5 přepíná pohled: první osoba -> zezadu -> zepředu -> zpět.
-            if (key == GLFW_KEY_F5) {
+            // Pohled: první osoba -> zezadu -> zepředu -> zpět.
+            if (bound == Keybinds.Action.VIEW) {
                 camera.view = camera.view.next();
             }
-            // výběr slotu hotbaru číselnými klávesami
-            if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) {
-                selectedSlot = key - GLFW_KEY_1;
+            // Výběr slotu hotbaru. Slot si nese sama akce, takže se dá
+            // přebindovat i jednotlivý slot, ne jen celá řada.
+            if (bound != null && bound.hotbarSlot() >= 0) {
+                selectedSlot = bound.hotbarSlot();
             }
-            // T posune čas o desetinu cyklu - na noc se jinak čeká minuty.
-            // V přepíná vsync; strop FPS a zbytek nastavení je v Options.
-            if (key == GLFW_KEY_T) {
+            // Posun času o desetinu cyklu - na noc se jinak čeká minuty.
+            if (bound == Keybinds.Action.SKIP_TIME) {
                 day.skip(0.1f);
             }
-            if (key == GLFW_KEY_V) {
+            if (bound == Keybinds.Action.VSYNC) {
                 options.setVsync(!options.vsync());
                 applyOptions();
                 saveOptions();
@@ -734,6 +747,22 @@ public class Main {
         // recept smí odkazovat na blok z labu a neznámý blok recept vyřadí.
         // Chybějící soubor = prázdný seznam a jen vestavěné recepty.
         RecipeBook.activate(RecipeBook.load(RecipeBook.FILE));
+
+        // Klávesy z labu (keybinds.json). Nezávislé na všem ostatním -
+        // chybějící soubor znamená přesně ty klávesy, které měl Main
+        // dřív natvrdo.
+        Keybinds.activate(Keybinds.load(Keybinds.FILE));
+        System.out.println("Klavesy: " + (Keybinds.active().isDefault() ? "vychozi" : "vlastni")
+                + (Files.isRegularFile(Keybinds.FILE) ? " (" + Keybinds.FILE.toAbsolutePath() + ")"
+                : " (" + Keybinds.FILE + " neni)"));
+
+        // Doladění generátoru po biomech (biome_tuning.json). MUSÍ být před
+        // prvním světem: TerrainGenerator si tuning bere při svém vzniku,
+        // ne za běhu - viz BiomeTuning.
+        BiomeTuning.activate(BiomeTuning.load(BiomeTuning.FILE));
+        System.out.println("Biomy: " + (BiomeTuning.active().isDefault() ? "vychozi hodnoty" : "vlastni tuning")
+                + (Files.isRegularFile(BiomeTuning.FILE) ? " (" + BiomeTuning.FILE.toAbsolutePath() + ")"
+                : " (" + BiomeTuning.FILE + " neni)"));
         System.out.println("Recepty z labu: " + RecipeBook.active().size()
                 + (Files.isRegularFile(RecipeBook.FILE) ? " (" + RecipeBook.FILE.toAbsolutePath() + ")"
                 : " (" + RecipeBook.FILE + " neni)"));
@@ -1624,16 +1653,34 @@ public class Main {
         player.inputForward = 0;
         player.inputStrafe = 0;
 
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) player.inputForward += 1;
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) player.inputForward -= 1;
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) player.inputStrafe += 1;
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) player.inputStrafe -= 1;
+        if (down(Keybinds.Action.FORWARD)) player.inputForward += 1;
+        if (down(Keybinds.Action.BACK))    player.inputForward -= 1;
+        if (down(Keybinds.Action.RIGHT))   player.inputStrafe += 1;
+        if (down(Keybinds.Action.LEFT))    player.inputStrafe -= 1;
 
-        player.inputJump    = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
-        player.inputSprint  = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS;
-        // Ctrl je klesání v letu a plížení při chůzi - co z toho, rozhodne Player
-        player.inputDescend = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
-        player.inputSneak   = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS;
+        player.inputJump   = down(Keybinds.Action.JUMP);
+        player.inputSprint = down(Keybinds.Action.SPRINT);
+
+        // Jedna klávesa, dva efekty: klesání v letu a plížení při chůzi -
+        // co z toho platí, rozhodne Player. Dvě samostatné akce by musely
+        // mít různé výchozí klávesy, jinak by hra startovala s kolizí.
+        boolean sneak = down(Keybinds.Action.SNEAK);
+        player.inputDescend = sneak;
+        player.inputSneak   = sneak;
+    }
+
+    /**
+     * Je klávesa téhle akce zmáčknutá?
+     *
+     * ⚠️ Ptá se `effectiveKey()`, ne `key()`. Akce v kolizi (dvě akce na
+     * jedné klávese) vrací NONE, takže se ani jedna nespustí - jinak by
+     * se dalo přiřadit W na dopředu i dozadu a hráč by stál na místě bez
+     * vysvětlení. `glfwGetKey` se na NONE (-1) nesmí ptát vůbec: GLFW na
+     * neplatný kód hlásí chybu.
+     */
+    private boolean down(Keybinds.Action action) {
+        int key = Keybinds.active().effectiveKey(action);
+        return key != Keybinds.NONE && glfwGetKey(window, key) == GLFW_PRESS;
     }
 
     // ------------------------------------------------------------------
