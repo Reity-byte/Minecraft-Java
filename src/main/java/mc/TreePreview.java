@@ -186,13 +186,38 @@ public class TreePreview {
         }
     }
 
-    /** Které sekce sloupce strom zabírá - jen ty se mešují. */
+    /**
+     * Přestaví meshe sekcí, ve kterých strom stojí.
+     *
+     * ⚠️ MEŠUJE SE JEN PÁS KOLEM STROMU, ne celý sloupec. Pod plošinkou leží
+     * normální terén náhledového světa (povrch je u výchozího seedu kolem 53)
+     * a ten do náhledu nepatří - kreslil by se patnáct bloků pod stromem jako
+     * kus krajiny, kvůli kterému by strom na malém obrázku zdrobněl. A navíc
+     * se ty sekce nikdy nemění, takže by se přestavovaly při každém kliknutí
+     * na [+] zadarmo.
+     */
     private void rebuildMeshes()
     {
         ChunkColumn column = world.column(X >> Chunk.BITS, Z >> Chunk.BITS);
 
+        // Od plošinky po vrchol nejvyššího možného stromu.
+        int from = (GROUND - 1) >> Chunk.BITS;
+        int to = Math.min(ChunkColumn.SECTIONS - 1,
+                (GROUND + TreeShape.totalHeight(BiomeTuning.MAX_TRUNK)) >> Chunk.BITS);
+
         for(int section = 0; section < ChunkColumn.SECTIONS; section++)
         {
+            if(section < from || section > to)
+            {
+                if(meshes[section] != null)
+                {
+                    meshes[section].delete();
+                    meshes[section] = null;
+                }
+
+                continue;
+            }
+
             Chunk chunk = column.section(section);
 
             if(meshes[section] != null)
