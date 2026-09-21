@@ -74,7 +74,7 @@ public class Main {
     // takže česká diakritika by se vykreslila jako otazníky.
     // Světy jsou v saves/<složka>/ a vybírají se na vlastní obrazovce, takže
     // hlavní menu má jen "Singleplayer" a nemusí se skládat znovu.
-    private final Menu mainMenu = new Menu("Minecraft Base", "Singleplayer", "Options", "Texture Lab", "Quit");
+    private final Menu mainMenu = new Menu("Minecraft Base", "Singleplayer", "Options", "Lab", "Quit");
     private final Menu pauseMenu = new Menu("Paused", "Resume", "Options", "Save and Quit to Title");
 
     // mouse look state
@@ -539,7 +539,7 @@ public class Main {
                         closeTextureLab();
                     }
                 } else if (action == GLFW_RELEASE) {
-                    lab.release();
+                    lab.releaseMouse();
                 }
                 return;
             }
@@ -632,6 +632,13 @@ public class Main {
         });
 
         glfwSetScrollCallback(window, (win, xoffset, yoffset) -> {
+            // Lab je přes celou obrazovku a jeho mód si kolečko může vzít
+            // (Recipes jím roluje přehledem bloků).
+            if (state == GameState.TEXTURE_LAB && lab != null) {
+                lab.scroll(yoffset);
+                return;
+            }
+
             if (state == GameState.SELECT_WORLD) {
                 selectScreen.scroll(yoffset);
                 return;
@@ -717,6 +724,14 @@ public class Main {
         System.out.println("Bloky z labu: " + BlockRegistry.active().size()
                 + (Files.isRegularFile(BlockRegistry.FILE) ? " (" + BlockRegistry.FILE.toAbsolutePath() + ")"
                 : " (" + BlockRegistry.FILE + " neni)"));
+
+        // Recepty z labu (textures/recipes.json). AŽ PO blocích, protože
+        // recept smí odkazovat na blok z labu a neznámý blok recept vyřadí.
+        // Chybějící soubor = prázdný seznam a jen vestavěné recepty.
+        RecipeBook.activate(RecipeBook.load(RecipeBook.FILE));
+        System.out.println("Recepty z labu: " + RecipeBook.active().size()
+                + (Files.isRegularFile(RecipeBook.FILE) ? " (" + RecipeBook.FILE.toAbsolutePath() + ")"
+                : " (" + RecipeBook.FILE + " neni)"));
 
         // Až tady, protože shadery a textury potřebují aktivní kontext
         // Atlas vlastní Main a půjčuje ho renderu světa i ikonám bloků.

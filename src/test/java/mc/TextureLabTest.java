@@ -562,9 +562,11 @@ public class TextureLabTest {
         TextureLabLayout l = new TextureLabLayout(w, h);
 
         check("na 1024 x 768 je meritko labu 2", l.scale() == 2, "" + l.scale());
+        // ⚠️ Mereno od panelLeft(), ne od left(): left() je od zavedeni
+        // bocniho pruhu levy okraj OBSAHU, tedy uz za pruhem.
         check("lab se vejde na obrazovku",
-                l.left() >= 0 && l.top() >= 0
-                        && l.left() + TextureLabLayout.WIDTH * l.scale() <= w
+                l.panelLeft() >= 0 && l.top() >= 0
+                        && l.panelLeft() + TextureLabLayout.WIDTH * l.scale() <= w
                         && l.top() + TextureLabLayout.HEIGHT * l.scale() <= h, "");
         check("i na malem okne je meritko aspon 1", TextureLabLayout.scaleFor(300, 200) == 1, "");
 
@@ -629,20 +631,12 @@ public class TextureLabTest {
                 TextureLabLayout.SWATCHES, TextureLabLayout.CURRENT, TextureLabLayout.HEX, TextureLabLayout.HUE,
                 TextureLabLayout.SATURATION, TextureLabLayout.VALUE, TextureLabLayout.GLOBAL};
         TextureLabLayout.Rect[] atlasMode = {TextureLabLayout.SAVE, TextureLabLayout.REVERT, TextureLabLayout.IMPORT,
-                TextureLabLayout.NEW_BLOCK, TextureLabLayout.CLOSE,
-                TextureLabLayout.MODE_BLOCKS, TextureLabLayout.MODE_SKIN};
+                TextureLabLayout.NEW_BLOCK, TextureLabLayout.CLOSE};
         TextureLabLayout.Rect[] blockMode = {TextureLabLayout.NAME, TextureLabLayout.SOFTER, TextureLabLayout.HARDER,
                 TextureLabLayout.SOLID, TextureLabLayout.OPAQUE, TextureLabLayout.faceSlot(0),
                 TextureLabLayout.faceSlot(1), TextureLabLayout.faceSlot(2), TextureLabLayout.NEW_TILE,
-                TextureLabLayout.CREATE, TextureLabLayout.CANCEL,
-                TextureLabLayout.MODE_BLOCKS, TextureLabLayout.MODE_SKIN};
+                TextureLabLayout.CREATE, TextureLabLayout.CANCEL};
         check("rezim atlasu: prvky se neprekryvaji a jsou v panelu", separate(shared, atlasMode), "");
-
-        // Rezim skin: misto mrizky dlazdic cela kuze, misto dlazdice stena.
-        check("zalozky Blocks a Skin jsou vedle sebe a stejne vysoko",
-                TextureLabLayout.MODE_BLOCKS.y() == TextureLabLayout.MODE_SKIN.y()
-                        && TextureLabLayout.MODE_BLOCKS.x() + TextureLabLayout.MODE_BLOCKS.w()
-                            <= TextureLabLayout.MODE_SKIN.x(), "");
 
         check("prehled kuze je presne cela kuze: 64 pixelu po " + TextureLabLayout.SKIN_ZOOM,
                 TextureLabLayout.SKIN_ZOOM * SkinLayout.SIZE == TextureLabLayout.SKIN_SHEET.w()
@@ -674,8 +668,18 @@ public class TextureLabTest {
         check("platno steny se vejde do CANVAS", fits, "");
         check("kazdy pixel steny na platne jde trefit mysi (round-trip)", everyPixel, "");
         check("rezim noveho bloku: prvky se neprekryvaji a jsou v panelu", separate(shared, blockMode), "");
+        check("rezim receptu: prvky se neprekryvaji a jsou v panelu",
+                separate(new TextureLabLayout.Rect[]{TextureLabLayout.RECIPE_GRID,
+                                TextureLabLayout.RECIPE_ARROW, TextureLabLayout.RECIPE_RESULT,
+                                TextureLabLayout.RECIPE_LESS, TextureLabLayout.RECIPE_COUNT,
+                                TextureLabLayout.RECIPE_MORE, TextureLabLayout.RECIPE_PICKER},
+                        new TextureLabLayout.Rect[]{TextureLabLayout.RECIPE_SAVE,
+                                TextureLabLayout.RECIPE_CLEAR, TextureLabLayout.RECIPE_CLOSE}), "");
+
         check("meritko labu: 1280 x 720 -> 2, Full HD -> 3",
                 TextureLabLayout.scaleFor(1280, 720) == 2 && TextureLabLayout.scaleFor(1920, 1080) == 3, "");
+
+        sidebar(l);
 
         TextureLabLayout.Rect bar = TextureLabLayout.HUE;
         check("posuvnik dava 0 az 1 a mimo se orizne",
@@ -684,12 +688,112 @@ public class TextureLabTest {
                         && l.sliderValue(bar, 99999) == 1f && l.sliderValue(bar, -99999) == 0f, "");
     }
 
+    /**
+     * Bocni panel labu: rozvrzeni, hit-testy a to, ze zavedenim panelu
+     * nespadlo meritko.
+     *
+     * ⚠️ MERITKO JE TU TA DULEZITA CAST. Lab bere nejvetsi CELE meritko, pri
+     * kterem se vejde, takze kazdy pixel sirky navic ho muze srazit o stupen -
+     * a 32 pixelu bocniho pruhu je zvolenych presne tak, aby se to nestalo.
+     * Pri 36 by na 1440x900 spadlo ze 3 na 2 a lab by byl znatelne mensi na
+     * displeji, ktery se do te doby vesel.
+     */
+    static void sidebar(TextureLabLayout l) {
+        check("bocni pruh a obsah davaji dohromady sirku panelu",
+                LabSidebar.WIDTH + TextureLabLayout.CONTENT_WIDTH == TextureLabLayout.WIDTH,
+                LabSidebar.WIDTH + " + " + TextureLabLayout.CONTENT_WIDTH);
+
+        // Meritko pred bocnim panelem: min(sirka / 448, vyska / 300).
+        int[][] screens = {{1024, 768}, {1280, 720}, {1366, 768}, {1440, 900},
+                {1600, 1000}, {1680, 1050}, {1920, 1080}, {2560, 1440}, {3840, 2160}};
+        boolean sameScale = true;
+        String lost = "";
+
+        for (int[] screen : screens) {
+            int before = Math.max(1, Math.min(screen[0] / TextureLabLayout.CONTENT_WIDTH,
+                    screen[1] / TextureLabLayout.HEIGHT));
+            int after = TextureLabLayout.scaleFor(screen[0], screen[1]);
+            if (before != after) {
+                sameScale = false;
+                lost = screen[0] + "x" + screen[1] + ": " + before + " -> " + after;
+            }
+        }
+        check("bocni panel nesrazil meritko na zadnem beznem rozliseni", sameScale, lost);
+
+        // Tlacitka jdou pod sebou, nedotykaji se a vejdou se do pruhu.
+        boolean stacked = true, insideStrip = true, noOverlap = true;
+        for (int i = 0; i < 6; i++) {
+            TextureLabLayout.Rect r = LabSidebar.button(i);
+            insideStrip &= r.x() >= 0 && r.x() + r.w() <= LabSidebar.WIDTH
+                    && r.y() >= 0 && r.y() + r.h() <= TextureLabLayout.HEIGHT;
+            if (i > 0) {
+                TextureLabLayout.Rect prev = LabSidebar.button(i - 1);
+                stacked &= r.y() > prev.y();
+                noOverlap &= prev.y() + prev.h() <= r.y();
+            }
+        }
+        check("tlacitka bocniho panelu jdou pod sebou a nedotykaji se", stacked && noOverlap, "");
+        check("tlacitka se vejdou do pruhu", insideStrip, "");
+
+        // Ikona lezi uvnitr tlacitka.
+        boolean iconInside = true;
+        for (int i = 0; i < 4; i++) {
+            TextureLabLayout.Rect b = LabSidebar.button(i), ic = LabSidebar.icon(i);
+            iconInside &= ic.x() >= b.x() && ic.y() >= b.y()
+                    && ic.x() + ic.w() <= b.x() + b.w() && ic.y() + ic.h() <= b.y() + b.h();
+        }
+        check("ikona lezi uvnitr sveho tlacitka", iconInside, "");
+
+        // Hit-test: stred kazdeho tlacitka trefi svuj index, mezera mezi nimi nic.
+        boolean hits = true;
+        for (int i = 0; i < 3; i++) {
+            TextureLabLayout.Rect r = LabSidebar.button(i);
+            hits &= LabSidebar.buttonAt(r.x() + r.w() / 2f, r.y() + r.h() / 2f, 3) == i;
+        }
+        check("klik doprostred tlacitka trefi svuj mod", hits, "");
+
+        // ⚠️ Mezera mezi tlacitky NENI tlacitko. Kdyby se index pocital
+        // delenim roztecí, prepnul by se mod i pri kliku vedle.
+        TextureLabLayout.Rect first = LabSidebar.button(0);
+        float gapY = first.y() + first.h() + LabSidebar.GAP / 2f;
+        check("klik do mezery mezi tlacitky neprepne nic",
+                LabSidebar.buttonAt(first.x() + 2, gapY, 3) == -1, "");
+
+        check("klik mimo pruh neprepne nic",
+                LabSidebar.buttonAt(-5, first.y() + 2, 3) == -1
+                        && LabSidebar.buttonAt(LabSidebar.WIDTH + 5, first.y() + 2, 3) == -1
+                        && LabSidebar.buttonAt(first.x() + 2, 0, 3) == -1, "");
+
+        // Panel zna jen POCET modu - na dvou modech nesmi jit trefit treti.
+        check("tlacitko nad pocet modu se netrefi",
+                LabSidebar.buttonAt(LabSidebar.button(2).x() + 2,
+                        LabSidebar.button(2).y() + 2, 2) == -1, "");
+
+        // Prevod mysi: panel ma vlastni pocatek, obsah je za nim.
+        double panelMouse = l.panelLeft() + 3.0 * l.scale();
+        check("panelGuiX ma pocatek na levem okraji pruhu",
+                Math.abs(l.panelGuiX(panelMouse) - 3f) < 1e-3f, "" + l.panelGuiX(panelMouse));
+        check("obsah zacina presne za pruhem",
+                l.left() - l.panelLeft() == LabSidebar.WIDTH * l.scale(),
+                (l.left() - l.panelLeft()) + " vs " + (LabSidebar.WIDTH * l.scale()));
+        check("guiX obsahu zacina na nule tam, kde konci pruh",
+                Math.abs(l.guiX(l.left())) < 1e-3f, "" + l.guiX(l.left()));
+
+        // Do panelu se vejde vic modu, nez jich dnes je - misto na dalsi.
+        check("do pruhu se vejde aspon sest modu",
+                LabSidebar.capacity(TextureLabLayout.HEIGHT) >= 6,
+                "" + LabSidebar.capacity(TextureLabLayout.HEIGHT));
+    }
+
     static boolean separate(TextureLabLayout.Rect[] a, TextureLabLayout.Rect[] b) {
         java.util.List<TextureLabLayout.Rect> all = new java.util.ArrayList<>(Arrays.asList(a));
         all.addAll(Arrays.asList(b));
         for (int i = 0; i < all.size(); i++) {
             TextureLabLayout.Rect r = all.get(i);
-            if (r.x() < 0 || r.y() < 0 || r.x() + r.w() > TextureLabLayout.WIDTH
+            // Obsahove obdelniky maji pocatek na levem okraji OBSAHU, takze
+            // se meri proti CONTENT_WIDTH - proti cele sirce panelu by prosel
+            // i prvek, ktery ve skutecnosti visi mimo obsahovou plochu.
+            if (r.x() < 0 || r.y() < 0 || r.x() + r.w() > TextureLabLayout.CONTENT_WIDTH
                     || r.y() + r.h() > TextureLabLayout.HEIGHT) return false;
             for (int j = i + 1; j < all.size(); j++) {
                 TextureLabLayout.Rect q = all.get(j);

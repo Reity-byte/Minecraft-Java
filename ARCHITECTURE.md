@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **1640 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **1740 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -70,6 +70,8 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `InventoryTest` | Hromádky, slévání při sběru, přetečení, recepty (i posunuté v mřížce), klikání myší, návrat obsahu při zavření, **shift-klik** (prázdný i plný cíl, přetečení, mřížka, výstup, crafting table), **tažení myší** (rovnoměrně i po jednom, zbytek v ruce, přeskočené sloty, zrušení druhým tlačítkem) |
 | `DroppedItemTest` | Předměty na zemi: dopad, stabilní ležení, tunelování, zeď, tření, voda, **vytlačení z položeného bloku**, vyhození z ruky, **zpoždění a dosah sběru**, slévání při sběru, plný a skoro plný inventář, zánik (`LIFETIME`, zahozený sloupec), mesh relativní ke kameře a jeho světlo |
 | `WaterTest` | Zaplavení po hladinu, suché jeskyně, pravidla viditelnosti stěn (ručně spočítané), suchý spawn, plavání |
+| `MainStateTest` | Stav, který nepatří `World`, ale přežije výměnu světa: **reset inventáře, obou crafting mřížek, výsledkového slotu a vybraného slotu**, reset denní doby, meze `DayCycle.setTime` (NaN, nekonečno, mimo rozsah), čas tam a zpět přes `world.dat` a **soubor ze starší verze formátu bez času**, a celá cesta svět A → svět B → načtení A zpátky |
+| `RecipeLabTest` | Recepty z labu: kontrola hodnot, **ořez vzoru na nejmenší obdélník**, `recipes.json` tam a zpět (i bajtová stabilita druhého zápisu), poškozený a chybějící soubor, **přeskočení jednoho vadného receptu a záloha `.bak`**, novější `format`, **recept z labu se chová jako vestavěný** (hledá se kdekoliv v mřížce, surovina navíc ho vyřadí, vestavěný má přednost), platnost **hned bez restartu** a logika módu (co se uloží a proč se to někdy odmítne) |
 | `SaveTest` | Ukládání: přežití změn přes unload sloupce, round-trip na disk, poškozený soubor, záporné souřadnice, obousměrnost `columnIndex`, a **svět zapsaný starší `GENERATOR_VERSION`** (načte se, změny bloků i inventář dorazí beze změny, nové chunky už mají biomy) |
 | `AsyncTest` | Async generování: shoda se synchronním blok po bloku, nejhorší `update()` při chůzi, omezený počet sloupců, kritický okruh, `shutdown()` |
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
@@ -80,7 +82,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `PlayerModelTest` | Animace: rozmach podle rychlosti, **opačná fáze nohou**, ruka proti noze, délka kroku, strop při letu, **nezávislost na FPS**, pohupování, máchnutí z `HandSwing`, držení. Model: rozměry jako hitbox, **pravá ruka vpravo, obličej vepředu**, končetiny v póze, držený blok u pěsti, odstín podle směru ve světě. Skin: každá stěna míří do vybarvené části. **Holá ruka v první osobě:** tytéž UV jako pravá ruka postavy, 4×12×4 px, v klidu vpravo dole před kamerou, při máchnutí u zaměřovače, **zpátky jde níž než tam (oblouk)**, po doběhnutí přesně klid; s blokem v ruce dál blok |
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
 | `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
-| `TextureLabTest` | Index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře**, **sledování změněných pixelů** (`DirtyRect` sám o sobě; tah zůstane uvnitř jedné dlaždice a obsahuje všechny změněné pixely; undo hlásí svou dlaždici, import celý atlas), **mapování pixelu na stěnu dílu těla** (obdélníky sedí na UV, která vydává `PlayerModelMesh.unfold()`; round-trip pixel → index → stěna; 1632 pokrytých pixelů; plátno má řádek 0 dole), **editace kůže** (tah jen ve své stěně, kapátko, undo i s návratem výběru), **PNG kůže bez překlápění** a **přesné znění hlášky o rozměru** |
+| `TextureLabTest` | **Boční panel** (šířka proti měřítku na devíti rozlišeních, tlačítka pod sebou, ikona uvnitř tlačítka, klik do mezery i mimo pruh nic nepřepne, panel zná jen počet módů, převod souřadnic panel vs. obsah), rozvržení módu Recipes bez překryvů, index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře**, **sledování změněných pixelů** (`DirtyRect` sám o sobě; tah zůstane uvnitř jedné dlaždice a obsahuje všechny změněné pixely; undo hlásí svou dlaždici, import celý atlas), **mapování pixelu na stěnu dílu těla** (obdélníky sedí na UV, která vydává `PlayerModelMesh.unfold()`; round-trip pixel → index → stěna; 1632 pokrytých pixelů; plátno má řádek 0 dole), **editace kůže** (tah jen ve své stěně, kapátko, undo i s návratem výběru), **PNG kůže bez překlápění** a **přesné znění hlášky o rozměru** |
 | `MouseScaleTest` | Přepočet myši z bodů okna na pixely framebufferu: poměr pro 1,0 / 1,5 / 2,0 / 3,0, každá osa zvlášť, ochrana proti dělení nulou — a **simulovaná Retina přes všechny klikací obrazovky** (menu, deset položek Options i konec posuvníku, řádek seznamu světů, pole seedu, dlaždice a pixel plátna v labu, slot hotbaru): co je nakreslené na daném místě, to tam po přepočtu i reaguje. Jedna kontrola schválně hlídá, že bez přepočtu by klik trefil jiné tlačítko |
 | `WorldSavesTest` | Světy na disku: **migrace starého `saves/world.dat`** (bajtová shoda, metadata, `world.dat.migrated`, druhý běh bez duplicity, pád uprostřed, obsazené jméno, poškozený zdroj), očištění jména na složku (zakázané znaky, `CON`/`com1`/`aux.txt`, tečky a mezery na konci), unikátní složka bez ohledu na velikost písmen, metadata tam a zpět (i `Long.MIN_VALUE`), **poškozený `world.json` svět neschová**, řazení podle posledního hraní, mazání jen vlastní složky |
 | `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) — přeměřené na generátoru s biomy, viz `GENERATOR_VERSION` |
@@ -182,9 +184,13 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `ContainerScreen` — kreslení a myš (klik, shift-klik, tažení) nad **seznamem mřížek**; jedna třída pro inventář, crafting table i creative přehled (mřížka s příznakem `infinite` a rolováním)
 - `BlockIcon` — izometrická kostka bloku, sdílená hotbarem i sloty
 
-**Texture lab (F6)**
-- `TextureLab` — obrazovka: přehled, plátno, paleta, HSV, hex, tlačítka, **záložky Blocks / Skin**;
-  kreslení a vstup
+**Lab (F6)**
+- `TextureLab` — **hub labu**: seznam módů, boční panel, panel, stavový řádek; a k tomu
+  pixelové módy (přehled, plátno, paleta, HSV, hex, tlačítka)
+- `LabMode` — rozhraní jednoho módu labu: jméno, ikona, kreslení a vstup; **přidat mód = třída + řádek v seznamu**
+- `LabSidebar` — rozvržení a hit-testy bočního pruhu, čistá aritmetika nad POČTEM módů; **bez GL**
+- `RecipeLab` — mód Recipes: mřížka 3×3, výběr bloků, výsledek a počet, ukládání
+- `RecipeBook` — recepty z `textures/recipes.json` nad vestavěnými, neměnný a s aktivním seznamem; **bez GL**
 - `TextureLabLayout` — rozvržení v GUI pixelech a hit-testy obou režimů; **bez GL**
 - `PixelEditor` — společný základ obou editorů: barva, tah štětcem, undo, `DirtyRect`, palety; **bez GL**
 - `AtlasEditor` — nad ním mřížka dlaždic atlasu, mapování dlaždice na bloky, barvy atlasu; **bez GL**
@@ -602,6 +608,20 @@ při `loadRadius = 8` trvá ~313 ms.
 **⚠️ Nový svět musí zastavit ten starý.** `World.shutdown()` se volá v `startWorldCreation()`
 i při ukončení hry — jinak by po každém „Create World" přibylo jedno běžící generující vlákno.
 
+**⚠️ A MUSÍ RESETOVAT I STAV, KTERÝ NENÍ VE `World`.** `freshWorld()` vyměňoval `World`,
+`SoundEngine`, `WorldRenderer` a položky na zemi — tedy všechno, co je samo o sobě objekt.
+Inventář, obě crafting mřížky, vybraný slot a denní doba ale objekt světa nejsou: jsou to
+pole `Main`, která zůstávají táž instance po celou dobu běhu hry. Na ty se zapomnělo, takže
+**nově založený svět ukázal v inventáři věci ze světa, ve kterém hráč byl před chvílí,
+a pokračoval v jeho denní době** — odejít v noci a založit nový svět znamenalo začít v noci.
+Obě chyby mají tutéž příčinu a hlídá je `MainStateTest`.
+
+`freshWorld()` proto volá `resetPlayerState()`, a **volá ho vždycky, i u načteného světa**;
+`restore()` až po něm. Kdyby se reset dělal jen u nového světa, byl by rozdíl mezi „nový svět"
+a „načtený svět, jehož soubor danou položku ještě nemá" — ta položka by se u druhého případu
+zdědila po předchozím světě. Pravidlo pro příští pole: co drží `Main` a co se vztahuje ke
+KONKRÉTNÍMU světu, patří do `resetPlayerState()`.
+
 ### Perzistence
 
 **⚠️ Neukládá se svět, ale ROZDÍL proti generátoru.** Generátor je čistá funkce souřadnic
@@ -734,7 +754,7 @@ skončil — ne obrazovka s tlačítky přes půlku.
 ### Obrazovky světů
 
 **Menu vede přes Singleplayer do seznamu světů**, ne rovnou do hry: hlavní menu má
-Singleplayer / Options / Texture Lab / Quit, pauza Resume / Options / Save and Quit to Title.
+Singleplayer / Options / Lab / Quit, pauza Resume / Options / Save and Quit to Title.
 Seznam je seřazený od naposledy hraného (to je taky ten předvybraný), u každého světa náhled,
 jméno, datum a seed; klik vybírá, dvojklik i Enter hrají, šipky přebírají výběr a kolečko
 roluje. **Mazání se ptá**, protože je to jediná nevratná věc v celém menu — a maže jen složku
@@ -958,6 +978,25 @@ na sousedy; to je model závislý na okolí, tedy další krok.
 **Dva nezávislé kanály, oba 0–15.** Sluneční padá shora a v noci se ztlumí; blokové vzniká
 u pochodní a svítí dál. Ve fragment shaderu se skládají **maximem, ne součtem** — se součtem
 by pochodeň ve dne byla jasnější než okolí a dvě vedle sebe by přepálily obraz do běla.
+
+**Denní doba se UKLÁDÁ SE SVĚTEM a nový svět začíná dopoledne.** `DayCycle.START_TIME` je
+0,15 cyklu (`hours()` vydá 9,6): vanilla Minecraft začíná ráno a nechává hráči celý první
+den na přístřešek, a při desetiminutovém dni tu zbývají do soumraku ještě zhruba tři minuty.
+Svítání by znamenalo začínat v šeru, poledne by ubralo půlku prvního dne.
+
+Uložení je krok formátu `world.dat` z **MCW2 na MCW3**: čas jako `float` **na konci záznamu**
+a čte se jen u novějšího MAGIC. Formát je poziční binárka bez délek, takže vložit pole
+doprostřed by znamenalo, že starší soubor od toho místa čte úplně jiná čísla — a neprojevilo
+by se to výjimkou, ale nesmyslnou polohou hráče. Soubor z MCW1/MCW2 čas nemá a dostane
+`START_TIME`, tedy přesně to, co dělal dosud. Bylo to levnější než varianta „každý svět
+vždycky začne ráno": formát už jednou přesně takhle rostl (MCW1 bez inventáře → MCW2 s ním),
+takže to nejsou čtyři řádky navíc proti přestavbě, ale čtyři řádky ve stejném vzoru — a
+vrátit se do světa, ze kterého hráč odešel v noci, do noci je to, co hráč čeká.
+
+**⚠️ `setTime()` ořízne nesmysl na `START_TIME`.** Záporné číslo, NaN nebo nekonečno
+z poškozeného souboru by se přes modulo protáhly dál a `daylight()` by vracela NaN — obloha
+i celý svět by zčernaly a nic by neřeklo proč. Stejný přístup jako u hodnot mimo meze
+v `Options`.
 
 **⚠️ Noc se dělá ZTLUMENÍM SLUNEČNÍHO KANÁLU V SHADERU, ne přepočtem světla ve světě.**
 Uložená hodnota je „kolik sem dosáhne obloha" a je pořád stejná; jak silná obloha je, řekne
@@ -1528,14 +1567,15 @@ HSV posuvníky labu. Není to nový UI systém — je to totéž, co už hra kre
 jednom místě. Rozvržení je v GUI pixelech a měřítko je `Gui.scale()`, takže obrazovky
 reagují na volbu GUI Scale ve stejném framu.
 
-### Texture lab
+### Texture lab (módy Blocks a Skin)
 
-**Vývojářská obrazovka na úpravy dlaždic atlasu, na F6 nebo z hlavního menu („Texture Lab").**
+**Vývojářská obrazovka na úpravy dlaždic atlasu, na F6 nebo z hlavního menu („Lab").**
 Vlevo přehled atlasu (klik vybere dlaždici), uprostřed dlaždice jako plátno 16×16 (levé
 tlačítko maluje, tažením čára, pravé bere barvu), vpravo živý 3D náhled bloku, pod tím paleta,
-HSV posuvníky, hex a tlačítka Save / Revert / Close. **Vpravo dole jsou záložky Blocks a Skin
-— druhá maluje kůži postavy, viz „Editace kůže postavy v labu".** F6 je volná — Minecraft ji nepoužívá,
-F3 je ladicí výpis a F5 pohled. Otevřený ze hry nechává za sebou kreslit svět.
+HSV posuvníky, hex a tlačítka Save / Revert / Close. **Mód se vybírá ikonou v bočním panelu
+vlevo — Blocks, Skin (kůže postavy) a Recipes; viz „Lab jako hub s bočním panelem".** F6 je
+volná — Minecraft ji nepoužívá, F3 je ladicí výpis a F5 pohled. Otevřený ze hry nechává za
+sebou kreslit svět.
 
 **⚠️ Proč živý náhled přes SKUTEČNÝ shader, ne malování naslepo.** Dlaždice na plátně vypadá
 jinak než na bloku: boky jsou ztmavené na 0,6 a 0,8, spodek na 0,5, a vzor, který se na plátně
@@ -1662,10 +1702,11 @@ nemají náhled přes blok; náhled je vždycky poledne; import neumí jiný roz
 
 ### Editace kůže postavy v labu
 
-**Druhá záložka labu vedle bloků: malování `textures/skin.png`.** Vpravo dole jsou dvě
-viditelná tlačítka **Blocks** a **Skin** — přepínač NENÍ klávesová zkratka schválně: režim,
-o kterém se nedá dozvědět jinak než z kódu, je skoro totéž jako žádný. Aktivní záložka je
-zapuštěná a orámovaná, neaktivní vystouplá jako běžné tlačítko.
+**Druhý mód labu vedle bloků: malování `textures/skin.png`.** Přepíná se **viditelnou
+ikonou v bočním panelu**, ne klávesovou zkratkou: režim, o kterém se nedá dozvědět jinak než
+z kódu, je skoro totéž jako žádný. Aktivní mód je zapuštěný a orámovaný, neaktivní vystouplý
+jako běžné tlačítko. (Dřív to byly dvě záložky vpravo dole — proč se z nich stal panel, je
+v „Lab jako hub s bočním panelem".)
 
 **⚠️ Plátno, paleta, kapátko, HSV, hex, undo i import PNG jsou TYTÉŽ.** Společný základ
 obou editorů je `PixelEditor` (barva, tah Bresenhamem, undo jako snímek oblasti,
@@ -1792,6 +1833,135 @@ být vidět: náklad jednoho draw callu (sestavit příkaz, nahrát vrcholy, ov�
 ovladač na CPU, a na macOS je několikanásobný oproti Windows. **Počet draw callů
 (`GlStats`) je jediné číslo o výkonu nezávislé na stroji** — když se z 422 stane 8, zlepší
 se to všude, jen na různých strojích různě moc.
+
+### Lab jako hub s bočním panelem
+
+**Z „Texture Labu" se stal „Lab".** Popisek v hlavním menu i v titulku obrazovky je
+teď `Lab`, protože už to není jen o texturách. **Třídy ani soubory se
+nepřejmenovaly** — `TextureLab`, `TextureLabLayout` a `TextureLabTest` si nechaly
+jména; přejmenovat je by byl stostránkový diff za nic.
+
+**⚠️ ZÁLOŽKY BLOCKS / SKIN NAHRADIL BOČNÍ PANEL, A JE TO KVŮLI TŘETÍMU MÓDU.**
+Dva režimy se přepínaly dvěma natvrdo napsanými tlačítky (`MODE_BLOCKS`,
+`MODE_SKIN`) a rozlišovaly příznakem `skinMode()`. Třetí mód by znamenal třetí
+konstantu v rozvržení, třetí větev v hit-testu, třetí v kreslení a čtvrtou
+v titulku — a čtvrtý mód zase to samé. Teď je mód OBJEKT (`LabMode`): ví, jak se
+jmenuje, jak vypadá jeho ikona, co kreslí a co dělá jeho vstup.
+
+**Přidat mód = třída, která implementuje `LabMode`, a jeden řádek v seznamu
+v `TextureLab`.** `LabSidebar` ani jeho test se nemění — panel zná jen POČET
+módů a ikonu si kreslí každý mód sám.
+
+```java
+modes.add(new PixelMode(Mode.BLOCKS, "Blocks", "…"));
+modes.add(new PixelMode(Mode.SKIN,   "Skin",   "…"));
+modes.add(recipeLab);
+// příští: modes.add(new KeybindLab(…));
+```
+
+**⚠️ ŠÍŘKA PRUHU 32 GUI PIXELŮ JE SPOČÍTANÁ, NE ODHADNUTÁ.** Lab bere největší
+CELÉ měřítko, při kterém se vejde, takže každý pixel šířky navíc může měřítko
+srazit o stupeň. Obsah je 448, celek tedy 480 — a při 480 zůstává měřítko na
+všech běžných rozlišeních přesně takové, jaké bylo předtím. Při 484 by na
+**1440×900 spadlo ze 3 na 2**. `TextureLabTest` to kontroluje výčtem devíti
+rozlišení proti vzorci „jak by to vyšlo bez pruhu".
+
+Důsledek té šířky: tlačítko je 28×28, tedy **jen ikona bez popisku** — „Recipes"
+by potřebovalo zhruba 49 pixelů. Jméno módu je proto v titulku labu a ve
+stavovém řádku při najetí myší, takže se pořád dá zjistit bez čtení kódu.
+
+**Ikony kreslí módy, ne panel.** `LabMode.drawIcon()` dostane čtverec a nakreslí
+si do něj, co chce — kostka, postava, mřížka se šipkou. Kdyby je kreslil panel,
+musel by znát všechny módy a byli bychom zpátky u switche. Kreslí se přes
+`Renderer2D`, ne přes `BlockIcon`: ten má vlastní shader a musel by uprostřed
+vyprázdnit dávku, kvůli které má lab 8 draw callů místo 422.
+
+**⚠️ OBSAHOVÉ OBDÉLNÍKY SE NEPOSUNULY ANI O PIXEL.** V `TextureLabLayout` je
+`left` levý okraj OBSAHU (`panelLeft + šířka pruhu`), ne panelu — celý posun je
+tedy jedna řádka v konstruktoru a žádná z desítek konstant rozvržení se nemusela
+sahat. Panel si říká o `panelLeft()` a `panelGuiX()`.
+
+**Aktivní mód je ZAPUŠTĚNÝ a orámovaný**, neaktivní vystouplý jako tlačítko —
+stejné rozlišení jako sloty inventáře proti tlačítkům, takže je na první pohled
+poznat, který mód běží.
+
+**Co se nerozebíralo:** `PixelEditor`, `AtlasEditor`, `SkinEditor`, paleta, undo,
+import PNG ani živé náhledy. Blocks a Skin zůstaly jedna metoda s `skinMode()`
+větvemi, protože sdílí plátno, paletu, HSV, hex i undo — rozdělit je na dvě kopie
+by znamenalo dělat každou opravu malování dvakrát. Navenek jsou to přesto dva
+samostatné `LabMode`, takže se panel nemusí ptát, jestli jsou „vlastně jeden".
+
+**Klávesa F6 se nezměnila**, otevírá a zavírá celý lab jako dřív. Kolečko myši
+teď jde do aktivního módu (Recipes jím roluje přehledem bloků); ostatní módy ho
+ignorují.
+
+### Recipe Lab a `textures/recipes.json`
+
+**Třetí mód labu: skládání craftovacích receptů.** Vlevo mřížka 3×3 (přesně
+crafting table), za šipkou výstupní slot a pod ním `-` / počet / `+`, dole
+přehled všech položitelných bloků. Levé tlačítko pokládá vybraný blok, pravé
+buňku maže, kolečko roluje přehledem.
+
+**⚠️ LAB SI NEVYMÝŠLÍ PRAVIDLA SHODY.** Rozepsaný recept leží v obyčejném
+`Container` — tomtéž typu, jaký drží crafting mřížka ve hře — a lab se na
+výsledek ptá `Recipes.match()`, tedy funkce, kterou se ptá crafting table
+i inventář. Kdyby si nesl vlastní porovnávání, byly by dvě odpovědi na otázku
+„co je shoda" a nikdo by nepoznal, která platí ve hře. Díky tomu je i **náhled
+v labu skutečnost**: co lab ukáže jako výsledek, to opravdu vyjde.
+
+**⚠️ RECEPT SE OŘEŽE NA NEJMENŠÍ OBDÉLNÍK, a není to kosmetika.** Lab skládá
+vždycky do 3×3, ale recept si nese svou velikost a hledá se kdekoliv v mřížce;
+recept 3×3 s jedinou surovinou uprostřed by se do malé mřížky 2×2 u inventáře
+**nevešel vůbec**. S ořezem se z něj stane recept 1×1 a funguje v obou mřížkách.
+`RecipeLabTest` to ověřuje tak, že ořezaný recept skutečně zkusí v mřížce 2×2.
+
+**⚠️ RECEPTY Z LABU SE PŘIDÁVAJÍ, NENAHRAZUJÍ.** `Recipes.match()` projde
+nejdřív tvarované vestavěné recepty, pak bezetvarové, a teprve pak seznam
+z labu. Chybějící, prázdný i poškozený soubor tedy znamená hru přesně takovou,
+jaká byla — smyčka se ani jednou neprotočí. **Vestavěný recept má přednost**,
+a lab vzor, který už vestavěný recept má, ani neuloží (řekne proč).
+
+**⚠️ NOVÝ RECEPT PLATÍ HNED, BEZ RESTARTU.** Save zapíše soubor **a zároveň**
+aktivuje nový `RecipeBook`; `Recipes.match()` se ptá aktivního seznamu, ne
+souboru. Pořadí je „zapsat, pak aktivovat" — kdyby se aktivovalo dřív, hrálo by
+se s receptem, který na disku není, a po restartu by zmizel. Je to táž úvaha,
+proč Create u bloku z labu ukládá atlas dřív, než blok založí.
+
+**Recept smí odkazovat na bloky z labu (id 64+).** Pravidlo „jen vestavěné
+bloky" platí pro GENERÁTOR TERÉNU, protože ten musí fungovat i bez
+`blocks.json`; recept je naopak data vedle dat a je v pořádku, aby jedna
+nepovinná věc odkazovala na druhou. Když blok z receptu zmizí, přeskočí se jen
+ten recept. Proto se `recipes.json` načítá **až po** `blocks.json`.
+
+**Soubor `textures/recipes.json`** vedle `blocks.json`, stejným vzorem: JSON
+(UTF-8, dvě mezery, `\n`, na konci nový řádek), atomický zápis přes `.tmp`,
+záloha do `.bak`, když soubor nešel načíst celý, chybějící soubor = mlčky
+prázdný seznam, jeden vadný záznam shodí jen sám sebe, novější `format` se
+načte s varováním.
+
+```json
+{
+  "format": 1,
+  "recipes": [
+    {
+      "width": 2,
+      "height": 2,
+      "pattern": [15, 15, 15, 15],
+      "result": 10,
+      "count": 8
+    }
+  ]
+}
+```
+
+`pattern` je jedno pole po řádcích shora dolů a **nula je prázdná buňka**
+(`World.AIR`), takže se recept dá přečíst i očima.
+
+**Meze:** jen tvarované recepty (bezetvarové se z kódu nepřidávají), recept
+z labu se nedá upravit ani smazat jinak než ručním zásahem do souboru,
+suroviny jsou vždycky po jednom kuse (recept „devět cihel" jde, „tři kameny
+z jednoho slotu" ne, protože tak crafting nefunguje), a výsledkem je blok —
+předměty pořád neexistují.
 
 ### Bloky z labu (datově řízené)
 
@@ -2015,7 +2185,7 @@ se tlačítko na hraně samo chytalo a pouštělo dokola.
 | Výška jednoho sloupečku | 204 ns (7 vzorků šumu), samotné `biomeAt()` 76 ns |
 | Skok výšky na hranici biomu | **3 bloky** — stejně jako uvnitř biomu, průměr 0,33 |
 | Frame texture labu | **1,0 ms** (před dávkováním 2,2 ms; RTX 2050, okno 1600×1000, medián z 600 framů) |
-| Draw cally labu | **8** na frame (před dávkováním 422) |
+| Draw cally labu | **8** na frame v módu Blocks/Skin (před dávkováním 422) |
 | Nahrání atlasu při tahu štětcem | 1 KB (dlaždice 16×16) místo 64 KB celého atlasu |
 
 **Frustum culling ani async generace nejsou implementované — po měření vyhodnoceny jako
@@ -2037,8 +2207,9 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | F5 | pohled: první osoba → třetí zezadu → třetí zepředu → zpět |
 | F3 | ladicí výpis vlevo nahoře — schovat / ukázat (výchozí: ukázaný) |
 | F11 | okno / celá obrazovka (uloží se do `options.json`) |
-| F6 | texture lab (znovu F6 nebo Esc zavře); taky z hlavního menu „Texture Lab" |
-| v labu: Blocks / Skin | záložky vpravo dole — dlaždice atlasu / kůže postavy (`textures/skin.png`) |
+| F6 | lab (znovu F6 nebo Esc zavře); taky z hlavního menu „Lab" |
+| v labu: boční panel vlevo | módy Blocks / Skin / Recipes — ikona přepíná, najetí myší řekne jméno |
+| v labu Recipes: LMB / PMB / kolečko | položit vybraný blok do mřížky / vymazat buňku / rolovat přehledem bloků |
 | v labu: New block / Import PNG | nový blok z labu (Esc zruší) / načíst `textures/import.png` (atlas 128×128, kůže 64×64); PNG přetažené do okna se naimportuje hned |
 | v labu: F3 | měření vykreslení labu — čas fází a počet draw callů |
 | PMB na crafting table | otevře mřížku 3×3 |
@@ -2076,11 +2247,13 @@ do `textures/atlas.png` a hra ho při startu načte místo procedurálního; viz
 **Editace kůže postavy — hotovo.** Záložka Skin v labu maluje `textures/skin.png` s živým
 náhledem skutečného modelu; viz sekce „Editace kůže postavy v labu".
 
-**Texture lab — hotovo.** F6 nebo „Texture Lab" v hlavním menu: úpravy dlaždic s živou 3D
-kostkou přes skutečný mesher a shader, export do PNG, import hotového PNG, paleta celého
-atlasu a zakládání nových bloků (plná kostka) do `textures/blocks.json`. Zbývá: víc atlasů /
-resource packy, úpravy a mazání bloků z labu, vlastní tvary, recepty pro bloky z labu,
-průsvitné bloky, animované textury.
+**Lab — hotovo, a je to teď hub.** F6 nebo „Lab" v hlavním menu; boční panel vlevo přepíná
+módy Blocks, Skin a Recipes. Úpravy dlaždic s živou 3D kostkou přes skutečný mesher a shader,
+export i import PNG, paleta celého atlasu, zakládání nových bloků do `textures/blocks.json`
+a skládání receptů do `textures/recipes.json`. **Přidat další mód je třída a jeden řádek
+v seznamu** — viz „Lab jako hub s bočním panelem". Zbývá: víc atlasů / resource packy, úpravy
+a mazání bloků i receptů z labu, vlastní tvary, průsvitné bloky, animované textury.
+Nápady na další módy: Keybind Lab, Ore / Biome Tuner, prefab nástroj, sound lab.
 
 **Jeskyně a rudy — hotovo.** 3D šum, uhlí a železo s vlastními hloubkami, v horách 3× víc
 železa. Přidat další rudu = konstanta ve `World`, řádek v `oreAt()`, dlaždice
@@ -2118,6 +2291,10 @@ Těžba padá do inventáře, pokládání z něj ubírá. Inventář se uklád�
 **Shift-klik, tažení myší a předměty na zemi — hotovo.** Shift-klik mezi hotbarem a batohem
 (i z crafting mřížky), tažení levým (rovnoměrně) i pravým (po jednom) s náhledem, vyhazování
 z ruky na Q / Ctrl+Q. Co se při těžbě nevejde do inventáře, vypadne na zem a dá se sebrat.
+
+**Recepty z labu — hotovo.** Mód Recipes skládá tvarované recepty do
+`textures/recipes.json`; přidávají se k vestavěným a platí okamžitě, bez restartu.
+Zbývá: bezetvarové recepty, úprava a mazání uloženého receptu, suroviny po víc kusech.
 
 **Co k inventáři chybí:** sloty na zbroj (nemá je co plnit), shift-klik na výsledek craftingu
 („vyrob, kolik to jde"), dvojklik pro sesbírání stejného bloku, vyhazování z otevřené obrazovky

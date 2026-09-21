@@ -117,6 +117,10 @@ public class AllTests {
         BlockRegistryTest.main(args);
         failures += BlockRegistryTest.failures;
 
+        System.out.println(NEWLINE + "========== RecipeLabTest ==========");
+        RecipeLabTest.main(args);
+        failures += RecipeLabTest.failures;
+
         System.out.println(NEWLINE + "========== LabBlockTest ==========");
         LabBlockTest.main(args);
         failures += LabBlockTest.failures;

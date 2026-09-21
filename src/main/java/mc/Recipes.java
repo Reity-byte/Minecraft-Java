@@ -114,7 +114,43 @@ public final class Recipes {
             }
         }
 
+        // ⚠️ Recepty z labu se zkoušejí AŽ PO vestavěných a TÝMŽ porovnáním.
+        //
+        // Až po nich proto, že vestavěné recepty jsou součást hry a soubor
+        // s daty je nesmí přebít - recept z recipes.json, který by měl stejný
+        // vzor jako "čtyři prkna do čtverce", by jinak tiše změnil, co z něj
+        // vyleze. Tímtéž porovnáním proto, že "co je shoda" musí mít jednu
+        // odpověď: kdyby si lab nesl vlastní pravidla, choval by se v něm
+        // recept jinak než ve hře a nikdo by nepoznal které je to pravé.
+        //
+        // Prázdný, chybějící i poškozený recipes.json dá prázdný seznam,
+        // takže se tahle smyčka ani jednou neprotočí a hra je jako dřív.
+        for(Recipe recipe : RecipeBook.active().recipes())
+        {
+            if(matchesShaped(grid, columns, rows, recipe))
+            {
+                return ItemStack.of(recipe.result(), recipe.resultCount());
+            }
+        }
+
         return ItemStack.EMPTY;
+    }
+
+    /** Vyrábí už nějaký VESTAVĚNÝ recept přesně tenhle vzor? */
+    public static boolean builtInHasPattern(Recipe wanted)
+    {
+        Recipe normalized = RecipeBook.normalize(wanted);
+
+        for(Recipe recipe : SHAPED)
+        {
+            if(recipe.width() == normalized.width() && recipe.height() == normalized.height()
+                    && java.util.Arrays.equals(recipe.pattern(), normalized.pattern()))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

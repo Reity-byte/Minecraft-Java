@@ -16,6 +16,13 @@ package mc;
  * z GLFW s počátkem nahoře, takže se řádek při hit-testu překlápí - na jednom
  * místě, tady.
  *
+ * ⚠️ OBSAHOVÉ OBDÉLNÍKY JSOU OD LEVÉHO OKRAJE OBSAHU, NE PANELU. Vlevo od
+ * obsahu leží boční panel s módy (LabSidebar) a je široký SIDEBAR_WIDTH.
+ * Počítá se s tím na JEDNOM místě, v konstruktoru: `left` je levý okraj
+ * OBSAHU (panelLeft + šířka pruhu), takže se ani jeden z obdélníků níž
+ * zavedením bočního panelu nemusel posunout. Panel sám si říká o `panelLeft()`
+ * a `panelGuiX()`.
+ *
  * ⚠️ REŽIM SKIN POUŽÍVÁ TYTÉŽ TŘI OBDÉLNÍKY. Vlevo místo přehledu atlasu
  * leží celá kůže 64x64 (dva GUI pixely na pixel kůže - vyjde přesně na
  * 128x128, které má přehled atlasu), uprostřed místo dlaždice vybraná stěna
@@ -30,7 +37,11 @@ package mc;
  */
 public final class TextureLabLayout {
 
-    public static final int WIDTH = 448;
+    /** Šířka obsahové části - to, co lab kreslil, než přibyl boční panel. */
+    public static final int CONTENT_WIDTH = 448;
+
+    /** Celý panel i s pruhem módů vlevo. */
+    public static final int WIDTH = LabSidebar.WIDTH + CONTENT_WIDTH;
     public static final int HEIGHT = 300;
 
     /** Obdélník v GUI pixelech, počátek vlevo nahoře. */
@@ -76,16 +87,6 @@ public final class TextureLabLayout {
     public static final Rect CLOSE = new Rect(284, 198, 156, 18);
 
     /**
-     * Záložky režimu - viditelná tlačítka, ne skrytá zkratka.
-     *
-     * Pravá je zarovnaná s Revert a New block (x = 364), levá o kus dál
-     * doprava než ostatní tlačítka (288 místo 284): v tom řádku leží vlevo
-     * písmeno "V" u posuvníku jasu a při 284 se ho okraj tlačítka dotýkal.
-     */
-    public static final Rect MODE_BLOCKS = new Rect(288, 220, 72, 16);
-    public static final Rect MODE_SKIN = new Rect(364, 220, 76, 16);
-
-    /**
      * Barvy celého atlasu - široký pruh pod vším ostatním. Stejný krok
      * a velikost vzorku jako paleta dlaždice, jen 43 sloupců přes celý panel.
      */
@@ -114,6 +115,57 @@ public final class TextureLabLayout {
     public static final Rect CREATE = new Rect(284, 176, 156, 18);
     public static final Rect CANCEL = new Rect(284, 198, 156, 18);
 
+    // ------------------------------------------------------------------
+    // mód Recipes
+    //
+    // ⚠️ Leží ve STEJNÉ obsahové ploše jako Blocks a Skin, ne ve vlastní.
+    // Druhé rozvržení by znamenalo druhý hit-test na každý prvek a dvě
+    // místa, kde se to může rozejít - tentýž důvod, proč Skin používá
+    // tytéž tři obdélníky jako Blocks.
+    // ------------------------------------------------------------------
+
+    /** Rozteč buněk mřížky receptu. Slot je 18x18 jako v inventáři. */
+    public static final int RECIPE_SLOT = ContainerScreen.SLOT_PITCH;
+
+    /** Mřížka receptu 3x3 - největší, co umí crafting table. */
+    public static final Rect RECIPE_GRID = new Rect(24, 40,
+            RecipeBook.MAX_SIZE * RECIPE_SLOT, RecipeBook.MAX_SIZE * RECIPE_SLOT);
+
+    /** Výsledek: jeden slot vpravo od mřížky, za šipkou. */
+    public static final Rect RECIPE_RESULT = new Rect(
+            RECIPE_GRID.x() + RECIPE_GRID.w() + 34, RECIPE_GRID.y() + RECIPE_SLOT,
+            RECIPE_SLOT, RECIPE_SLOT);
+
+    /** Šipka mezi mřížkou a výsledkem. */
+    public static final Rect RECIPE_ARROW = new Rect(
+            RECIPE_GRID.x() + RECIPE_GRID.w() + 8, RECIPE_GRID.y() + RECIPE_SLOT + 7,
+            22, 4);
+
+    /** Počet kusů na výstupu: - hodnota +. */
+    public static final Rect RECIPE_LESS = new Rect(RECIPE_RESULT.x() - 2, RECIPE_RESULT.y() + 24, 12, 12);
+    public static final Rect RECIPE_COUNT = new Rect(RECIPE_RESULT.x() + 10, RECIPE_RESULT.y() + 24, 24, 12);
+    public static final Rect RECIPE_MORE = new Rect(RECIPE_RESULT.x() + 34, RECIPE_RESULT.y() + 24, 12, 12);
+
+    /**
+     * Přehled bloků, ze kterých se recept skládá. Mřížka slotů přes celou
+     * šířku obsahu pod mřížkou receptu; rolovací, protože bloků z labu
+     * může být až 64.
+     */
+    public static final int PICKER_COLUMNS = 22;
+    public static final int PICKER_ROWS = 4;
+    public static final Rect RECIPE_PICKER = new Rect(8, 128,
+            PICKER_COLUMNS * RECIPE_SLOT, PICKER_ROWS * RECIPE_SLOT);
+
+    // Tlačítka módu Recipes - v tomtéž sloupci jako tlačítka atlasu.
+    public static final Rect RECIPE_SAVE = new Rect(284, 20, 156, 18);
+    public static final Rect RECIPE_CLEAR = new Rect(284, 42, 156, 18);
+    public static final Rect RECIPE_CLOSE = new Rect(284, 64, 156, 18);
+
+    /** Kde se vypisuje, co je v souboru a jestli recept platí. */
+    public static final int RECIPE_INFO_Y = 92;
+    public static final int RECIPE_LIST_Y = 106;
+    public static final int PICKER_LABEL_Y = 118;
+
     public static final int TITLE_Y = 6;
     public static final int INFO_Y = 154;
     public static final int GLOBAL_LABEL_Y = 241;
@@ -121,14 +173,19 @@ public final class TextureLabLayout {
     public static final int HELP_Y = 288;
 
     private final int scale;
+    private final int panelLeft;
     private final int left;
     private final int top;
 
     public TextureLabLayout(int screenWidth, int screenHeight)
     {
         scale = scaleFor(screenWidth, screenHeight);
-        left = (int) Gui.snap((screenWidth - WIDTH * scale) / 2f, scale);
+        panelLeft = (int) Gui.snap((screenWidth - WIDTH * scale) / 2f, scale);
         top = (int) Gui.snap((screenHeight - HEIGHT * scale) / 2f, scale);
+
+        // ⚠️ left je levý okraj OBSAHU, ne panelu. Díky tomu zůstaly všechny
+        // obdélníky obsahu na svých souřadnicích i po zavedení bočního pruhu.
+        left = panelLeft + LabSidebar.WIDTH * scale;
     }
 
     /** Největší celé měřítko, při kterém se lab vejde. Aspoň 1. */
@@ -138,8 +195,40 @@ public final class TextureLabLayout {
     }
 
     public int scale() { return scale; }
+
+    /** Levý okraj OBSAHU v pixelech obrazovky (za bočním pruhem). */
     public int left()  { return left; }
+
+    /** Levý okraj celého panelu i s bočním pruhem. */
+    public int panelLeft() { return panelLeft; }
+
     public int top()   { return top; }
+
+    // ------------------------------------------------------------------
+    // boční panel
+    // ------------------------------------------------------------------
+
+    /** Myš na GUI pixely BOČNÍHO PANELU (počátek na jeho levém okraji). */
+    public float panelGuiX(double mouseX) { return (float) ((mouseX - panelLeft) / scale); }
+
+    /** Svislá osa je pro panel i obsah tatáž - oba začínají na `top`. */
+    public float panelGuiY(double mouseY) { return guiY(mouseY); }
+
+    public boolean hitPanel(Rect r, double mouseX, double mouseY)
+    {
+        return r.contains(panelGuiX(mouseX), panelGuiY(mouseY));
+    }
+
+    /** Levý okraj obdélníku bočního panelu v pixelech obrazovky. */
+    public float panelScreenX(Rect r)
+    {
+        return panelLeft + r.x() * scale;
+    }
+
+    public float panelTextLeft(float guiX)
+    {
+        return panelLeft + guiX * scale;
+    }
 
     // ------------------------------------------------------------------
     // převody
@@ -283,6 +372,53 @@ public final class TextureLabLayout {
     // ------------------------------------------------------------------
 
     /** Políčko stěny; face je BlockAtlas.FACE_*. */
+    /** Buňka mřížky receptu (sloupec, řádek) - řádek 0 je NAHOŘE jako v inventáři. */
+    public static Rect recipeCell(int column, int row)
+    {
+        return new Rect(RECIPE_GRID.x() + column * RECIPE_SLOT,
+                RECIPE_GRID.y() + row * RECIPE_SLOT, RECIPE_SLOT, RECIPE_SLOT);
+    }
+
+    /** Index buňky mřížky receptu pod myší (řádky shora dolů), nebo -1. */
+    public int recipeCellAt(double mouseX, double mouseY)
+    {
+        float gx = guiX(mouseX), gy = guiY(mouseY);
+
+        if(!RECIPE_GRID.contains(gx, gy))
+        {
+            return -1;
+        }
+
+        int column = (int) ((gx - RECIPE_GRID.x()) / RECIPE_SLOT);
+        int row = (int) ((gy - RECIPE_GRID.y()) / RECIPE_SLOT);
+
+        return row * RecipeBook.MAX_SIZE + column;
+    }
+
+    /** Slot přehledu bloků (index od nuly, po řádcích). */
+    public static Rect pickerSlot(int index)
+    {
+        return new Rect(RECIPE_PICKER.x() + (index % PICKER_COLUMNS) * RECIPE_SLOT,
+                RECIPE_PICKER.y() + (index / PICKER_COLUMNS) * RECIPE_SLOT,
+                RECIPE_SLOT, RECIPE_SLOT);
+    }
+
+    /** Index slotu přehledu pod myší (bez posunu rolováním), nebo -1. */
+    public int pickerSlotAt(double mouseX, double mouseY)
+    {
+        float gx = guiX(mouseX), gy = guiY(mouseY);
+
+        if(!RECIPE_PICKER.contains(gx, gy))
+        {
+            return -1;
+        }
+
+        int column = (int) ((gx - RECIPE_PICKER.x()) / RECIPE_SLOT);
+        int row = (int) ((gy - RECIPE_PICKER.y()) / RECIPE_SLOT);
+
+        return row * PICKER_COLUMNS + column;
+    }
+
     public static Rect faceSlot(int face)
     {
         return new Rect(FACE_SLOT_X[face], FACE_SLOT_Y, FACE_SLOT_W, FACE_SLOT_H);

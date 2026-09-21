@@ -73,7 +73,14 @@ public class TextureLab {
     private static final float[] GUM_CHECK   = {0.75f, 0.75f, 0.75f, 1f};
     private static final float[] SKY = {WorldRenderer.SKY_R, WorldRenderer.SKY_G, WorldRenderer.SKY_B, 1f};
 
-    /** Co se maluje. Přepíná se záložkami v pravém sloupci. */
+    /**
+     * Do čeho se maluje v pixelovém módu.
+     *
+     * ⚠️ Zůstalo to enum, protože oba pixelové módy sdílí plátno, paletu,
+     * HSV, hex i undo a liší se jen cílem (dlaždice atlasu proti stěně dílu
+     * těla). Navenek jsou to ale dva samostatné `LabMode` v bočním panelu -
+     * tenhle příznak je vnitřní věc malování, ne navigace.
+     */
     public enum Mode { BLOCKS, SKIN }
 
     private final AtlasEditor editor;
@@ -93,6 +100,15 @@ public class TextureLab {
 
     /** Měření času vykreslení labu po fázích - zapíná se v labu klávesou F3. */
     private final LabProfiler profiler = new LabProfiler();
+
+    /** Mód Recipes. Vzniká s labem, aby se rozepsaný recept nezahodil přepnutím. */
+    private final RecipeLab recipeLab;
+
+    /**
+     * Ikony bloků pro mód Recipes - tytéž izometrické kostky jako v hotbaru
+     * a ve slotech inventáře, takže blok vypadá v receptu stejně jako ve hře.
+     */
+    private final BlockIcon blockIcons;
 
     /** Odkud atlas pochází: true = textures/atlas.png, false = procedurální. */
     private boolean fromFile;
@@ -190,8 +206,370 @@ public class TextureLab {
         checker = Texture.fromArgb(new int[]{0xFF9A9A9A, 0xFF6A6A6A, 0xFF6A6A6A, 0xFF9A9A9A},
                 2, 2, GL_REPEAT);
 
+        blockIcons = new BlockIcon(atlas);
+        recipeLab = new RecipeLab(this, shapes, text);
+
         selectTile(0);
         setColor(editor.get(0, 0));
+
+        // ⚠️ POŘADÍ V SEZNAMU = POŘADÍ V BOČNÍM PANELU. Další mód se přidá
+        // sem a nikam jinam; LabSidebar zná jen počet.
+        modes.add(new PixelMode(Mode.BLOCKS, "Blocks",
+                "Blocks: pick an atlas tile on the left, paint it in the middle"));
+        modes.add(new PixelMode(Mode.SKIN, "Skin",
+                "Skin: pick a body face on the left, paint it in the middle"));
+        modes.add(recipeLab);
+
+        current().onEnter();
+    }
+
+    // ==================================================================
+    // módy
+    // ==================================================================
+
+    /**
+     * Blocks a Skin jako položky bočního panelu.
+     *
+     * Obě jen přepnou vnitřní příznak `mode` a pak nechají pracovat týž
+     * kód, který lab měl odjakživa - sdílené plátno, paletu, undo a import
+     * tenhle refaktor vědomě nerozebíral (viz `LabMode`). Navenek jsou to
+     * přitom dva samostatné módy, takže se sidebar nemusí ptát, jestli jsou
+     * "vlastně jeden".
+     */
+    private final class PixelMode implements LabMode {
+
+        private final Mode which;
+        private final String title;
+        private final String hint;
+
+        PixelMode(Mode which, String title, String hint)
+        {
+            this.which = which;
+            this.title = title;
+            this.hint = hint;
+        }
+
+        @Override public String title() { return title; }
+        @Override public String hint()  { return hint; }
+
+        @Override
+        public void drawIcon(Renderer2D shapes, float left, float bottom, float size)
+        {
+            if(which == Mode.BLOCKS)
+            {
+                drawCubeIcon(shapes, left, bottom, size);
+            }
+            else
+            {
+                drawSkinIcon(shapes, left, bottom, size);
+            }
+        }
+
+        @Override
+        public void onEnter()
+        {
+            mode = which;
+
+            if(which == Mode.BLOCKS)
+            {
+                refreshPreview();
+            }
+        }
+
+        @Override
+        public void onLeave()
+        {
+            // Rozepsaný blok patří k atlasu; nechat ho viset v jiném módu
+            // by znamenalo aktivní dočasný registr, o kterém není nic vidět.
+            cancelBlock();
+            release();
+        }
+
+        @Override public void update(float dt) { updatePixel(dt); }
+
+        @Override
+        public void drawShapes(TextureLabLayout layout, int screenWidth, int screenHeight,
+                               double mouseX, double mouseY)
+        {
+            drawPixelContent(layout, screenWidth, screenHeight, mouseX, mouseY);
+        }
+
+        @Override
+        public void drawText(TextureLabLayout layout, int screenWidth, int screenHeight,
+                             double mouseX, double mouseY)
+        {
+            drawPixelTexts(layout, screenWidth, screenHeight, mouseX, mouseY);
+        }
+
+        @Override
+        public boolean press(TextureLabLayout layout, double mouseX, double mouseY,
+                             int screenWidth, int screenHeight, boolean left)
+        {
+            return pressPixel(layout, mouseX, mouseY, screenWidth, screenHeight, left);
+        }
+
+        @Override
+        public void drag(TextureLabLayout layout, double mouseX, double mouseY,
+                         int screenWidth, int screenHeight)
+        {
+            dragPixel(layout, mouseX, mouseY, screenWidth, screenHeight);
+        }
+
+        @Override public void release() { TextureLab.this.release(); }
+        @Override public boolean key(int key, int mods) { return keyPixel(key, mods); }
+        @Override public void typed(int codepoint) { typedPixel(codepoint); }
+    }
+
+    /**
+     * Ikona módu Blocks: izometrická kostka ze tří kosodélníků.
+     *
+     * ⚠️ Kreslí se přes `Renderer2D`, ne přes `BlockIcon`. Ten má vlastní
+     * shader a VAO, takže by uprostřed dávky bočního panelu musel dávku
+     * vyprázdnit - a lab má 8 draw callů místo 422 právě proto, že se
+     * nevyprazdňuje (viz "Výkon labu"). Odstíny stěn jsou tytéž konstanty
+     * jako v `ChunkMesh`, aby ikona seděla s tím, jak blok vypadá ve světě.
+     */
+    private static void drawCubeIcon(Renderer2D shapes, float left, float bottom, float size)
+    {
+        float cx = left + size / 2f;
+        float cy = bottom + size / 2f;
+        float half = size * 0.42f;
+        float quarter = half / 2f;
+
+        float[] top   = {0.36f, 0.55f, 0.23f, 1f};   // tráva shora
+        float[] leftF = {0.44f, 0.34f, 0.23f, 1f};   // hlína, bok +Z (0,8)
+        float[] rightF = {0.33f, 0.26f, 0.17f, 1f};  // hlína, bok +X (0,6)
+
+        shapes.fillQuad(cx, cy + half, cx - half, cy + quarter,
+                cx, cy, cx + half, cy + quarter, top);
+        shapes.fillQuad(cx - half, cy + quarter, cx - half, cy - quarter,
+                cx, cy - half, cx, cy, leftF);
+        shapes.fillQuad(cx, cy, cx, cy - half,
+                cx + half, cy - quarter, cx + half, cy + quarter, rightF);
+    }
+
+    /** Ikona módu Skin: hlava, trup a dvě ruce z obdélníků. */
+    private static void drawSkinIcon(Renderer2D shapes, float left, float bottom, float size)
+    {
+        float unit = size / 8f;
+        float[] skinColor = {0.78f, 0.61f, 0.49f, 1f};
+        float[] shirt = {0.12f, 0.61f, 0.61f, 1f};
+
+        shapes.fillRect(left + 2.5f * unit, bottom + 5.5f * unit, 3 * unit, 2.5f * unit, skinColor);
+        shapes.fillRect(left + 2.5f * unit, bottom + 2f * unit, 3 * unit, 3.5f * unit, shirt);
+        shapes.fillRect(left + 1f * unit, bottom + 2.5f * unit, 1.5f * unit, 3 * unit, skinColor);
+        shapes.fillRect(left + 5.5f * unit, bottom + 2.5f * unit, 1.5f * unit, 3 * unit, skinColor);
+        shapes.fillRect(left + 2.5f * unit, bottom + 0.5f * unit, 3 * unit, 1.5f * unit, skinColor);
+    }
+
+    // ==================================================================
+    // vstup a kreslení hubu
+    // ==================================================================
+
+    /**
+     * Zmáčknutí myši. Boční panel má přednost před módem: klik na ikonu
+     * přepíná, i když má mód rozepsané cokoliv (jeho `onLeave()` to uklidí).
+     */
+    public boolean press(double mouseX, double mouseY, int screenWidth, int screenHeight, boolean left)
+    {
+        TextureLabLayout layout = new TextureLabLayout(screenWidth, screenHeight);
+
+        if(left)
+        {
+            int button = LabSidebar.buttonAt(layout.panelGuiX(mouseX), layout.panelGuiY(mouseY),
+                    modes.size());
+
+            if(button >= 0)
+            {
+                selectMode(button);
+                return false;
+            }
+        }
+
+        return current().press(layout, mouseX, mouseY, screenWidth, screenHeight, left);
+    }
+
+    public void drag(double mouseX, double mouseY, int screenWidth, int screenHeight)
+    {
+        current().drag(new TextureLabLayout(screenWidth, screenHeight),
+                mouseX, mouseY, screenWidth, screenHeight);
+    }
+
+    public void releaseMouse()
+    {
+        current().release();
+    }
+
+    public boolean key(int key, int mods)
+    {
+        return current().key(key, mods);
+    }
+
+    public void typed(int codepoint)
+    {
+        current().typed(codepoint);
+    }
+
+    /**
+     * Kolečko myši. Zatím ho používá jen mód Recipes na rolování přehledem
+     * bloků; ostatní módy ho ignorují, takže se nic neděje.
+     */
+    public void scroll(double yoffset)
+    {
+        if(current() == recipeLab)
+        {
+            recipeLab.scroll(yoffset);
+        }
+    }
+
+    public void update(float dt)
+    {
+        if(statusLeft > 0f)
+        {
+            statusLeft = Math.max(0f, statusLeft - dt);
+        }
+
+        current().update(dt);
+    }
+
+    /**
+     * Jeden frame labu: panel, boční pruh, obsah aktivního módu a nakonec
+     * texty.
+     *
+     * ⚠️ TEXT AŽ PO VŠECH TVARECH, ve dvou průchodech. Kdyby si mód kreslil
+     * text mezi svoje tvary, přebil by ho další panel nakreslený po něm -
+     * je to tentýž důvod, proč to takhle dělá seznam světů s potvrzovacím
+     * dialogem.
+     */
+    public void render(int screenWidth, int screenHeight, double mouseX, double mouseY)
+    {
+        profiler.beginFrame();
+
+        TextureLabLayout layout = new TextureLabLayout(screenWidth, screenHeight);
+        int scale = layout.scale();
+
+        // --- panel a boční pruh ---
+        profiler.start(LabProfiler.SHAPES);
+        shapes.begin(screenWidth, screenHeight);
+
+        shapes.bevelRect(layout.panelLeft(),
+                screenHeight - layout.top() - TextureLabLayout.HEIGHT * scale,
+                TextureLabLayout.WIDTH * scale, TextureLabLayout.HEIGHT * scale, scale,
+                Palette.PANEL_OUTLINE, Palette.CONTAINER_FILL,
+                Palette.CONTAINER_HIGHLIGHT, Palette.CONTAINER_SHADOW);
+
+        drawSidebar(layout, screenHeight, mouseX, mouseY);
+
+        shapes.end();
+        profiler.stop(LabProfiler.SHAPES);
+
+        current().drawShapes(layout, screenWidth, screenHeight, mouseX, mouseY);
+
+        profiler.start(LabProfiler.TEXT);
+        current().drawText(layout, screenWidth, screenHeight, mouseX, mouseY);
+        drawStatusAndHelp(layout, screenWidth, screenHeight, mouseX, mouseY);
+        profiler.stop(LabProfiler.TEXT);
+
+        profiler.endFrame();
+    }
+
+    /**
+     * Boční pruh: jedno tlačítko na mód, aktivní zapuštěný a orámovaný.
+     *
+     * ⚠️ NEZNÁ ŽÁDNÝ KONKRÉTNÍ MÓD. Jen projde seznam, řekne si u `LabSidebar`
+     * o obdélník a nechá mód nakreslit vlastní ikonu. Proto přidání módu
+     * nesahá sem ani do `LabSidebar`.
+     */
+    private void drawSidebar(TextureLabLayout layout, int screenHeight,
+                             double mouseX, double mouseY)
+    {
+        for(int i = 0; i < modes.size(); i++)
+        {
+            TextureLabLayout.Rect r = LabSidebar.button(i);
+            float x = layout.panelScreenX(r);
+            float y = layout.screenBottom(r, screenHeight);
+            float w = r.w() * layout.scale(), h = r.h() * layout.scale();
+
+            if(i == currentMode)
+            {
+                // Aktivní mód je ZAPUŠTĚNÝ (světlá hrana dole a vpravo) a
+                // orámovaný - stejné rozlišení jako u slotů inventáře proti
+                // tlačítkům, takže je na první pohled poznat, který mód běží.
+                shapes.bevelRect(x, y, w, h, layout.scale(), Palette.PANEL_OUTLINE,
+                        Palette.SLOT_FILL, Palette.CONTAINER_SHADOW, Palette.CONTAINER_HIGHLIGHT);
+                shapes.border(x, y, w, h, layout.scale(), Palette.SELECTOR);
+            }
+            else
+            {
+                boolean hovered = LabSidebar.button(i)
+                        .contains(layout.panelGuiX(mouseX), layout.panelGuiY(mouseY));
+
+                shapes.bevelRect(x, y, w, h, layout.scale(),
+                        hovered ? Palette.BUTTON_HOVER_OUTLINE : Palette.PANEL_OUTLINE,
+                        hovered ? Palette.BUTTON_HOVER_FILL : Palette.BUTTON_FILL,
+                        hovered ? Palette.BUTTON_HOVER_HIGHLIGHT : Palette.CONTAINER_HIGHLIGHT,
+                        hovered ? Palette.BUTTON_HOVER_SHADOW : Palette.CONTAINER_SHADOW);
+            }
+
+            TextureLabLayout.Rect icon = LabSidebar.icon(i);
+            modes.get(i).drawIcon(shapes, layout.panelScreenX(icon),
+                    layout.screenBottom(icon, screenHeight), icon.w() * layout.scale());
+        }
+    }
+
+    /**
+     * Stavový řádek a nápověda dole - společné všem módům, takže je kreslí
+     * hub, ne každý mód znovu.
+     */
+    private void drawStatusAndHelp(TextureLabLayout layout, int screenWidth, int screenHeight,
+                                   double mouseX, double mouseY)
+    {
+        int scale = layout.scale();
+        text.begin(screenWidth, screenHeight, scale);
+
+        // Zapnuté měření mluví na týchž dvou řádcích jako stav a nápověda -
+        // je to dočasný ladicí režim, ne trvalá část rozhraní.
+        if(profiler.enabled())
+        {
+            String[] lines = profiler.lines();
+            label(layout, 8, TextureLabLayout.STATUS_Y,
+                    fit(lines[0], TextureLabLayout.CONTENT_WIDTH - 16, scale));
+            text.draw(fit(lines[1], TextureLabLayout.CONTENT_WIDTH - 16, scale),
+                    layout.textLeft(8), layout.textTop(TextureLabLayout.HELP_Y), Palette.TEXT_MUTED);
+            text.end();
+            return;
+        }
+
+        if(statusLeft > 0f)
+        {
+            label(layout, 8, TextureLabLayout.STATUS_Y,
+                    fit(status, TextureLabLayout.CONTENT_WIDTH - 16, scale));
+        }
+
+        text.draw(fit(hubHelp(layout, mouseX, mouseY), TextureLabLayout.CONTENT_WIDTH - 16, scale),
+                layout.textLeft(8), layout.textTop(TextureLabLayout.HELP_Y), Palette.TEXT_MUTED);
+
+        text.end();
+    }
+
+    /**
+     * Nápověda dole. Najetí na ikonu módu řekne jeho jméno - to je jediné
+     * místo, kde se jméno módu dá přečíst, protože do 28 pixelů široké ikony
+     * se popisek nevejde (viz LabSidebar).
+     */
+    private String hubHelp(TextureLabLayout layout, double mouseX, double mouseY)
+    {
+        int hovered = LabSidebar.buttonAt(layout.panelGuiX(mouseX), layout.panelGuiY(mouseY),
+                modes.size());
+
+        if(hovered >= 0)
+        {
+            return modes.get(hovered).title() + " - " + modes.get(hovered).hint();
+        }
+
+        return current() instanceof PixelMode
+                ? help(layout, mouseX, mouseY)
+                : recipeLab.help(layout, mouseX, mouseY);
     }
 
     /** Měřič fází vykreslení - pro sondy, které lab kreslí mimo hru. */
@@ -217,30 +595,55 @@ public class TextureLab {
         return mode;
     }
 
+    // ------------------------------------------------------------------
+    // hub: seznam módů a boční panel
+    // ------------------------------------------------------------------
+
     /**
-     * Přepnutí záložky. Rozepsaný blok se zruší - formulář patří k atlasu
-     * a nechat ho viset v jiném režimu by znamenalo, že v něm lab drží
-     * aktivní dočasný registr, o kterém není nic vidět.
+     * Všechny módy labu, v pořadí, v jakém je vypíše boční panel.
+     *
+     * ⚠️ PŘIDAT MÓD = TŘÍDA + JEDEN ŘÁDEK TADY. `LabSidebar` ani jeho test
+     * se nemění - panel zná jen počet módů a nechává každý, aby si nakreslil
+     * svou ikonu sám.
      */
-    private void setMode(Mode newMode)
+    private final List<LabMode> modes = new ArrayList<>();
+
+    private int currentMode = 0;
+
+    private LabMode current()
     {
-        if(mode == newMode)
+        return modes.get(currentMode);
+    }
+
+    /** Který mód je aktivní - pro titulek a pro testy. */
+    public String currentModeTitle()
+    {
+        return current().title();
+    }
+
+    public int modeCount()
+    {
+        return modes.size();
+    }
+
+    /**
+     * Přepnutí módu.
+     *
+     * Odcházející mód dostane `onLeave()` (zruší rozepsaný blok, ukončí tah),
+     * příchozí `onEnter()`. Bez toho by v jiném módu visel dočasný registr
+     * s návrhem bloku, o kterém není nic vidět.
+     */
+    void selectMode(int index)
+    {
+        if(index < 0 || index >= modes.size() || index == currentMode)
         {
             return;
         }
 
-        cancelBlock();
-        release();
-        mode = newMode;
-
-        if(mode == Mode.BLOCKS)
-        {
-            refreshPreview();
-        }
-
-        say(mode == Mode.SKIN
-                ? "Skin: pick a body face on the left, paint it in the middle"
-                : "Blocks: pick an atlas tile on the left, paint it in the middle");
+        current().onLeave();
+        currentMode = index;
+        current().onEnter();
+        say(current().hint());
     }
 
     private boolean skinMode()
@@ -324,7 +727,7 @@ public class TextureLab {
         editor.setColor(AtlasEditor.hsv(hue, saturation, value, alpha == 0 ? 0xFF : alpha));
     }
 
-    private void say(String message)
+    void say(String message)
     {
         status = message;
         statusLeft = STATUS_SECONDS;
@@ -423,7 +826,7 @@ public class TextureLab {
         importImage();
     }
 
-    public void update(float dt)
+    private void updatePixel(float dt)
     {
         preview.update(dt);
         skinPreview.update(dt);
@@ -551,9 +954,9 @@ public class TextureLab {
     // ------------------------------------------------------------------
 
     /** Zmáčknutí tlačítka myši. Vrací true, když se kliklo na Close. */
-    public boolean press(double mouseX, double mouseY, int screenWidth, int screenHeight, boolean left)
+    private boolean pressPixel(TextureLabLayout layout, double mouseX, double mouseY,
+                               int screenWidth, int screenHeight, boolean left)
     {
-        TextureLabLayout layout = new TextureLabLayout(screenWidth, screenHeight);
 
         // Klik jinam ukončí psaní hexu - platný se použije, neplatný zahodí.
         if(hexInput != null && !layout.hit(TextureLabLayout.HEX, mouseX, mouseY))
@@ -668,19 +1071,6 @@ public class TextureLab {
             return false;
         }
 
-        // Záložky jsou vidět a fungují v obou režimech, i v rozepsaném bloku.
-        if(layout.hit(TextureLabLayout.MODE_BLOCKS, mouseX, mouseY))
-        {
-            setMode(Mode.BLOCKS);
-            return false;
-        }
-
-        if(layout.hit(TextureLabLayout.MODE_SKIN, mouseX, mouseY))
-        {
-            setMode(Mode.SKIN);
-            return false;
-        }
-
         return draft != null
                 ? pressBlockForm(layout, mouseX, mouseY)
                 : pressMainButtons(layout, mouseX, mouseY);
@@ -767,10 +1157,9 @@ public class TextureLab {
     }
 
     /** Pohyb myši s drženým tlačítkem. */
-    public void drag(double mouseX, double mouseY, int screenWidth, int screenHeight)
+    private void dragPixel(TextureLabLayout layout, double mouseX, double mouseY,
+                           int screenWidth, int screenHeight)
     {
-        TextureLabLayout layout = new TextureLabLayout(screenWidth, screenHeight);
-
         if(painting)
         {
             // Mimo plátno se tah přitiskne k okraji, ať se čára u kraje neutrhne.
@@ -794,7 +1183,7 @@ public class TextureLab {
         }
     }
 
-    public void release()
+    void release()
     {
         if(painting)
         {
@@ -810,7 +1199,7 @@ public class TextureLab {
      * Znaky, ne kódy kláves: velká písmena, mezery i rozložení klávesnice
      * pak fungují samy. Bere se jen ASCII, font nic jiného nemá.
      */
-    public void typed(int codepoint)
+    private void typedPixel(int codepoint)
     {
         if(draft == null || !editingName || codepoint < 32 || codepoint > 126
                 || codepoint == '"' || codepoint == '\\')
@@ -828,7 +1217,7 @@ public class TextureLab {
      * Klávesa. Vrací true, když se má lab zavřít (Esc, F6).
      * Při psaní hexu nebo jména patří klávesy poli, ne zkratkám.
      */
-    public boolean key(int key, int mods)
+    private boolean keyPixel(int key, int mods)
     {
         boolean ctrl = (mods & GLFW_MOD_CONTROL) != 0;
 
@@ -970,9 +1359,18 @@ public class TextureLab {
     // kreslení
     // ------------------------------------------------------------------
 
-    public void render(int screenWidth, int screenHeight, double mouseX, double mouseY)
+    /**
+     * Obsah obou pixelových módů (Blocks i Skin).
+     *
+     * Zůstalo to jedna metoda se `skinMode()` větvemi schválně: obě
+     * záložky sdílí plátno, paletu, HSV, hex i undo a liší se jen tím,
+     * do čeho míří. Rozdělit je na dvě kopie by znamenalo, že se každá
+     * oprava malování dělá dvakrát - přesně to, čemu `PixelEditor`
+     * odjakživa brání. Navigaci to nebrání: navenek jsou to dva `LabMode`.
+     */
+    private void drawPixelContent(TextureLabLayout layout, int screenWidth, int screenHeight,
+                                  double mouseX, double mouseY)
     {
-        profiler.beginFrame();
 
         // Jedno nahrání za frame, ať se maluje jakkoliv rychle - a jen
         // OBDÉLNÍK, který se změnil (při malování jedna dlaždice, 1 KB
@@ -982,7 +1380,6 @@ public class TextureLab {
         upload(skin, skinTexture);
         profiler.stop(LabProfiler.UPLOAD);
 
-        TextureLabLayout layout = new TextureLabLayout(screenWidth, screenHeight);
         int scale = layout.scale();
 
         profiler.start(LabProfiler.PALETTE);
@@ -1000,11 +1397,6 @@ public class TextureLab {
         // --- podklady ---
         profiler.start(LabProfiler.SHAPES);
         shapes.begin(screenWidth, screenHeight);
-
-        shapes.bevelRect(layout.left(), screenHeight - layout.top() - TextureLabLayout.HEIGHT * scale,
-                TextureLabLayout.WIDTH * scale, TextureLabLayout.HEIGHT * scale, scale,
-                Palette.PANEL_OUTLINE, Palette.CONTAINER_FILL,
-                Palette.CONTAINER_HIGHLIGHT, Palette.CONTAINER_SHADOW);
 
         sunken(layout, screenHeight, TextureLabLayout.ATLAS);
         sunken(layout, screenHeight, TextureLabLayout.CANVAS);
@@ -1126,8 +1518,6 @@ public class TextureLab {
             drawBlockForm(layout, screenHeight, mouseX, mouseY);
         }
 
-        drawModeTabs(layout, screenHeight, mouseX, mouseY);
-
         shapes.end();
         profiler.stop(LabProfiler.SHAPES);
 
@@ -1147,11 +1537,6 @@ public class TextureLab {
         }
         profiler.stop(LabProfiler.PREVIEW);
 
-        profiler.start(LabProfiler.TEXT);
-        drawTexts(layout, screenWidth, screenHeight, mouseX, mouseY);
-        profiler.stop(LabProfiler.TEXT);
-
-        profiler.endFrame();
     }
 
     /** Nahraje na grafiku obdélník, který se v editoru změnil - nic víc. */
@@ -1362,30 +1747,6 @@ public class TextureLab {
         }
     }
 
-    /** Záložky Blocks / Skin. Aktivní je zapuštěná a orámovaná, ne vystouplá. */
-    private void drawModeTabs(TextureLabLayout layout, int screenHeight,
-                              double mouseX, double mouseY)
-    {
-        drawTab(layout, screenHeight, TextureLabLayout.MODE_BLOCKS, mode == Mode.BLOCKS,
-                mouseX, mouseY);
-        drawTab(layout, screenHeight, TextureLabLayout.MODE_SKIN, mode == Mode.SKIN,
-                mouseX, mouseY);
-    }
-
-    private void drawTab(TextureLabLayout layout, int screenHeight, TextureLabLayout.Rect r,
-                         boolean active, double mouseX, double mouseY)
-    {
-        if(active)
-        {
-            sunken(layout, screenHeight, r);
-            outline(layout, screenHeight, r, layout.scale(), Palette.SELECTOR);
-        }
-        else
-        {
-            button(layout, screenHeight, r, mouseX, mouseY);
-        }
-    }
-
     private boolean isSwatchHovered(TextureLabLayout layout, double mouseX, double mouseY)
     {
         int swatch = layout.swatchAt(mouseX, mouseY);
@@ -1454,8 +1815,8 @@ public class TextureLab {
         }
     }
 
-    private void drawTexts(TextureLabLayout layout, int screenWidth, int screenHeight,
-                           double mouseX, double mouseY)
+    private void drawPixelTexts(TextureLabLayout layout, int screenWidth, int screenHeight,
+                                double mouseX, double mouseY)
     {
         int scale = layout.scale();
         text.begin(screenWidth, screenHeight, scale);
@@ -1468,27 +1829,24 @@ public class TextureLab {
         if(skinMode())
         {
             label(layout, 8, TextureLabLayout.TITLE_Y,
-                    fit("Texture Lab   skin: " + source + unsaved, TextureLabLayout.WIDTH - 16, scale));
+                    fit("Texture Lab   skin: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
             drawSkinInfo(layout);
         }
         else if(draft == null)
         {
             label(layout, 8, TextureLabLayout.TITLE_Y,
-                    fit("Texture Lab   atlas: " + source + unsaved, TextureLabLayout.WIDTH - 16, scale));
+                    fit("Texture Lab   atlas: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
             drawTileInfo(layout);
         }
         else
         {
             label(layout, 8, TextureLabLayout.TITLE_Y, fit("Texture Lab   new block, id "
-                    + baseRegistry.nextId() + "   atlas: " + source + unsaved, TextureLabLayout.WIDTH - 16, scale));
+                    + baseRegistry.nextId() + "   atlas: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
             drawFormTexts(layout);
         }
 
         String hex = hexInput != null ? "#" + hexInput + "_" : AtlasEditor.toHex(active().color());
         label(layout, TextureLabLayout.HEX.x() + 3, TextureLabLayout.HEX.y() + 2, hex);
-
-        centered(layout, TextureLabLayout.MODE_BLOCKS, "Blocks");
-        centered(layout, TextureLabLayout.MODE_SKIN, "Skin");
 
         label(layout, TextureLabLayout.HUE.x() + TextureLabLayout.HUE.w() + 4, TextureLabLayout.HUE.y() - 2, "H");
         label(layout, TextureLabLayout.SATURATION.x() + TextureLabLayout.SATURATION.w() + 4,
@@ -1502,26 +1860,6 @@ public class TextureLab {
         label(layout, 8, TextureLabLayout.GLOBAL_LABEL_Y,
                 (skinMode() ? "Skin colors: " : "Atlas colors: ") + shown
                         + ", by hue - hover shows where they are");
-
-        // Zapnuté měření mluví na týchž dvou řádcích jako stav a nápověda -
-        // je to dočasný ladicí režim, ne trvalá část rozhraní.
-        if(profiler.enabled())
-        {
-            String[] lines = profiler.lines();
-            label(layout, 8, TextureLabLayout.STATUS_Y, fit(lines[0], TextureLabLayout.WIDTH - 16, scale));
-            text.draw(fit(lines[1], TextureLabLayout.WIDTH - 16, scale),
-                    layout.textLeft(8), layout.textTop(TextureLabLayout.HELP_Y), Palette.TEXT_MUTED);
-            text.end();
-            return;
-        }
-
-        if(statusLeft > 0f)
-        {
-            label(layout, 8, TextureLabLayout.STATUS_Y, fit(status, TextureLabLayout.WIDTH - 16, scale));
-        }
-
-        text.draw(fit(help(layout, mouseX, mouseY), TextureLabLayout.WIDTH - 16, scale),
-                layout.textLeft(8), layout.textTop(TextureLabLayout.HELP_Y), Palette.TEXT_MUTED);
 
         text.end();
     }
@@ -1629,10 +1967,6 @@ public class TextureLab {
     /** Nápověda dole podle toho, na čem je myš. */
     private String help(TextureLabLayout l, double mouseX, double mouseY)
     {
-        if(l.hit(TextureLabLayout.MODE_BLOCKS, mouseX, mouseY)
-                || l.hit(TextureLabLayout.MODE_SKIN, mouseX, mouseY))
-            return "Blocks paints the block atlas, Skin paints the player's skin";
-
         if(skinMode())
         {
             if(l.skinPixelAt(mouseX, mouseY) != null)
@@ -1707,14 +2041,42 @@ public class TextureLab {
     // pomocné kreslení (všechno v GUI pixelech panelu)
     // ------------------------------------------------------------------
 
-    private void fill(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r, float[] color)
+    /**
+     * Izometrické ikony bloků - tytéž kostky jako v hotbaru a ve slotech
+     * inventáře, takže blok vypadá v receptu stejně jako ve hře.
+     *
+     * ⚠️ JE TO TROJICE begin / draw / end, ne jedna metoda na ikonu. `begin()`
+     * naváže shader, texturu a VAO; kdyby se to dělalo na každou ikonu zvlášť,
+     * stál by přehled bloků v módu Recipes skoro devadesát změn stavu GL za
+     * frame - a lab má 8 draw callů místo 422 právě proto, že se stav
+     * nepřenastavuje zbytečně (viz "Výkon labu").
+     *
+     * Vlastní shader se musí navázat MIMO dávku `Renderer2D`, takže si o ikony
+     * mód říká až po `shapes.end()`.
+     */
+    void blockIconsBegin(int screenWidth, int screenHeight)
+    {
+        blockIcons.begin(screenWidth, screenHeight);
+    }
+
+    void blockIcon(byte block, float x, float y, float size)
+    {
+        blockIcons.draw(x, y, size, block);
+    }
+
+    void blockIconsEnd()
+    {
+        blockIcons.end();
+    }
+
+    void fill(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r, float[] color)
     {
         int s = l.scale();
         shapes.fillRect(l.screenX(r), l.screenBottom(r, screenHeight), r.w() * s, r.h() * s, color);
     }
 
     /** Zapuštěný rámeček kolem obdélníku, jako slot v inventáři. */
-    private void sunken(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r)
+    void sunken(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r)
     {
         int s = l.scale();
         shapes.bevelRect(l.screenX(r) - s, l.screenBottom(r, screenHeight) - s,
@@ -1723,7 +2085,7 @@ public class TextureLab {
     }
 
     /** Rámeček daný tloušťkou v pixelech obrazovky (1 = tenká čára i při velkém měřítku). */
-    private void outline(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r,
+    void outline(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r,
                          int thickness, float[] color)
     {
         int s = l.scale();
@@ -1805,7 +2167,7 @@ public class TextureLab {
         shapes.fillRect(marker - s / 2f, y, s, bar.h() * s, Palette.SELECTOR);
     }
 
-    private void button(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r,
+    void button(TextureLabLayout l, int screenHeight, TextureLabLayout.Rect r,
                         double mouseX, double mouseY)
     {
         int s = l.scale();
@@ -1842,12 +2204,12 @@ public class TextureLab {
         image(l, screenWidth, screenHeight, atlas, r, u0, v0, u0 + span, v0 + span);
     }
 
-    private void label(TextureLabLayout l, float guiX, float guiY, String line)
+    void label(TextureLabLayout l, float guiX, float guiY, String line)
     {
         text.drawShadowed(line, l.textLeft(guiX), l.textTop(guiY), Palette.TEXT, Palette.TEXT_SHADOW);
     }
 
-    private void centered(TextureLabLayout l, TextureLabLayout.Rect r, String line)
+    void centered(TextureLabLayout l, TextureLabLayout.Rect r, String line)
     {
         float centerX = l.textLeft(r.x() + r.w() / 2f);
         float top = l.textTop(r.y()) + (r.h() * l.scale() - text.lineHeight()) / 2f;
@@ -1904,6 +2266,7 @@ public class TextureLab {
 
         images.delete();
         checker.delete();
+        blockIcons.delete();
         preview.delete();
         skinPreview.delete();
     }
