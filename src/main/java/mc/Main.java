@@ -480,8 +480,19 @@ public class Main {
             // potřebuje zachytit i tu klávesu, na kterou se zrovna něco
             // přebindovává - a ta v tu chvíli žádnou akci znamenat nemá.
             if (state == GameState.TEXTURE_LAB) {
-                if (action != GLFW_RELEASE && lab.key(key, mods) && action == GLFW_PRESS) {
+                if (action == GLFW_RELEASE) {
+                    return;
+                }
+
+                TextureLab.KeyResult result = lab.key(key, mods);
+
+                if (result == TextureLab.KeyResult.CLOSE && action == GLFW_PRESS) {
                     closeTextureLab();
+                } else if (result == TextureLab.KeyResult.UNUSED && action == GLFW_PRESS
+                        && bound == Keybinds.Action.FULLSCREEN) {
+                    // F11 přepíná odkudkoliv - i z labu, když si ji mód nevzal
+                    // (Keybind Lab si ji při čekání na klávesu vezme, aby šla přiřadit).
+                    toggleFullscreen();
                 }
                 return;
             }
@@ -490,13 +501,27 @@ public class Main {
             // v poli se jménem), zavírají se ale jen stiskem.
             if (state == GameState.OPTIONS || state == GameState.SELECT_WORLD
                     || state == GameState.CREATE_WORLD) {
-                if (action == GLFW_RELEASE || bound == Keybinds.Action.FULLSCREEN) {
-                    // Fullscreen propadne dolů k přepnutí celé obrazovky.
-                    if (action != GLFW_PRESS) {
-                        return;
-                    }
-                } else {
+                if (action == GLFW_RELEASE) {
+                    return;
+                }
+
+                // ⚠️ Esc a Enter zavírají nebo potvrzují, takže JEN STISKEM.
+                // Dřív šlo opakování do screenKey() taky: držený Esc na Create
+                // World proletěl přes seznam světů až do menu a držený Enter
+                // po nepovedeném načtení zkoušel svět načíst ~30x za sekundu.
+                if (action == GLFW_REPEAT && isConfirmOrCancel(key)) {
+                    return;
+                }
+
+                // Celá obrazovka propadne dolů k přepnutí - ale jen z klávesy,
+                // která na obrazovce nic nepíše. Přebindovaná na písmeno nebo
+                // Enter by jinak přepínala při psaní jména světa.
+                if (bound != Keybinds.Action.FULLSCREEN || isTypingKey(key)) {
                     screenKey(key, mods);
+                    return;
+                }
+
+                if (action != GLFW_PRESS) {
                     return;
                 }
             }
@@ -507,9 +532,7 @@ public class Main {
 
             // Fullscreen se přepíná odkudkoliv, jako v Minecraftu.
             if (bound == Keybinds.Action.FULLSCREEN) {
-                options.setFullscreen(!options.fullscreen());
-                applyOptions();
-                saveOptions();
+                toggleFullscreen();
                 return;
             }
 
@@ -651,6 +674,10 @@ public class Main {
                     } else if (optionsScreen.takeChanged()) {
                         applyOptions();
                     }
+
+                    if (optionsScreen.takeClicked()) {
+                        sound.play(Sound.CLICK);
+                    }
                 } else if (action == GLFW_RELEASE) {
                     optionsScreen.release();
                 }
@@ -660,10 +687,18 @@ public class Main {
             if (state == GameState.SELECT_WORLD && action == GLFW_PRESS
                     && button == GLFW_MOUSE_BUTTON_LEFT) {
                 switch (selectScreen.press(mouseX, mouseY, width, height, glfwGetTime())) {
-                    case PLAY -> { sound.play(Sound.CLICK); playWorld(selectScreen.selected()); }
+                    // ⚠️ Kliknutí AŽ PO akci: playWorld() -> freshWorld() zavře
+                    // zvukový engine a otevře nový, takže zvuk pouštěný předtím
+                    // by se hned uťal (tak to bylo). Hraje se na tom novém.
+                    case PLAY -> { playWorld(selectScreen.selected()); sound.play(Sound.CLICK); }
                     case CREATE -> { sound.play(Sound.CLICK); openCreateWorld(); }
                     case CANCEL -> { sound.play(Sound.CLICK); setState(GameState.MAIN_MENU); }
                     default -> { }
+                }
+
+                // Delete a tlačítka potvrzovacího dialogu obsluhuje obrazovka sama.
+                if (selectScreen.takeClicked()) {
+                    sound.play(Sound.CLICK);
                 }
                 return;
             }
@@ -671,9 +706,14 @@ public class Main {
             if (state == GameState.CREATE_WORLD && action == GLFW_PRESS
                     && button == GLFW_MOUSE_BUTTON_LEFT) {
                 switch (createScreen.press(mouseX, mouseY, width, height)) {
-                    case CREATE -> { sound.play(Sound.CLICK); createWorld(); }
+                    case CREATE -> { createWorld(); sound.play(Sound.CLICK); }
                     case CANCEL -> { sound.play(Sound.CLICK); openSelectWorld(); }
                     default -> { }
+                }
+
+                // Přepínač Game Mode obsluhuje obrazovka sama.
+                if (createScreen.takeClicked()) {
+                    sound.play(Sound.CLICK);
                 }
                 return;
             }
@@ -1237,6 +1277,28 @@ public class Main {
      * Přepne volný let. Nulování svislé rychlosti je tu proto, aby se
      * po vypnutí letu nezačalo padat setrvačností z poslední hodnoty vy.
      */
+    /** Klávesy, které na obrazovkách zavírají nebo potvrzují. */
+    static boolean isConfirmOrCancel(int key) {
+        return key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER;
+    }
+
+    /**
+     * Klávesa, kterou obrazovky používají k psaní a pohybu: znaky, Enter,
+     * Backspace, Tab, šipky, Delete a numerická klávesnice. Funkční klávesy
+     * (F1 a dál) a modifikátory mezi ně nepatří.
+     */
+    static boolean isTypingKey(int key) {
+        return (key >= GLFW_KEY_SPACE && key < GLFW_KEY_F1)
+                || (key >= GLFW_KEY_KP_0 && key <= GLFW_KEY_KP_EQUAL);
+    }
+
+    /** Okno / celá obrazovka - F11 odkudkoliv, včetně labu. */
+    private void toggleFullscreen() {
+        options.setFullscreen(!options.fullscreen());
+        applyOptions();
+        saveOptions();
+    }
+
     private void toggleFlight() {
         player.flying = !player.flying;
         player.vy = 0;
@@ -1392,7 +1454,10 @@ public class Main {
                 }
             }
             case CREATE_WORLD -> {
-                String clipboard = glfwGetClipboardString(window);
+                // Schránka jen při vložení: čtení je na X11 dotaz vlastníkovi
+                // schránky a dřív se dělalo při každém stisku klávesy.
+                String clipboard = CreateWorldScreen.isPaste(key, mods)
+                        ? glfwGetClipboardString(window) : null;
 
                 switch (createScreen.key(key, mods, clipboard)) {
                     case CREATE -> createWorld();
@@ -1415,6 +1480,10 @@ public class Main {
     }
 
     private void closeOptions() {
+        // Zavření Escem uprostřed tažení: puštění tlačítka už do Options
+        // nedojde, a instance je jedna na celý běh - posuvník by při
+        // dalším otevření jel za myší sám.
+        optionsScreen.release();
         saveOptions();
         setState(optionsReturnState);
     }
@@ -1676,9 +1745,10 @@ public class Main {
     }
 
     /**
-     * Kliknutí v menu. Zvuk kliknutí hraje AŽ PO akci tlačítka: "Create World"
-     * a "Load World" zvukový engine zavřou a otevřou nový (jako svět), takže
-     * zvuk pouštěný předtím by se hned uťal.
+     * Kliknutí v hlavním menu a v pauze. Zvuk kliknutí hraje AŽ PO akci
+     * tlačítka - stejné pravidlo jako u "Play Selected World" a "Create"
+     * na obrazovkách světů, které zvukový engine zavřou a otevřou nový
+     * (jako svět): zvuk pouštěný předtím by se hned uťal.
      */
     private void handleMenuClick() {
         if (state == GameState.MAIN_MENU) {
@@ -1832,8 +1902,8 @@ public class Main {
                         worldRenderer.drawnSections(),
                         worldRenderer.drawnFaces(),
                         worldRenderer.pendingBuilds()),
-                String.format("E inventory   held %d/%d slots   on ground %d",
-                        usedSlots(), Inventory.SIZE, drops.size()),
+                String.format("%s inventory   held %d/%d slots   on ground %d",
+                        key(Keybinds.Action.INVENTORY), usedSlots(), Inventory.SIZE, drops.size()),
                 String.format("sound %s   atlas %s   skin %s   lab blocks %d",
                         sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off",
                         atlasFromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural",
@@ -1855,11 +1925,21 @@ public class Main {
                                     ? String.format("swimming %.0f%%", player.submerged * 100)
                                 : player.onGround ? "on ground" : "in air",
                         player.vy, mode.label()),
-                mode.canFly()
-                        ? "Space x2 fly   Space/Ctrl up/down   Q drop   T time   V vsync   Esc pause"
-                        : "F fly   C noclip   1-9 slot   Q drop   T time   V vsync   Esc pause",
-                "F3 debug   F5 view   F6 texture lab   F11 fullscreen"
+                // Klávesy z Keybinds, ne natvrdo - po přebindování by nápověda lhala.
+                (mode.canFly()
+                        ? key(Keybinds.Action.JUMP) + " x2 fly   " + key(Keybinds.Action.JUMP) + "/"
+                                + key(Keybinds.Action.SNEAK) + " up/down"
+                        : key(Keybinds.Action.FLY) + " fly   " + key(Keybinds.Action.NOCLIP) + " noclip   "
+                                + key(Keybinds.Action.HOTBAR_1) + ".." + key(Keybinds.Action.HOTBAR_9) + " slot")
+                        + "   " + key(Keybinds.Action.DROP) + " drop   " + key(Keybinds.Action.SKIP_TIME)
+                        + " time   " + key(Keybinds.Action.VSYNC) + " vsync   Esc pause",
+                key(Keybinds.Action.DEBUG) + " debug   " + key(Keybinds.Action.VIEW) + " view   "
+                        + key(Keybinds.Action.LAB) + " lab   " + key(Keybinds.Action.FULLSCREEN) + " fullscreen"
         };
+    }
+
+    private static String key(Keybinds.Action action) {
+        return Keybinds.activeKeyName(action);
     }
 
     /**

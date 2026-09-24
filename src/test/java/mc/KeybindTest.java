@@ -44,6 +44,7 @@ public class KeybindTest {
             brokenFile();
             liveWithoutRestart();
             labFlow();
+            escAndScreenKeys();
         } finally {
             Keybinds.activate(before);
         }
@@ -392,5 +393,58 @@ public class KeybindTest {
                 Files.deleteIfExists(path);
             }
         }
+    }
+
+    // ==================================================================
+    // Esc patri jen pauze; klavesy na obrazovkach
+    // ==================================================================
+
+    /**
+     * BUG: pojistka "Esc zavira vzdycky" nedrzela, kdyz rucne upraveny
+     * keybinds.json dal Esc jine akci - Main testuje Esc az za vetvemi akci,
+     * takze Esc v inventari prepnul celou obrazovku misto zavreni. Ted Esc
+     * smi mit jen pauza; soubor s Esc jinde se nacte a ta akce dostane
+     * vychozi klavesu.
+     */
+    static void escAndScreenKeys() throws IOException {
+        System.out.println("\n-- Esc patri jen pauze, klavesy na obrazovkach --");
+
+        Path dir = Files.createTempDirectory("mc-keybinds-esc");
+        Path file = dir.resolve("keybinds.json");
+
+        try {
+            Files.writeString(file, "{\"format\": 1, \"keys\": {\"pause\": \"P\","
+                    + " \"fullscreen\": \"ESC\", \"drop\": \"ESC\", \"jump\": \"#5\"}}");
+            Keybinds loaded = Keybinds.load(file);
+
+            check("Esc pro celou obrazovku se odmitne (vychozi F11)",
+                    loaded.key(Keybinds.Action.FULLSCREEN) == GLFW_KEY_F11, Keybinds.keyName(loaded.key(Keybinds.Action.FULLSCREEN)));
+            check("Esc pro vyhozeni se odmitne (vychozi Q)",
+                    loaded.key(Keybinds.Action.DROP) == GLFW_KEY_Q, "");
+            check("Esc tedy nepatri zadne jine akci",
+                    loaded.actionFor(GLFW_KEY_ESCAPE) == null, "" + loaded.actionFor(GLFW_KEY_ESCAPE));
+            check("pauza na P se nacte", loaded.key(Keybinds.Action.PAUSE) == GLFW_KEY_P, "");
+            check("kod pod mezernikem (#5) GLFW v glfwGetKey odmita - akce zustane na vychozi",
+                    loaded.key(Keybinds.Action.JUMP) == GLFW_KEY_SPACE, Keybinds.keyName(loaded.key(Keybinds.Action.JUMP)));
+
+            check("Esc pro pauzu je dovoleny", Keybinds.allowedFor(Keybinds.Action.PAUSE, GLFW_KEY_ESCAPE), "");
+            check("Esc pro lab ne", !Keybinds.allowedFor(Keybinds.Action.LAB, GLFW_KEY_ESCAPE), "");
+            check("kody 1-31 nejsou pouzitelne, mezernik ano",
+                    !Keybinds.isUsableKey(5) && !Keybinds.isUsableKey(31) && Keybinds.isUsableKey(GLFW_KEY_SPACE), "");
+        } finally {
+            delete(dir);
+        }
+
+        // Obrazovky: Esc a Enter jen stiskem, celá obrazovka jen z klavesy, ktera nepise.
+        check("Esc, Enter i Enter na numericke zavira/potvrzuje",
+                Main.isConfirmOrCancel(GLFW_KEY_ESCAPE) && Main.isConfirmOrCancel(GLFW_KEY_ENTER)
+                        && Main.isConfirmOrCancel(GLFW_KEY_KP_ENTER) && !Main.isConfirmOrCancel(GLFW_KEY_BACKSPACE), "");
+        check("pismena, Enter, Backspace, sipky a numericka se pisou",
+                Main.isTypingKey(GLFW_KEY_G) && Main.isTypingKey(GLFW_KEY_ENTER)
+                        && Main.isTypingKey(GLFW_KEY_BACKSPACE) && Main.isTypingKey(GLFW_KEY_LEFT)
+                        && Main.isTypingKey(GLFW_KEY_KP_5), "");
+        check("F11 a ostatni funkcni klavesy se nepisou (celou obrazovku smi prepnout)",
+                !Main.isTypingKey(GLFW_KEY_F11) && !Main.isTypingKey(GLFW_KEY_F1)
+                        && !Main.isTypingKey(GLFW_KEY_F25), "");
     }
 }

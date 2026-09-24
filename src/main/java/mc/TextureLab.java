@@ -411,8 +411,18 @@ public class TextureLab {
         current().release();
     }
 
+    /** Co se s klávesou v labu stalo - viz key(). */
+    public enum KeyResult {
+        /** Vzal si ji mód (psaní, Ctrl+Z, čekání na klávesu v Keybind Labu). */
+        CONSUMED,
+        /** Esc nebo klávesa labu, kterou si nevzal mód: lab se zavře. */
+        CLOSE,
+        /** Nikdo ji nechtěl - Main ji smí použít (celá obrazovka). */
+        UNUSED
+    }
+
     /**
-     * Klávesa. Vrací true, když se má lab ZAVŘÍT.
+     * Klávesa.
      *
      * ⚠️ O ZAVŘENÍ ROZHODUJE HUB, NE MÓD. Mód jen řekne, jestli si klávesu
      * vzal (`LabMode.key`); zavírá se, až když si ji nevzal nikdo a je to
@@ -422,27 +432,42 @@ public class TextureLab {
      * takže Delete v módu Recipes vymazal mřížku A ZAVŘEL LAB, kdežto Esc
      * v něm lab nezavíral vůbec. Tady je ta otázka jen jedna a ptá se na
      * ni jedno místo.
+     *
+     * Třetí výsledek UNUSED je kvůli celé obrazovce: F11 má přepínat
+     * odkudkoliv, ale v Keybind Labu při čekání na klávesu si ji mód musí
+     * vzít (jinak by nešla přiřadit) - proto to Main pozná až odsud.
      */
-    public boolean key(int key, int mods)
+    public KeyResult key(int key, int mods)
     {
-        return closesLab(current(), key, mods);
+        return route(current(), key, mods);
     }
 
     /**
      * Celé rozhodnutí hubu jako statická funkce, aby šla konvence
      * `LabMode.key()` otestovat se skutečnými módy bez GL (LabModesTest).
      */
-    static boolean closesLab(LabMode mode, int key, int mods)
+    static KeyResult route(LabMode mode, int key, int mods)
     {
         if(mode.key(key, mods))
         {
-            return false;
+            return KeyResult.CONSUMED;
         }
 
         // Klávesa labu zavírá lab, ať je přebindovaná kamkoliv; Esc platí
         // vždycky, aby se z labu šlo dostat i s rozbitým keybinds.json.
-        return key == GLFW_KEY_ESCAPE
-                || Keybinds.active().actionFor(key) == Keybinds.Action.LAB;
+        if(key == GLFW_KEY_ESCAPE
+                || Keybinds.active().actionFor(key) == Keybinds.Action.LAB)
+        {
+            return KeyResult.CLOSE;
+        }
+
+        return KeyResult.UNUSED;
+    }
+
+    /** Zavře tahle klávesa lab? Zkratka nad route() pro testy. */
+    static boolean closesLab(LabMode mode, int key, int mods)
+    {
+        return route(mode, key, mods) == KeyResult.CLOSE;
     }
 
     public void typed(int codepoint)
@@ -1974,7 +1999,7 @@ public class TextureLab {
         centered(layout, TextureLabLayout.REVERT, "Revert");
         centered(layout, TextureLabLayout.IMPORT, "Import PNG");
         centered(layout, TextureLabLayout.NEW_BLOCK, "New block");
-        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / F6)");
+        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / " + Keybinds.activeKeyName(Keybinds.Action.LAB) + ")");
     }
 
     /** Informace o vybrané stěně kůže - nalevo místo informací o dlaždici. */
@@ -1998,7 +2023,7 @@ public class TextureLab {
         centered(layout, TextureLabLayout.SAVE, "Save");
         centered(layout, TextureLabLayout.REVERT, "Revert");
         centered(layout, TextureLabLayout.IMPORT, "Import PNG");
-        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / F6)");
+        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / " + Keybinds.activeKeyName(Keybinds.Action.LAB) + ")");
     }
 
     private void drawFormTexts(TextureLabLayout layout)

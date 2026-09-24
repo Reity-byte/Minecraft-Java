@@ -76,6 +76,14 @@ public class LabModesTest {
         check("Recipes: a rekne to", recipes.lastMessage().equals("Grid cleared"), recipes.lastMessage());
         check("Recipes: Backspace taky", !TextureLab.closesLab(recipes, GLFW_KEY_BACKSPACE, 0), "");
 
+        // F11 si mod nevezme a nezavira - Main ji pak pouzije k prepnuti cele obrazovky.
+        check("Recipes: F11 je UNUSED (Main prepne celou obrazovku)",
+                TextureLab.route(recipes, GLFW_KEY_F11, 0) == TextureLab.KeyResult.UNUSED, "");
+        keys.arm(Keybinds.Action.FULLSCREEN);
+        check("Keys pri cekani: F11 je CONSUMED (jde ji priradit, fullscreen se neprepne)",
+                TextureLab.route(keys, GLFW_KEY_F11, 0) == TextureLab.KeyResult.CONSUMED, "");
+        keys.onEnter();
+
         // Klavesa labu zavira i po prebindovani - hub se pta Keybinds, ne GLFW konstanty.
         Keybinds moved = Keybinds.defaults().with(Keybinds.Action.LAB, GLFW_KEY_F7);
         Keybinds.activate(moved);

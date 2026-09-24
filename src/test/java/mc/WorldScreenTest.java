@@ -25,6 +25,7 @@ public class WorldScreenTest {
 
     public static void main(String[] args) throws IOException {
         createScreen();
+        createScreenClicks();
         selectScreen();
         wholeFlow();
 
@@ -129,6 +130,36 @@ public class WorldScreenTest {
 
     // ==================================================================
 
+    /** Tlacitka, ktera obrazovka obslouzi sama, zni stejne jako ostatni; Cmd+V na Macu. */
+    static void createScreenClicks() throws IOException {
+        Path root = temp();
+
+        try {
+            CreateWorldScreen screen = new CreateWorldScreen(null, root);
+            int w = 1024, h = 768;
+            ScreenLayout l = CreateWorldScreen.layout(w, h);
+            double[] mode = centre(l, CreateWorldScreen.MODE);
+            double[] name = centre(l, CreateWorldScreen.NAME);
+
+            screen.press(name[0], name[1], w, h);
+            check("klik do pole neni tlacitko - nezni", !screen.takeClicked(), "");
+            screen.press(mode[0], mode[1], w, h);
+            check("prepinac Game Mode zni (driv mlcel)", screen.takeClicked(), "");
+
+            check("Ctrl+V je vlozeni", CreateWorldScreen.isPaste(org.lwjgl.glfw.GLFW.GLFW_KEY_V,
+                    org.lwjgl.glfw.GLFW.GLFW_MOD_CONTROL), "");
+            check("Cmd+V (macOS) je vlozeni taky", CreateWorldScreen.isPaste(org.lwjgl.glfw.GLFW.GLFW_KEY_V,
+                    org.lwjgl.glfw.GLFW.GLFW_MOD_SUPER), "");
+            check("samotne V neni vlozeni", !CreateWorldScreen.isPaste(org.lwjgl.glfw.GLFW.GLFW_KEY_V, 0), "");
+
+            screen.press(name[0], name[1], w, h);
+            screen.key(org.lwjgl.glfw.GLFW.GLFW_KEY_V, org.lwjgl.glfw.GLFW.GLFW_MOD_SUPER, "Mac");
+            check("Cmd+V vlozi do pole se jmenem", screen.name().endsWith("Mac"), screen.name());
+        } finally {
+            deleteTree(root);
+        }
+    }
+
     static void selectScreen() throws IOException {
         Path root = temp();
 
@@ -187,10 +218,14 @@ public class WorldScreenTest {
             double[] confirmDelete = centre(l, SelectWorldScreen.CONFIRM_DELETE);
 
             screen.press(second[0], second[1], w, h, 20.0);
+            check("vyber radku neni tlacitko - nezni", !screen.takeClicked(), "");
             String doomed = screen.selected().name();
             screen.press(delete[0], delete[1], w, h, 21.0);
             check("Delete se nejdriv zepta", screen.isConfirming() && Files.isDirectory(root.resolve(doomed)), "");
+            check("Delete je tlacitko jako ostatni - zni (driv mlcel)", screen.takeClicked(), "");
+            check("a takeClicked se precte jen jednou", !screen.takeClicked(), "");
             screen.press(confirmCancel[0], confirmCancel[1], w, h, 22.0);
+            check("Cancel v dialogu zni taky", screen.takeClicked(), "");
             check("Cancel v dialogu nic nesmaze",
                     !screen.isConfirming() && Files.isDirectory(root.resolve(doomed)) && screen.worlds().size() == 5, "");
 
