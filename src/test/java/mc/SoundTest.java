@@ -65,7 +65,7 @@ public class SoundTest {
     static byte[] targetableBlocks() {
         byte[] all = new byte[64];
         int n = 0;
-        for (int id = 0; id <= World.FENCE; id++)
+        for (int id = 0; id <= World.LAST_BUILT_IN; id++)
             if (World.isTargetable((byte) id)) all[n++] = (byte) id;
         return Arrays.copyOf(all, n);
     }
@@ -368,6 +368,39 @@ public class SoundTest {
             check("poskozeny soubor hru nepolozi - hraje placeholder",
                     Arrays.equals(SoundLibrary.load(Sound.PLACE_WOOD, dir).samples(),
                             SoundSynth.synthesize(Sound.PLACE_WOOD).samples()), "");
+
+            // BUG: delka bloku kolem Integer.MAX_VALUE pretekla v int, kontrola
+            // prosla a decode hodil IndexOutOfBoundsException - SoundLibrary ji
+            // nechytal a SoundEngine.open() pak vypnul VSECHNY zvuky.
+            for (String tag : new String[]{"LIST", "fmt ", "data"}) {
+                ByteBuffer hostile = ByteBuffer.allocate(40).order(ByteOrder.LITTLE_ENDIAN);
+                hostile.put("RIFF".getBytes()).putInt(32).put("WAVE".getBytes());
+                hostile.put(tag.getBytes()).putInt(0x7FFFFFF0).put(new byte[20]);
+
+                boolean threw = false;
+                Wav.Pcm decoded = null;
+                try {
+                    decoded = Wav.decode(hostile.array());
+                } catch (RuntimeException e) {
+                    threw = true;
+                }
+                check("blok " + tag.trim() + " s obri delkou: decode nehodi vyjimku", !threw, "");
+                check("blok " + tag.trim() + " s obri delkou: je to nepodporovany soubor (null)",
+                        !threw && (decoded == null || tag.equals("data")), "");
+
+                Files.write(dir.resolve("step_earth.wav"), hostile.array());
+                check("blok " + tag.trim() + " s obri delkou: hraje placeholder, zbytek zvuku zije",
+                        SoundLibrary.load(Sound.STEP_EARTH, dir) != null, "");
+            }
+
+            // Obri soubor (omylem pojmenovana dlouha nahravka) se ani nezkusi precist.
+            Path huge = dir.resolve("break_wood.wav");
+            try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(huge.toFile(), "rw")) {
+                raf.setLength(SoundLibrary.MAX_FILE_BYTES + 1);   // ridky soubor, na disku skoro nic
+            }
+            check("soubor nad strop velikosti hraje placeholder (driv OutOfMemoryError)",
+                    Arrays.equals(SoundLibrary.load(Sound.BREAK_WOOD, dir).samples(),
+                            SoundSynth.synthesize(Sound.BREAK_WOOD).samples()), "");
         } finally {
             try (var files = Files.list(dir)) {
                 for (Path p : files.toList()) Files.deleteIfExists(p);

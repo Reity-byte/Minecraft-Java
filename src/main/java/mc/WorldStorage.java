@@ -2,6 +2,7 @@ package mc;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 
 /**
  * Uložení a načtení světa.
@@ -73,6 +75,9 @@ public final class WorldStorage {
      * dayTime je poloha v denním cyklu v sekundách (viz DayCycle). Soubory
      * z verze 1 a 2 ji nemají a dostanou DayCycle.START_TIME, takže se
      * otevřou dopoledne jako nový svět.
+     *
+     * inventory je libovolně dlouhé pole slotů; Main do něj za 36 slotů
+     * inventáře ukládá i obě crafting mřížky (Main.inventorySnapshot()).
      */
     public record Save(float x, float y, float z,
                        float yaw, float pitch,
@@ -81,6 +86,12 @@ public final class WorldStorage {
                        Map<Long, Map<Integer, Byte>> changes,
                        ItemStack[] inventory,
                        float dayTime) {}
+
+    /** Kam se hráč postaví, když uložená poloha nedává smysl (NaN, nekonečno, mimo svět). */
+    static final float FALLBACK_XZ = 8.5f;
+
+    /** Poloha y dál než tohle od nuly je nesmysl - svět má 128 bloků. */
+    static final float MAX_SANE_Y = 4096f;
 
     private WorldStorage() {}
 
@@ -92,19 +103,22 @@ public final class WorldStorage {
     /**
      * Zapíše svět. Vrací false, když se to nepovedlo - hra kvůli neúspěšnému
      * uložení nemá padat, jen o tom musí být vidět zpráva.
+     *
+     * ⚠️ NEPÍŠE SE PŘÍMO DO world.dat. Svět se nejdřív celý zakóduje do paměti
+     * a na disk jde přes SafeFiles (.tmp, force, přejmenování). Dřív se cíl
+     * otevřel s TRUNCATE_EXISTING, takže plný disk nebo zabití procesu při
+     * ukládání v okamžiku zavření okna nechalo useknutý soubor - a svět, který
+     * nejde načíst, playWorld() záměrně nehraje. Byl by pryč celý, ne jen
+     * poslední session. world.dat je jediná část světa, kterou nejde dopočítat.
+     * Soubor, který nejde načíst, se navíc před přepsáním zazálohuje do .bak.
      */
     public static boolean save(Path path, Save save)
     {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+
         try
         {
-            Path parent = path.getParent();
-            if(parent != null)
-            {
-                Files.createDirectories(parent);
-            }
-
-            try(DataOutputStream out = new DataOutputStream(
-                    new BufferedOutputStream(Files.newOutputStream(path))))
+            try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(bytes)))
             {
                 out.writeInt(MAGIC_V3);
                 out.writeInt(GENERATOR_VERSION);
@@ -144,21 +158,34 @@ public final class WorldStorage {
                 // Denní doba, až úplně na konci - viz poznámka u MAGIC.
                 out.writeFloat(save.dayTime());
             }
-
-            return true;
         }
         catch(IOException e)
         {
+            // Do paměti se zapsat nepovede jen výjimečně, ale DataOutputStream to deklaruje.
             System.err.println("Ulozeni sveta selhalo: " + e);
             return false;
         }
+
+        return SafeFiles.writeAtomically(path, bytes.toByteArray(), WorldStorage::readsCompletely, "Svet");
+    }
+
+    /** Jde dosavadní soubor načíst? Tiše - na stderr píše jen skutečné načítání. */
+    private static boolean readsCompletely(Path path)
+    {
+        return read(path, message -> { }) != null;
     }
 
     /**
      * Načte svět. Vrací null, když soubor neexistuje, je poškozený nebo to
-     * není náš formát - volající si pak založí nový svět.
+     * není náš formát - důvod napíše na stderr a volající svět nehraje.
      */
     public static Save load(Path path)
+    {
+        return read(path, System.err::println);
+    }
+
+    /** Vlastní čtení; zprávy jdou do report (stderr, nebo nikam u tiché kontroly). */
+    private static Save read(Path path, Consumer<String> report)
     {
         try(DataInputStream in = new DataInputStream(
                 new BufferedInputStream(Files.newInputStream(path))))
@@ -167,7 +194,7 @@ public final class WorldStorage {
 
             if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3)
             {
-                System.err.println("Ulozeny svet ma cizi format: " + path);
+                report.accept("Ulozeny svet ma cizi format: " + path);
                 return null;
             }
 
@@ -176,7 +203,7 @@ public final class WorldStorage {
             {
                 // Nenacist by znamenalo prijit o vsechno postavene. Terén se
                 // posune, stavby zůstanou - to je z těch dvou možností lepší.
-                System.err.println("Ulozeny svet je z generatoru verze " + version
+                report.accept("Ulozeny svet je z generatoru verze " + version
                         + ", ted je " + GENERATOR_VERSION
                         + " - teren pod stavbami muze byt jiny.");
             }
@@ -186,13 +213,35 @@ public final class WorldStorage {
             float z = in.readFloat();
             float yaw = in.readFloat();
             float pitch = in.readFloat();
+
+            // ⚠️ Hodnoty ze souboru se ořezávají, stejně jako denní doba
+            // (DayCycle.setTime): NaN v poloze nebo v kameře by dal černý
+            // obraz bez jediné hlášky a první uložení by ho zapsalo zpátky.
+            // Svět se kvůli tomu NEZAHAZUJE - hráč jen přistane jinde.
+            if(!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z)
+                    || Math.abs(y) > MAX_SANE_Y)
+            {
+                report.accept("Ulozeny svet ma nesmyslnou polohu hrace (" + x + ", " + y + ", " + z
+                        + ") - hrac zacne nad " + FALLBACK_XZ + ", " + FALLBACK_XZ);
+                x = FALLBACK_XZ;
+                z = FALLBACK_XZ;
+                y = World.WORLD_HEIGHT;
+            }
+
+            if(!Float.isFinite(yaw))
+            {
+                yaw = 0f;
+            }
+
+            pitch = Float.isFinite(pitch) ? Math.max(-Camera.MAX_PITCH, Math.min(Camera.MAX_PITCH, pitch)) : 0f;
+
             boolean flying = in.readBoolean();
             int selectedSlot = in.readInt();
 
             int columnCount = in.readInt();
             if(columnCount < 0)
             {
-                System.err.println("Ulozeny svet je poskozeny: zaporny pocet sloupcu");
+                report.accept("Ulozeny svet je poskozeny: zaporny pocet sloupcu");
                 return null;
             }
 
@@ -205,7 +254,7 @@ public final class WorldStorage {
 
                 if(blockCount < 0)
                 {
-                    System.err.println("Ulozeny svet je poskozeny: zaporny pocet bloku");
+                    report.accept("Ulozeny svet je poskozeny: zaporny pocet bloku");
                     return null;
                 }
 
@@ -228,17 +277,33 @@ public final class WorldStorage {
 
                 if(slots < 0 || slots > 1024)
                 {
-                    System.err.println("Ulozeny svet je poskozeny: divny pocet slotu");
+                    report.accept("Ulozeny svet je poskozeny: divny pocet slotu");
                     return null;
                 }
 
                 inventory = new ItemStack[slots];
+                int clamped = 0;
 
                 for(int i = 0; i < slots; i++)
                 {
                     byte block = in.readByte();
                     int count = in.readInt();
+
+                    // Hromádka přes MAX_COUNT by rozbila slévání (záporné
+                    // místo ve slotu) - ořízne se a ohlásí, soubor se nezahodí.
+                    if(count > ItemStack.MAX_COUNT)
+                    {
+                        count = ItemStack.MAX_COUNT;
+                        clamped++;
+                    }
+
                     inventory[i] = ItemStack.of(block, count);
+                }
+
+                if(clamped > 0)
+                {
+                    report.accept("Ulozeny svet ma " + clamped + " hromadek pres "
+                            + ItemStack.MAX_COUNT + " kusu - oriznuty na " + ItemStack.MAX_COUNT);
                 }
             }
 
@@ -263,7 +328,7 @@ public final class WorldStorage {
 
             if(!unknown.isEmpty())
             {
-                System.err.println("Ulozeny svet obsahuje bloky z labu " + unknown + ", ktere "
+                report.accept("Ulozeny svet obsahuje bloky z labu " + unknown + ", ktere "
                         + BlockRegistry.FILE + " nezna - ukazou se jako neznamy blok.");
             }
 
@@ -272,7 +337,7 @@ public final class WorldStorage {
         catch(IOException e)
         {
             // Sem spadne i useknuty soubor - readInt na konci hodi EOFException.
-            System.err.println("Nacteni sveta selhalo: " + e);
+            report.accept("Nacteni sveta selhalo: " + e);
             return null;
         }
     }

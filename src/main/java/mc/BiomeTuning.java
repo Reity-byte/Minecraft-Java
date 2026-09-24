@@ -182,7 +182,23 @@ public final class BiomeTuning {
             return 0;
         }
 
-        return Math.max(1, (int) Math.round(baseRarity / density));
+        // ⚠️ Math.round(double) vrací long a přetypování na int ořízne horní
+        // bity: u hustoty pod ~3e-8 vyšlo záporné číslo, max(1, ...) z něj
+        // udělal 1 - a "skoro žádná ruda" dala žílu v každé buňce. Proto se
+        // nasytí na Integer.MAX_VALUE, tedy "prakticky nikde".
+        long rarity = Math.round(baseRarity / density);
+        return (int) Math.max(1, Math.min(Integer.MAX_VALUE, rarity));
+    }
+
+    /**
+     * Násobek, jaký rudě doopravdy platí: vzácnost je celé číslo, takže
+     * třeba 7,0× uhlí (30 / 7 = 4,29) se zaokrouhlí na vzácnost 4 = 7,5×.
+     * Lab ukazuje tohle číslo, ne to, co je v souboru.
+     */
+    public static double effectiveDensity(int baseRarity, double density)
+    {
+        int rarity = rarity(baseRarity, density);
+        return rarity == 0 ? 0.0 : (double) baseRarity / rarity;
     }
 
     // ------------------------------------------------------------------
@@ -432,10 +448,8 @@ public final class BiomeTuning {
             out.append("      \"trunkMax\": ").append(t.trunkMax()).append(",\n");
             out.append("      \"crownMin\": ").append(t.crownMin()).append(",\n");
             out.append("      \"crownMax\": ").append(t.crownMax()).append(",\n");
-            out.append("      \"ironDensity\": ")
-                    .append(String.format(Locale.ROOT, "%.2f", t.ironDensity())).append(",\n");
-            out.append("      \"coalDensity\": ")
-                    .append(String.format(Locale.ROOT, "%.2f", t.coalDensity())).append("\n");
+            out.append("      \"ironDensity\": ").append(decimalText(t.ironDensity())).append(",\n");
+            out.append("      \"coalDensity\": ").append(decimalText(t.coalDensity())).append("\n");
             out.append(i < biomes.length - 1 ? "    },\n" : "    }\n");
         }
 
@@ -550,12 +564,27 @@ public final class BiomeTuning {
         return clamped;
     }
 
+    /**
+     * Násobek rudy do souboru: dvě desetinná místa, když na nich hodnota
+     * přesně sedí (lab krokuje po 0,25), jinak plná přesnost.
+     *
+     * ⚠️ Dřív vždycky %.2f: načtení drželo plnou přesnost, zápis ji ořízl,
+     * takže 0,004 (ruda vzácná) se po uložení z labu změnilo na 0,00 (ruda
+     * v biomu vypnutá) - a stačilo v labu upravit úplně jiný biom.
+     */
+    static String decimalText(double value)
+    {
+        String twoPlaces = String.format(Locale.ROOT, "%.2f", value);
+        return Double.parseDouble(twoPlaces) == value ? twoPlaces : Double.toString(value);
+    }
+
     private static String describe(Tune t)
     {
         return "base " + t.baseHeight() + ", amp " + t.amplitude()
                 + ", trees " + t.treeDensity()
                 + ", trunk " + t.trunkMin() + "-" + t.trunkMax()
-                + ", crown " + t.crownMin() + "-" + t.crownMax();
+                + ", crown " + t.crownMin() + "-" + t.crownMax()
+                + ", iron " + t.ironDensity() + ", coal " + t.coalDensity();
     }
 
     private static int integer(String key, Map<?, ?> values, String name, int fallback,
@@ -570,7 +599,21 @@ public final class BiomeTuning {
 
         if(value instanceof Double number && Double.isFinite(number))
         {
-            return (int) Math.round(number);
+            // ⚠️ Nasytit, ne přetypovat: (int) Math.round(3e9) přetekl na
+            // záporné číslo a ořez pak dal SPODNÍ mez místo horní - bez hlášky,
+            // protože výsledek ležel v mezích. Přetečení teď skončí mimo meze
+            // a clamped() ho ohlásí jako každou jinou hodnotu mimo rozsah.
+            long rounded = Math.round(number);
+            int whole = (int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, rounded));
+
+            // Zlomek se zaokrouhlí, ale ohlásí - jako options.json. Tiše by
+            // překlep nevznikl ani .bak a příští Save by ho přepsal.
+            if(number != Math.rint(number))
+            {
+                problems.add(key + "." + name + " " + number + " neni cele cislo - zaokrouhleno na " + whole);
+            }
+
+            return whole;
         }
 
         problems.add(key + "." + name + " neni cislo - vychozi " + fallback);

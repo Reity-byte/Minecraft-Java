@@ -35,8 +35,12 @@ public class Camera {
     static final float CAMERA_RADIUS = 0.1f;
 
     public float x = 8, y = 80, z = 8; // start above the terrain (ground is around y=64)
-    public float yaw = -90f;   // facing -Z initially
-    public float pitch = 0f;
+    /** Kam se kamera dívá v novém světě: yaw -90 je směr -Z, pitch 0 vodorovně. */
+    public static final float DEFAULT_YAW = -90f;
+    public static final float DEFAULT_PITCH = 0f;
+
+    public float yaw = DEFAULT_YAW;
+    public float pitch = DEFAULT_PITCH;
 
     public View view = View.FIRST_PERSON;
 
@@ -47,12 +51,19 @@ public class Camera {
     public float mouseSensitivity = DEFAULT_SENSITIVITY;
     public boolean invertMouseY = false;
 
+    /**
+     * Nejvíc nahoru / dolů ve stupních. Přesně 90 by dalo pohled rovnoběžný
+     * s vektorem "nahoru" a setLookAt by vrátil NaN matici (černý obraz).
+     * Stejnou mezí se ořezává i pitch načtený z world.dat.
+     */
+    public static final float MAX_PITCH = 89f;
+
     public void processMouse(double dx, double dy) {
         yaw += (float) (dx * mouseSensitivity);
         pitch += (float) ((invertMouseY ? -dy : dy) * mouseSensitivity);
 
-        if (pitch > 89f) pitch = 89f;
-        if (pitch < -89f) pitch = -89f;
+        if (pitch > MAX_PITCH) pitch = MAX_PITCH;
+        if (pitch < -MAX_PITCH) pitch = -MAX_PITCH;
     }
 
     public void setPosition(float x, float y, float z)

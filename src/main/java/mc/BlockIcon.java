@@ -3,6 +3,7 @@ package mc;
 import org.lwjgl.BufferUtils;
 
 import java.nio.FloatBuffer;
+import java.util.Arrays;
 
 import static org.lwjgl.opengl.GL33.*;
 
@@ -19,6 +20,20 @@ import static org.lwjgl.opengl.GL33.*;
  *
  * Vlastní shader a VAO: vertex je pozice(2) + uv(2) + odstín(1), což se
  * do formátu Renderer2D (pozice + barva) nevejde.
+ *
+ * ⚠️ JEDEN DRAW CALL NA CELOU DÁVKU begin() … end(), NE NA KVÁDR. Dřív
+ * každý kvádr každé ikony dělal vlastní glBufferSubData do téhož místa téhož
+ * VBO a vlastní glDrawArrays: creative inventář ~82 draw callů za frame jen
+ * za ikony, přehled v Recipes až ~98 - přesně ten vzor, který na macOS
+ * sekal lab (viz "Výkon labu" v ARCHITECTURE.md), a přepis bufferu, ze
+ * kterého předchozí draw call ještě čte, nutil ovladač čekat. Teď draw()
+ * jen skládá vrcholy a end() je pošle najednou do čerstvě alokovaného
+ * bufferu (orphaning - ovladač nemusí čekat na předchozí frame).
+ *
+ * Pořadí se zachová: trojúhelníky jednoho draw callu se kreslí v pořadí,
+ * v jakém přišly, takže kurzor nakreslený naposled zůstane nahoře stejně
+ * jako dřív. Mezi begin() a end() se proto nesmí kreslit nic jiného, co
+ * by mělo ležet mezi ikonami - dnes to nikdo nedělá.
  * ---------------------------------------------------------------------------
  */
 public class BlockIcon {
@@ -31,8 +46,11 @@ public class BlockIcon {
     private static final int FLOATS_PER_VERTEX = 5;
     private static final int VERTICES_PER_QUAD = 6;
 
-    /** Tři viditelné stěny na kvádr. Kreslí se po kvádrech, takže víc netřeba. */
-    private static final int MAX_FLOATS = 3 * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+    /** Tři viditelné stěny na kvádr. */
+    private static final int FLOATS_PER_BOX = 3 * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+
+    /** Počáteční místo: zhruba plný creative inventář krychlí. Roste podle potřeby. */
+    private static final int INITIAL_FLOATS = 96 * FLOATS_PER_BOX;
 
     private final ShaderProgram shader =
             new ShaderProgram(Shaders.UI_BLOCK_VERTEX, Shaders.UI_BLOCK_FRAGMENT);
@@ -42,8 +60,8 @@ public class BlockIcon {
     private final int vao;
     private final int vbo;
 
-    private final float[] scratch = new float[MAX_FLOATS];
-    private final FloatBuffer upload = BufferUtils.createFloatBuffer(MAX_FLOATS);
+    private float[] scratch = new float[INITIAL_FLOATS];
+    private FloatBuffer upload = BufferUtils.createFloatBuffer(INITIAL_FLOATS);
 
     private int floats = 0;
 
@@ -59,7 +77,7 @@ public class BlockIcon {
 
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferData(GL_ARRAY_BUFFER, (long) MAX_FLOATS * Float.BYTES, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, (long) INITIAL_FLOATS * Float.BYTES, GL_STREAM_DRAW);
 
         int stride = FLOATS_PER_VERTEX * Float.BYTES;
         glVertexAttribPointer(0, 2, GL_FLOAT, false, stride, 0L);
@@ -86,10 +104,15 @@ public class BlockIcon {
         shader.setInt("uAtlas", 0);
 
         glBindVertexArray(vao);
+
+        floats = 0;
     }
 
+    /** Pošle všechny ikony od begin() jedním draw callem a vrátí stav GL. */
     public void end()
     {
+        flush();
+
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_BLEND);
@@ -115,7 +138,7 @@ public class BlockIcon {
 
         for(BlockModels.BlockBox box : BlockModels.of(block))
         {
-            floats = 0;
+            ensureRoom();
 
             // Horní stěna (+Y): u podle x, v podle z.
             face(top, SHADE_TOP,
@@ -137,8 +160,14 @@ public class BlockIcon {
                     box.maxX(), box.minY(), box.maxZ(),  box.maxZ(), box.minY(),
                     box.maxX(), box.minY(), box.minZ(),  box.minZ(), box.minY(),
                     box.maxX(), box.maxY(), box.minZ(),  box.minZ(), box.maxY());
+        }
+    }
 
-            flush();
+    private void ensureRoom()
+    {
+        if(floats + FLOATS_PER_BOX > scratch.length)
+        {
+            scratch = Arrays.copyOf(scratch, scratch.length * 2);
         }
     }
 
@@ -198,14 +227,24 @@ public class BlockIcon {
             return;
         }
 
+        if(upload.capacity() < floats)
+        {
+            upload = BufferUtils.createFloatBuffer(scratch.length);
+        }
+
         upload.clear();
         upload.put(scratch, 0, floats);
         upload.flip();
 
+        // glBufferData, ne SubData: nový obsah jde do nového úložiště, takže
+        // ovladač nečeká, až draw call minulého framu dočte to staré.
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, upload);
+        glBufferData(GL_ARRAY_BUFFER, upload, GL_STREAM_DRAW);
 
         glDrawArrays(GL_TRIANGLES, 0, floats / FLOATS_PER_VERTEX);
+        GlStats.countDraw();
+
+        floats = 0;
     }
 
     public void delete()

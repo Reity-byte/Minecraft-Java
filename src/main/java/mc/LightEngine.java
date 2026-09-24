@@ -378,7 +378,11 @@ public class LightEngine {
                 break;
             }
 
+            // ⚠️ touch(): setSkyLightAt sekci záměrně neznačí a další BFS
+            // v úzké šachtě už nic nezmění - bez tohohle zůstaly stěny šachty
+            // pod první sekcí v meshi tmavé, i když data světla byla správně.
             world.setSkyLightAt(x, scan, z, MAX_LIGHT);
+            touch(x, scan, z);
             spread[SKY].add(pack(x, scan, z));
         }
     }
@@ -544,23 +548,29 @@ public class LightEngine {
     }
 
     /**
-     * Poznamená sekci buňky a - když buňka leží na jejím okraji - i sekce
-     * za tou hranicí. Stěny bloků z nich si totiž světlo berou právě odsud.
+     * Poznamená každou sekci, jejíž mesh si světlo z téhle buňky bere.
+     *
+     * ⚠️ OKOLÍ 3x3x3, ne 6 stěnových sousedů - plynulé osvětlení čte světlo
+     * i z buněk do strany a do rohu stěny, takže buňka na hraně nebo rohu
+     * sekce mění i diagonální sekce (viz World.markDirtyAround). Uvnitř
+     * sekce vyjde jedna sekce, takže BFS tím skoro nic nestojí.
      */
     private void touch(int x, int y, int z)
     {
-        int cx = x >> Chunk.BITS, cy = y >> Chunk.BITS, cz = z >> Chunk.BITS;
+        int cx0 = (x - 1) >> Chunk.BITS, cx1 = (x + 1) >> Chunk.BITS;
+        int cy0 = (y - 1) >> Chunk.BITS, cy1 = (y + 1) >> Chunk.BITS;
+        int cz0 = (z - 1) >> Chunk.BITS, cz1 = (z + 1) >> Chunk.BITS;
 
-        touched.add(sectionKey(cx, cy, cz));
-
-        int lx = x & Chunk.MASK, ly = y & Chunk.MASK, lz = z & Chunk.MASK;
-
-        if(lx == 0)          touched.add(sectionKey(cx - 1, cy, cz));
-        if(lx == Chunk.MASK) touched.add(sectionKey(cx + 1, cy, cz));
-        if(lz == 0)          touched.add(sectionKey(cx, cy, cz - 1));
-        if(lz == Chunk.MASK) touched.add(sectionKey(cx, cy, cz + 1));
-        if(ly == 0)          touched.add(sectionKey(cx, cy - 1, cz));
-        if(ly == Chunk.MASK) touched.add(sectionKey(cx, cy + 1, cz));
+        for(int cx = cx0; cx <= cx1; cx++)
+        {
+            for(int cz = cz0; cz <= cz1; cz++)
+            {
+                for(int cy = cy0; cy <= cy1; cy++)
+                {
+                    touched.add(sectionKey(cx, cy, cz));
+                }
+            }
+        }
     }
 
     private static long sectionKey(int cx, int cy, int cz)

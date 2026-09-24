@@ -186,13 +186,29 @@ public class ChunkTest {
         check("da se vytezit i puvodni teren", !w.isSolid(nx, nh - 1, nz), "");
 
         // ---------- 7) liny alokator sekci + solidCount ----------
-        ChunkColumn col = null;
-        // sahnout na sloupec pres verejne API nejde, tak testujeme nepr. pres chovani:
-        // sekce vysoko nad terenem musi byt vzduch a nesmi se alokovat zapisem AIR
-        check("sekce nad terenem je vzduch", !w.isSolid(8, 120, 8), "");
-        w.breakBlock(8, 120, 8); // zapis AIR do neexistujici sekce nesmi spadnout
-        check("break do prazdne sekce nespadne a nic nezmeni", !w.isSolid(8, 120, 8), "");
+        // Driv tu stalo "na sloupec pres verejne API nejde" a kontroly, ktere
+        // prosly vzdycky. Jde: World.column() i ChunkColumn.section() jsou
+        // verejne - a na solidCount stoji, ktere sekce WorldRenderer preskoci.
+        ChunkColumn col = w.column(0, 0);
+        int top = ChunkColumn.SECTIONS - 1;
+        check("nejvyssi sekce nad terenem neni alokovana", col != null && col.section(top) == null, "");
+        check("rozbiti vzduchu nic nezmeni (vraci false)", !w.breakBlock(8, top * Chunk.SIZE + 8, 8), "");
+        check("zapis vzduchu do prazdne sekce ji nealokuje", col.section(top) == null, "");
         check("pocet sekci na sloupec = 8", ChunkColumn.SECTIONS == 8, "" + ChunkColumn.SECTIONS);
+
+        Chunk chunk = new Chunk();
+        check("nova sekce je prazdna", chunk.isEmpty(), "");
+        chunk.set(1, 2, 3, World.STONE);
+        check("jeden blok ji udela neprazdnou", !chunk.isEmpty(), "");
+        chunk.set(1, 2, 3, World.STONE);
+        chunk.set(1, 2, 3, World.GRASS);
+        check("prepis stejnym i jinym blokem pocitadlo neposune", !chunk.isEmpty(), "");
+        chunk.set(1, 2, 3, World.AIR);
+        check("vzduch pres posledni blok ji udela zase prazdnou (pocitadlo nekleslo pod nulu ani nezustalo)",
+                chunk.isEmpty(), "");
+        chunk.set(1, 2, 3, World.AIR);
+        chunk.set(4, 4, 4, World.WATER);
+        check("vzduch pres vzduch nic nezmeni a voda se pocita", !chunk.isEmpty(), "");
 
         // ---------- 8) uvolnovani + hystereze ----------
         check("unloadRadius > loadRadius (jinak thrashing na hranici)",

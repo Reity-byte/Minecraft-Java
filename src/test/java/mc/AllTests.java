@@ -29,6 +29,10 @@ public class AllTests {
         MeshTest.main(args);
         failures += MeshTest.failures;
 
+        System.out.println("\n========== PerfTest ==========");
+        PerfTest.main(args);
+        failures += PerfTest.failures;
+
         System.out.println("\n========== PhysicsTest ==========");
         PhysicsTest.main(args);
         failures += PhysicsTest.failures;
@@ -129,9 +133,17 @@ public class AllTests {
         BiomeTuningTest.main(args);
         failures += BiomeTuningTest.failures;
 
+        System.out.println(NEWLINE + "========== LabModesTest ==========");
+        LabModesTest.main(args);
+        failures += LabModesTest.failures;
+
         System.out.println(NEWLINE + "========== LabBlockTest ==========");
         LabBlockTest.main(args);
         failures += LabBlockTest.failures;
+
+        System.out.println(NEWLINE + "========== SafeFilesTest ==========");
+        SafeFilesTest.main(args);
+        failures += SafeFilesTest.failures;
 
         System.out.println(NEWLINE + "========== WorldSavesTest ==========");
         WorldSavesTest.main(args);

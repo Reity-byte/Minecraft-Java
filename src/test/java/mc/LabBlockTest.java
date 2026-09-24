@@ -330,7 +330,7 @@ public class LabBlockTest {
     static void sound() {
         boolean consistent = true;
         String broken = "";
-        for (int id = 1; id <= World.FENCE; id++) {
+        for (int id = 1; id <= World.LAST_BUILT_IN; id++) {
             byte b = (byte) id;
             if (b == World.WATER || b == World.TORCH || b == World.COAL_ORE || b == World.IRON_ORE) continue;
             if (Sound.Material.byHardness(World.hardness(b)) != Sound.Material.of(b)) {

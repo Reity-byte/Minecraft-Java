@@ -197,6 +197,7 @@ public class SaveTest {
         check("columnIndex jde rozlozit zpatky pro celou vysku sveta", indexOk, "");
 
         oldGeneratorVersion(dir);
+        nonsenseValues(dir);
 
         w.shutdown();
         restored.shutdown();
@@ -329,5 +330,67 @@ public class SaveTest {
                 seen.size() + " z " + Biome.values().length);
 
         world.shutdown();
+    }
+
+    // ==================================================================
+    // nesmyslne hodnoty v souboru se orezou, svet se nezahodi
+    // ==================================================================
+
+    /** Zapise soubor MCW3 s danou polohou, pohledem a jednou hromadkou. */
+    static void writeRaw(Path file, float x, float y, float z, float yaw, float pitch, int count)
+            throws IOException {
+        try (java.io.DataOutputStream out = new java.io.DataOutputStream(Files.newOutputStream(file))) {
+            out.writeInt(0x4D435733);                   // MCW3
+            out.writeInt(WorldStorage.GENERATOR_VERSION);
+            out.writeFloat(x); out.writeFloat(y); out.writeFloat(z);
+            out.writeFloat(yaw); out.writeFloat(pitch);
+            out.writeBoolean(false);
+            out.writeInt(0);
+            out.writeInt(0);                            // zadne zmeny
+            out.writeInt(1);                            // jeden slot
+            out.writeByte(World.STONE);
+            out.writeInt(count);
+            out.writeFloat(100f);
+        }
+    }
+
+    /**
+     * Denni doba se odjakziva orezava (DayCycle.setTime), poloha, kamera
+     * a pocty v hromadkach ne: NaN v poloze nebo pitch 90 dal cerny obraz
+     * bez hlasky, hromadka 100 kusu rozbila slevani (zaporne misto ve slotu).
+     */
+    static void nonsenseValues(Path dir) throws IOException {
+        System.out.println("\n-- nesmyslne hodnoty v souboru --");
+
+        Path file = dir.resolve("nonsense.dat");
+
+        writeRaw(file, Float.NaN, 70f, Float.POSITIVE_INFINITY, Float.NaN, 400f, 100);
+        WorldStorage.Save loaded = WorldStorage.load(file);
+
+        check("svet s nesmyslnymi hodnotami se NACTE, nezahodi", loaded != null, "");
+        if (loaded == null) return;
+
+        check("NaN a nekonecno v poloze -> nahradni poloha nad svetem",
+                loaded.x() == WorldStorage.FALLBACK_XZ && loaded.z() == WorldStorage.FALLBACK_XZ
+                        && loaded.y() == World.WORLD_HEIGHT,
+                loaded.x() + ", " + loaded.y() + ", " + loaded.z());
+        check("NaN v yaw -> 0", loaded.yaw() == 0f, "" + loaded.yaw());
+        check("pitch mimo meze se orizne na MAX_PITCH", loaded.pitch() == Camera.MAX_PITCH, "" + loaded.pitch());
+        check("hromadka pres MAX_COUNT se orizne",
+                loaded.inventory()[0].count() == ItemStack.MAX_COUNT, loaded.inventory()[0].toString());
+        check("denni doba i dalsi hodnoty prosly", loaded.dayTime() == 100f, "" + loaded.dayTime());
+
+        writeRaw(file, 5f, 1e30f, 5f, 12f, Float.NaN, 64);
+        loaded = WorldStorage.load(file);
+        check("y daleko mimo svet -> nahradni poloha",
+                loaded != null && loaded.y() == World.WORLD_HEIGHT, loaded == null ? "null" : "" + loaded.y());
+        check("NaN v pitch -> 0", loaded != null && loaded.pitch() == 0f, "");
+
+        writeRaw(file, -12.5f, 66f, 30f, 45f, -30f, 64);
+        loaded = WorldStorage.load(file);
+        check("rozumne hodnoty projdou beze zmeny",
+                loaded != null && loaded.x() == -12.5f && loaded.y() == 66f && loaded.z() == 30f
+                        && loaded.yaw() == 45f && loaded.pitch() == -30f
+                        && loaded.inventory()[0].count() == 64, "");
     }
 }

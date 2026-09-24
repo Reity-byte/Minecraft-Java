@@ -1,15 +1,10 @@
 package mc;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -326,82 +321,7 @@ public final class BlockRegistry {
      */
     public boolean save(Path file)
     {
-        Path target = file.toAbsolutePath();
-        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
-        boolean moved = false;
-
-        try
-        {
-            Path parent = target.getParent();
-
-            if(parent != null)
-            {
-                Files.createDirectories(parent);
-            }
-
-            backupIfDamaged(target);
-
-            // force() dostane data na disk dřív, než přejmenování ukáže nový
-            // soubor - jinak by po výpadku proudu mohl zůstat nový, ale prázdný.
-            try(FileChannel channel = FileChannel.open(temp, StandardOpenOption.CREATE,
-                    StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING))
-            {
-                ByteBuffer bytes = ByteBuffer.wrap(toJson().getBytes(StandardCharsets.UTF_8));
-
-                while(bytes.hasRemaining())
-                {
-                    channel.write(bytes);
-                }
-
-                channel.force(true);
-            }
-
-            try
-            {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            }
-            catch(AtomicMoveNotSupportedException e)
-            {
-                // Některé souborové systémy atomické přejmenování neumí; i tak
-                // je to lepší než psát přímo do cíle.
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-
-            moved = true;
-            return true;
-        }
-        catch(IOException e)
-        {
-            System.err.println("Bloky " + file + " nejdou ulozit: " + e);
-            return false;
-        }
-        finally
-        {
-            if(!moved)
-            {
-                try
-                {
-                    Files.deleteIfExists(temp);
-                }
-                catch(IOException ignored)
-                {
-                    // Zbytek .tmp nevadí - příští zápis ho přepíše.
-                }
-            }
-        }
-    }
-
-    /** Zkopíruje existující soubor do .bak, když ho load nedokáže přečíst celý. */
-    private static void backupIfDamaged(Path file) throws IOException
-    {
-        if(!Files.isRegularFile(file) || loadsCompletely(file))
-        {
-            return;
-        }
-
-        Path backup = file.resolveSibling(file.getFileName() + ".bak");
-        Files.copy(file, backup, StandardCopyOption.REPLACE_EXISTING);
-        System.err.println("Bloky " + file + ": puvodni soubor nesel cely nacist, zaloha je v " + backup);
+        return SafeFiles.writeAtomically(file, toJson(), BlockRegistry::loadsCompletely, "Bloky");
     }
 
     /** Přečte se soubor bez jediné výhrady? Nic nevypisuje - to už udělal load. */

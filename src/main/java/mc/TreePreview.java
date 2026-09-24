@@ -84,10 +84,19 @@ public class TreePreview {
     private final Matrix4f view = new Matrix4f();
     private final Matrix4f viewProjection = new Matrix4f();
 
-    /** Náhledový svět: nejmenší okolí, jaké World umí, vygenerované a nasvícené hned. */
+    /**
+     * Náhledový svět: nejmenší okolí, jaké World umí, vygenerované a nasvícené hned.
+     *
+     * ⚠️ S VÝCHOZÍM tuningem, ne s aktivním. Strom stojí na plošince v pevné
+     * výšce GROUND a počítá s tím, že terén u (8, 8) je hluboko pod ní
+     * (povrch ~53). S aktivním tuningem stačilo uložit pláně se základem
+     * od ~76 a terén plošinku i kmen zasypal - náhled pak ukazoval kmen
+     * trčící z kopce bez koruny. Strom samotný staví show() podle
+     * rozepsaného tuningu, terén pod ním do náhledu nepatří.
+     */
     static World createWorld()
     {
-        World world = new World();
+        World world = new World(World.DEFAULT_SEED, BiomeTuning.defaults());
         world.loadRadius = 1;
         world.unloadRadius = 3;
         world.updateBlocking(X + 0.5f, Z + 0.5f);

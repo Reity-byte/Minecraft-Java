@@ -62,6 +62,29 @@ public final class RecipeLab implements LabMode {
     /** Bloky v přehledu. Přepočítá se při každém vstupu do módu. */
     private List<Byte> available = new ArrayList<>();
 
+    // ------------------------------------------------------------------
+    // hlášky
+    // ------------------------------------------------------------------
+
+    /** Poslední hláška - aby šla logika módu otestovat bez labu (a bez GL). */
+    private String lastMessage = "";
+
+    /** Hláška do stavového řádku labu. Bez labu (headless test) si ji jen zapamatuje. */
+    private void say(String message)
+    {
+        lastMessage = message;
+
+        if(lab != null)
+        {
+            lab.say(message);
+        }
+    }
+
+    String lastMessage()
+    {
+        return lastMessage;
+    }
+
     public RecipeLab(TextureLab lab, Renderer2D shapes, TextRenderer text)
     {
         this.lab = lab;
@@ -260,7 +283,7 @@ public final class RecipeLab implements LabMode {
         if(slot >= 0)
         {
             picked = available.get(slot);
-            lab.say("Picked " + TextureLab.blockName(picked) + " - click the grid to place it");
+            say("Picked " + TextureLab.blockName(picked) + " - click the grid to place it");
             return false;
         }
 
@@ -269,7 +292,7 @@ public final class RecipeLab implements LabMode {
             // Klik na výsledek do něj dá právě vybraný blok - není potřeba
             // druhý přehled jen pro výstup.
             result = picked;
-            lab.say("Result: " + TextureLab.blockName(result));
+            say("Result: " + TextureLab.blockName(result));
             return false;
         }
 
@@ -288,7 +311,7 @@ public final class RecipeLab implements LabMode {
         if(layout.hit(TextureLabLayout.RECIPE_CLEAR, mouseX, mouseY))
         {
             clear();
-            lab.say("Grid cleared");
+            say("Grid cleared");
             return false;
         }
 
@@ -319,7 +342,7 @@ public final class RecipeLab implements LabMode {
 
         if(problem != null)
         {
-            lab.say(problem);
+            say(problem);
             return;
         }
 
@@ -327,12 +350,12 @@ public final class RecipeLab implements LabMode {
 
         if(!updated.save(RecipeBook.FILE))
         {
-            lab.say("Could not write " + RecipeBook.FILE.toString().replace('\\', '/'));
+            say("Could not write " + RecipeBook.FILE.toString().replace('\\', '/'));
             return;
         }
 
         RecipeBook.activate(updated);
-        lab.say("Saved - " + TextureLab.blockName(result) + " x" + resultCount
+        say("Saved - " + TextureLab.blockName(result) + " x" + resultCount
                 + " works right now, no restart");
     }
 
@@ -342,7 +365,7 @@ public final class RecipeLab implements LabMode {
         if(key == GLFW_KEY_DELETE || key == GLFW_KEY_BACKSPACE)
         {
             clear();
-            lab.say("Grid cleared");
+            say("Grid cleared");
             return true;
         }
 

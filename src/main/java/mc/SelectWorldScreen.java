@@ -145,6 +145,21 @@ public final class SelectWorldScreen {
         return new ScreenLayout.Rect(LIST.x(), LIST.y() + visibleIndex * ROW_PITCH, LIST.w(), ROW_HEIGHT);
     }
 
+    /**
+     * Trefil poslední klik tlačítko, které obrazovka obsloužila sama (bez
+     * akce pro Main)? Main podle toho zahraje zvuk kliknutí - dřív zněla
+     * jen tlačítka, jejichž akci vracela obrazovka, a stejně vypadající
+     * přepínače vedle nich mlčely.
+     */
+    private boolean buttonClicked = false;
+
+    public boolean takeClicked()
+    {
+        boolean was = buttonClicked;
+        buttonClicked = false;
+        return was;
+    }
+
     /** Index světa pod myší, nebo -1. */
     int worldAt(ScreenLayout l, double mouseX, double mouseY)
     {
@@ -170,10 +185,12 @@ public final class SelectWorldScreen {
             if(l.hit(CONFIRM_DELETE, mouseX, mouseY))
             {
                 deleteSelected();
+                buttonClicked = true;
             }
             else if(l.hit(CONFIRM_CANCEL, mouseX, mouseY))
             {
                 confirming = false;
+                buttonClicked = true;
             }
 
             return Action.NONE;
@@ -202,6 +219,7 @@ public final class SelectWorldScreen {
         if(l.hit(DELETE, mouseX, mouseY) && selected() != null)
         {
             confirming = true;
+            buttonClicked = true;
             return Action.NONE;
         }
         if(l.hit(CANCEL, mouseX, mouseY))

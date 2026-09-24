@@ -39,8 +39,9 @@ public class Main {
     private long window;
     private int width = 1024, height = 768;
 
-    private final Camera camera = new Camera();
-    private final Player player = new Player();
+    // Package-private kvůli MainStateTest (reset stavu mezi světy).
+    final Camera camera = new Camera();
+    final Player player = new Player();
     World world = new World(); // nahrazuje se při vytvoření nového světa
 
     /**
@@ -136,6 +137,14 @@ public class Main {
      * nahraná textura, a texture lab ho upravuje na místě a přenahrává.
      */
     private int[] skinPixels;
+
+    /**
+     * Editory labu nad atlasPixels a skinPixels. Žijí po celý běh hry, ne
+     * s labem: neuložené úpravy zůstávají ve hře i po zavření labu, takže
+     * s nimi musí zůstat i příznak "(unsaved)" a undo. Zakládají se v init().
+     */
+    private AtlasEditor atlasEditor;
+    private SkinEditor skinEditor;
     private boolean skinFromFile;
 
     /** Obrazovky mimo lab: nastavení, výběr a založení světa. */
@@ -225,22 +234,88 @@ public class Main {
 
     public void run() {
         init();
-        loop();
 
-        // GL objekty se musí uvolnit, dokud je kontext ještě aktivní
-        // Zavření okna uprostřed hry je běžný způsob, jak skončit - svět
-        // se proto uloží i tady, ne jen při odchodu do menu.
-        if (state == GameState.PLAYING || state == GameState.PAUSED
-                || (state == GameState.OPTIONS && optionsReturnState == GameState.PLAYING)
-                || (state == GameState.TEXTURE_LAB && labReturnState == GameState.PLAYING)) {
-            // Zavřít okno uprostřed hry je běžný způsob, jak skončit - svět
-            // se proto uloží i s náhledem, stejně jako při odchodu do menu.
-            captureThumbnail();
+        // ⚠️ finally, ne kód za smyčkou: výjimka kdekoliv ve hře (i z callbacku
+        // GLFW přes glfwPollEvents) by jinak přeskočila uložení a hráč by
+        // přišel o celou session. Výjimka se po uložení stejně propaguje dál.
+        try {
+            loop();
+        } finally {
+            try {
+                saveOnExit();
+            } finally {
+                releaseGl();
+            }
+        }
+    }
+
+    /**
+     * Zavření okna uprostřed hry je běžný způsob, jak skončit - svět se proto
+     * uloží i tady, ne jen při odchodu do menu.
+     *
+     * ⚠️ Otevřená obrazovka se nejdřív ZAVŘE STEJNĚ JAKO BĚŽNĚ: inventář vrátí
+     * kurzor a mřížku do batohu, lab předá hromádku založeného bloku, Options
+     * se uloží. Teprve pak se rozhoduje o uložení světa, a to jedinou funkcí
+     * worldInPlay() - dřív tu byl vlastní výčet stavů, který zapomněl na
+     * inventář i na Options otevřené z pauzy.
+     */
+    private void saveOnExit() {
+        try {
+            closeScreenForExit();
+        } catch (RuntimeException e) {
+            System.err.println("Zavreni obrazovky pri ukonceni selhalo: " + e);
+        }
+
+        if (worldInPlay(state)) {
+            // Svět napřed, náhled až po něm: náhled je postradatelný, svět ne.
             saveWorld();
+
+            try {
+                captureThumbnail();
+            } catch (RuntimeException e) {
+                System.err.println("Nahled sveta pri ukonceni se nepovedl: " + e);
+            }
         }
 
         saveOptions();
+    }
 
+    /** Zavře obrazovku nad světem tak, jako by ji zavřel hráč. */
+    private void closeScreenForExit() {
+        switch (state) {
+            case CONTAINER -> closeContainer();
+            case TEXTURE_LAB -> closeTextureLab();
+            case OPTIONS -> closeOptions();
+            default -> { }
+        }
+    }
+
+    /**
+     * Hraje se v tomhle stavu svět (i když stojí za obrazovkou)? Podle toho
+     * se ukládá při zavření okna a kreslí svět za Options a labem.
+     *
+     * ⚠️ Switch je schválně BEZ default větve: nový GameState neprojde
+     * překladem, dokud se tady o něm nerozhodne. Přesně tohle se stalo
+     * inventáři (CONTAINER) - v ručním výčtu chyběl a zavření okna s otevřeným
+     * inventářem svět neuložilo. Options se otevírají z PAUZY, ne ze hry,
+     * takže dřívější test "návrat do PLAYING" nikdy neplatil.
+     */
+    static boolean worldInPlay(GameState state, GameState optionsReturn, GameState labReturn) {
+        return switch (state) {
+            case PLAYING, PAUSED, CONTAINER -> true;
+            case OPTIONS -> worldInPlay(optionsReturn, GameState.MAIN_MENU, GameState.MAIN_MENU);
+            case TEXTURE_LAB -> worldInPlay(labReturn, GameState.MAIN_MENU, GameState.MAIN_MENU);
+            case MAIN_MENU, CREATING_WORLD, SELECT_WORLD, CREATE_WORLD -> false;
+        };
+    }
+
+    /** worldInPlay() pro aktuální návratové stavy Options a labu. */
+    private boolean worldInPlay(GameState state) {
+        return worldInPlay(state, optionsReturnState, labReturnState);
+    }
+
+    /** GL objekty se musí uvolnit, dokud je kontext ještě aktivní. */
+    private void releaseGl() {
         if (lab != null) {
             lab.delete();
         }
@@ -405,8 +480,19 @@ public class Main {
             // potřebuje zachytit i tu klávesu, na kterou se zrovna něco
             // přebindovává - a ta v tu chvíli žádnou akci znamenat nemá.
             if (state == GameState.TEXTURE_LAB) {
-                if (action != GLFW_RELEASE && lab.key(key, mods) && action == GLFW_PRESS) {
+                if (action == GLFW_RELEASE) {
+                    return;
+                }
+
+                TextureLab.KeyResult result = lab.key(key, mods);
+
+                if (result == TextureLab.KeyResult.CLOSE && action == GLFW_PRESS) {
                     closeTextureLab();
+                } else if (result == TextureLab.KeyResult.UNUSED && action == GLFW_PRESS
+                        && bound == Keybinds.Action.FULLSCREEN) {
+                    // F11 přepíná odkudkoliv - i z labu, když si ji mód nevzal
+                    // (Keybind Lab si ji při čekání na klávesu vezme, aby šla přiřadit).
+                    toggleFullscreen();
                 }
                 return;
             }
@@ -415,13 +501,27 @@ public class Main {
             // v poli se jménem), zavírají se ale jen stiskem.
             if (state == GameState.OPTIONS || state == GameState.SELECT_WORLD
                     || state == GameState.CREATE_WORLD) {
-                if (action == GLFW_RELEASE || bound == Keybinds.Action.FULLSCREEN) {
-                    // Fullscreen propadne dolů k přepnutí celé obrazovky.
-                    if (action != GLFW_PRESS) {
-                        return;
-                    }
-                } else {
+                if (action == GLFW_RELEASE) {
+                    return;
+                }
+
+                // ⚠️ Esc a Enter zavírají nebo potvrzují, takže JEN STISKEM.
+                // Dřív šlo opakování do screenKey() taky: držený Esc na Create
+                // World proletěl přes seznam světů až do menu a držený Enter
+                // po nepovedeném načtení zkoušel svět načíst ~30x za sekundu.
+                if (action == GLFW_REPEAT && isConfirmOrCancel(key)) {
+                    return;
+                }
+
+                // Celá obrazovka propadne dolů k přepnutí - ale jen z klávesy,
+                // která na obrazovce nic nepíše. Přebindovaná na písmeno nebo
+                // Enter by jinak přepínala při psaní jména světa.
+                if (bound != Keybinds.Action.FULLSCREEN || isTypingKey(key)) {
                     screenKey(key, mods);
+                    return;
+                }
+
+                if (action != GLFW_PRESS) {
                     return;
                 }
             }
@@ -432,9 +532,7 @@ public class Main {
 
             // Fullscreen se přepíná odkudkoliv, jako v Minecraftu.
             if (bound == Keybinds.Action.FULLSCREEN) {
-                options.setFullscreen(!options.fullscreen());
-                applyOptions();
-                saveOptions();
+                toggleFullscreen();
                 return;
             }
 
@@ -576,6 +674,10 @@ public class Main {
                     } else if (optionsScreen.takeChanged()) {
                         applyOptions();
                     }
+
+                    if (optionsScreen.takeClicked()) {
+                        sound.play(Sound.CLICK);
+                    }
                 } else if (action == GLFW_RELEASE) {
                     optionsScreen.release();
                 }
@@ -585,10 +687,18 @@ public class Main {
             if (state == GameState.SELECT_WORLD && action == GLFW_PRESS
                     && button == GLFW_MOUSE_BUTTON_LEFT) {
                 switch (selectScreen.press(mouseX, mouseY, width, height, glfwGetTime())) {
-                    case PLAY -> { sound.play(Sound.CLICK); playWorld(selectScreen.selected()); }
+                    // ⚠️ Kliknutí AŽ PO akci: playWorld() -> freshWorld() zavře
+                    // zvukový engine a otevře nový, takže zvuk pouštěný předtím
+                    // by se hned uťal (tak to bylo). Hraje se na tom novém.
+                    case PLAY -> { playWorld(selectScreen.selected()); sound.play(Sound.CLICK); }
                     case CREATE -> { sound.play(Sound.CLICK); openCreateWorld(); }
                     case CANCEL -> { sound.play(Sound.CLICK); setState(GameState.MAIN_MENU); }
                     default -> { }
+                }
+
+                // Delete a tlačítka potvrzovacího dialogu obsluhuje obrazovka sama.
+                if (selectScreen.takeClicked()) {
+                    sound.play(Sound.CLICK);
                 }
                 return;
             }
@@ -596,9 +706,14 @@ public class Main {
             if (state == GameState.CREATE_WORLD && action == GLFW_PRESS
                     && button == GLFW_MOUSE_BUTTON_LEFT) {
                 switch (createScreen.press(mouseX, mouseY, width, height)) {
-                    case CREATE -> { sound.play(Sound.CLICK); createWorld(); }
+                    case CREATE -> { createWorld(); sound.play(Sound.CLICK); }
                     case CANCEL -> { sound.play(Sound.CLICK); openSelectWorld(); }
                     default -> { }
+                }
+
+                // Přepínač Game Mode obsluhuje obrazovka sama.
+                if (createScreen.takeClicked()) {
+                    sound.play(Sound.CLICK);
                 }
                 return;
             }
@@ -785,6 +900,10 @@ public class Main {
         System.out.println("Kuze postavy: " + (skinFromFile
                 ? Textures.SKIN_FILE.toAbsolutePath() : "vestavena (" + Textures.SKIN_FILE + " neni)"));
         playerSkin = Textures.playerSkin(skinPixels);
+
+        atlasEditor = new AtlasEditor(atlasPixels);
+        skinEditor = new SkinEditor(skinPixels);
+
         worldRenderer = new WorldRenderer(blockAtlas, playerSkin);
         sky = new SkyRenderer();
         heldItem = new HeldItemRenderer(blockAtlas, playerSkin);
@@ -921,7 +1040,11 @@ public class Main {
                 case OPTIONS -> {
                     // Z pauzy se za nastavením dál kreslí (a generuje) svět -
                     // posunutí render distance je tak vidět rovnou při tažení.
-                    if (optionsReturnState == GameState.PLAYING) {
+                    // ⚠️ Options se otevírají z PAUZY, ne ze hry, proto
+                    // worldInPlay() a ne srovnání s PLAYING.
+                    boolean overWorld = worldInPlay(optionsReturnState);
+
+                    if (overWorld) {
                         world.update(player.x, player.z);
                         renderWorld();
                     } else {
@@ -929,8 +1052,7 @@ public class Main {
                         background.draw(width, height, Palette.BACKGROUND_TINT);
                     }
 
-                    optionsScreen.render(width, height, mouseX, mouseY,
-                            optionsReturnState == GameState.PLAYING);
+                    optionsScreen.render(width, height, mouseX, mouseY, overWorld);
 
                     if (optionsScreen.takeChanged()) {
                         applyOptions();
@@ -949,7 +1071,7 @@ public class Main {
                 case TEXTURE_LAB -> {
                     // Otevřený ze hry: svět za labem se kreslí dál, i s upraveným
                     // atlasem. Z menu: pozadí menu.
-                    if (labReturnState == GameState.PLAYING) {
+                    if (worldInPlay(labReturnState)) {
                         world.update(player.x, player.z);
                         renderWorld();
                     } else {
@@ -1042,9 +1164,12 @@ public class Main {
 
         selectedSlot = Math.floorMod(save.selectedSlot(), Inventory.HOTBAR_SIZE);
         inventory.clear();
-        for (int i = 0; i < Math.min(Inventory.SIZE, save.inventory().length); i++) {
-            inventory.set(i, save.inventory()[i]);
-        }
+        restoreSlots(save.inventory(), 0, inventory);
+
+        // Obě crafting mřížky leží za inventářem - viz inventorySnapshot().
+        // Soubor ze starší verze je nemá, takže zůstanou prázdné z resetu.
+        restoreSlots(save.inventory(), Inventory.SIZE, craftingSmall);
+        restoreSlots(save.inventory(), Inventory.SIZE + craftingSmall.size(), craftingLarge);
 
         // Denní doba je uložená se světem (formát MCW3). Soubor ze starší
         // verze ji nemá a WorldStorage za něj dosadí DayCycle.START_TIME,
@@ -1070,8 +1195,12 @@ public class Main {
      * si nový svět bral inventář i denní dobu po tom předchozím v témže běhu hry.
      *
      * Pravidlo pro příští pole: co drží `Main` a co se vztahuje ke KONKRÉTNÍMU
-     * světu, patří sem. `MainStateTest` prochází tenhle seznam a kdyby se sem
-     * přidalo pole a zapomnělo na reset, spadne.
+     * světu, patří sem. `MainStateTest.everyFieldIsClassified()` prochází
+     * reflexí VŠECHNA pole Main, Player a Camera a každé musí mít zapsané,
+     * jestli patří světu, nebo přežije jeho výměnu - nové pole bez
+     * rozhodnutí test shodí. (Dřív tu stálo, že test "prochází seznam", ale
+     * kontroloval jen čtyři natvrdo vyjmenované věci; let a noclip tím
+     * prošly bez resetu.)
      *
      * Načtený svět si potom svoje hodnoty vrátí v `restore()` - resetuje se
      * VŽDYCKY a přepisuje se až potom, aby nebyl rozdíl mezi "nový svět"
@@ -1095,6 +1224,7 @@ public class Main {
 
         worldRenderer.reset();
         worldRenderer.setBuildBudget(WorldRenderer.BUILD_BUDGET_LOADING);
+        world.lightBudget = World.LIGHT_BUDGET_LOADING;
 
         drops.clear();
 
@@ -1104,11 +1234,12 @@ public class Main {
     }
 
     /**
-     * Stav hráče, který nepatří světu, ale sezení - vrátit na výchozí.
+     * Stav, který drží Main (a jeho Player a Camera) po celý běh hry, ale
+     * patří konkrétnímu světu - vrátit na výchozí.
      *
      * Je to vlastní metoda, a ne pár řádků uvnitř `freshWorld()`, aby šla
      * zavolat z testu bez GL, GLFW i OpenAL. `MainStateTest` na ní ověřuje
-     * obě opravené chyby.
+     * všechny tři opravené chyby (inventář, denní doba, let a pohled).
      */
     void resetPlayerState() {
         // Nový svět = nový začátek. Bez tohohle ukázal inventář věci
@@ -1126,12 +1257,49 @@ public class Main {
         // Denní doba je pole Main, ne World - bez resetu začne nový svět
         // v tu dobu, ve kterou skončil ten předchozí.
         day.reset();
+
+        // Hráč a kamera jsou taky jedna instance po celý běh hry. Bez resetu
+        // začal nový survival svět v letu po creative světě, noclip přecházel
+        // do každého dalšího světa a pohled zůstal natočený jako ve starém.
+        // Pohled F5, citlivost a obrácená osa jsou nastavení hráče, ne světa -
+        // ty zůstávají.
+        player.resetForNewWorld();
+        camera.yaw = Camera.DEFAULT_YAW;
+        camera.pitch = Camera.DEFAULT_PITCH;
+
+        // Rozdělaný dvojstisk, kopání a zaměřený blok patří starému světu.
+        flyTap.reset();
+        mining.cancel();
+        miningHeld = false;
+        hit = null;
     }
 
     /**
      * Přepne volný let. Nulování svislé rychlosti je tu proto, aby se
      * po vypnutí letu nezačalo padat setrvačností z poslední hodnoty vy.
      */
+    /** Klávesy, které na obrazovkách zavírají nebo potvrzují. */
+    static boolean isConfirmOrCancel(int key) {
+        return key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER;
+    }
+
+    /**
+     * Klávesa, kterou obrazovky používají k psaní a pohybu: znaky, Enter,
+     * Backspace, Tab, šipky, Delete a numerická klávesnice. Funkční klávesy
+     * (F1 a dál) a modifikátory mezi ně nepatří.
+     */
+    static boolean isTypingKey(int key) {
+        return (key >= GLFW_KEY_SPACE && key < GLFW_KEY_F1)
+                || (key >= GLFW_KEY_KP_0 && key <= GLFW_KEY_KP_EQUAL);
+    }
+
+    /** Okno / celá obrazovka - F11 odkudkoliv, včetně labu. */
+    private void toggleFullscreen() {
+        options.setFullscreen(!options.fullscreen());
+        applyOptions();
+        saveOptions();
+    }
+
     private void toggleFlight() {
         player.flying = !player.flying;
         player.vy = 0;
@@ -1166,8 +1334,8 @@ public class Main {
      * se hra neukončí.
      */
     private void openTextureLab() {
-        lab = new TextureLab(atlasPixels, blockAtlas, atlasFromFile,
-                skinPixels, playerSkin, skinFromFile, shapes, text);
+        lab = new TextureLab(atlasEditor, blockAtlas, atlasFromFile,
+                skinEditor, playerSkin, skinFromFile, shapes, text);
         labReturnState = state;
         setState(GameState.TEXTURE_LAB);
     }
@@ -1236,20 +1404,33 @@ public class Main {
             return;
         }
 
-        WorldStorage.save(currentWorld.worldFile(), new WorldStorage.Save(
+        boolean saved = WorldStorage.save(currentWorld.worldFile(), new WorldStorage.Save(
                 player.x, player.y, player.z,
                 camera.yaw, camera.pitch,
                 player.flying, selectedSlot,
                 world.changes(), inventorySnapshot(), day.time()));
 
-        // Poslední hraní se posune až po uložení - seznam světů se podle něj řadí.
+        // ⚠️ Poslední hraní se posune JEN po úspěšném uložení - seznam světů
+        // se podle něj řadí a nový čas by tvrdil, že se svět uložil.
+        if (!saved) {
+            System.err.println("Svet " + currentWorld.folder() + " se NEULOZIL - zmeny od posledniho ulozeni chybi");
+            return;
+        }
+
         currentWorld = WorldSaves.touch(currentWorld, System.currentTimeMillis());
     }
 
     /** Uloží svět i s náhledem a vrátí se do hlavního menu. */
     private void quitToTitle() {
-        captureThumbnail();
+        // Svět napřed, náhled až po něm - náhled je postradatelný, svět ne.
         saveWorld();
+
+        try {
+            captureThumbnail();
+        } catch (RuntimeException e) {
+            System.err.println("Nahled sveta se nepovedl: " + e);
+        }
+
         currentWorld = null;
 
         // V menu se na mód nikdo neptá, ale ať tam po creative světě nezůstane
@@ -1274,7 +1455,10 @@ public class Main {
                 }
             }
             case CREATE_WORLD -> {
-                String clipboard = glfwGetClipboardString(window);
+                // Schránka jen při vložení: čtení je na X11 dotaz vlastníkovi
+                // schránky a dřív se dělalo při každém stisku klávesy.
+                String clipboard = CreateWorldScreen.isPaste(key, mods)
+                        ? glfwGetClipboardString(window) : null;
 
                 switch (createScreen.key(key, mods, clipboard)) {
                     case CREATE -> createWorld();
@@ -1297,6 +1481,10 @@ public class Main {
     }
 
     private void closeOptions() {
+        // Zavření Escem uprostřed tažení: puštění tlačítka už do Options
+        // nedojde, a instance je jedna na celý běh - posuvník by při
+        // dalším otevření jel za myší sám.
+        optionsScreen.release();
         saveOptions();
         setState(optionsReturnState);
     }
@@ -1347,8 +1535,13 @@ public class Main {
                 loadingProgress(missingColumns, pendingMeshes));
 
         // Pár framů rezervy, aby se fronty stihly vůbec naplnit.
-        if (missingColumns == 0 && pendingMeshes == 0 && loadingFrames > 3) {
+        // ⚠️ I světlo musí doběhnout: dřív se čekalo jen na sloupce a meshe,
+        // hra začala s ~700 000 nezpracovanými uzly světla a dosvícení pak
+        // přestavovalo sekce mimo rozpočet. S rozpočtem světla pro loading
+        // (12 ms) doběhne spolu se sloupci, takže loading to neprodlouží.
+        if (missingColumns == 0 && pendingMeshes == 0 && world.pendingLight() == 0 && loadingFrames > 3) {
             worldRenderer.setBuildBudget(WorldRenderer.BUILD_BUDGET_PLAYING);
+            world.lightBudget = World.LIGHT_BUDGET;
             setState(GameState.PLAYING);
             giveCreatedBlocks();
         }
@@ -1558,9 +1751,10 @@ public class Main {
     }
 
     /**
-     * Kliknutí v menu. Zvuk kliknutí hraje AŽ PO akci tlačítka: "Create World"
-     * a "Load World" zvukový engine zavřou a otevřou nový (jako svět), takže
-     * zvuk pouštěný předtím by se hned uťal.
+     * Kliknutí v hlavním menu a v pauze. Zvuk kliknutí hraje AŽ PO akci
+     * tlačítka - stejné pravidlo jako u "Play Selected World" a "Create"
+     * na obrazovkách světů, které zvukový engine zavřou a otevřou nový
+     * (jako svět): zvuk pouštěný předtím by se hned uťal.
      */
     private void handleMenuClick() {
         if (state == GameState.MAIN_MENU) {
@@ -1714,8 +1908,8 @@ public class Main {
                         worldRenderer.drawnSections(),
                         worldRenderer.drawnFaces(),
                         worldRenderer.pendingBuilds()),
-                String.format("E inventory   held %d/%d slots   on ground %d",
-                        usedSlots(), Inventory.SIZE, drops.size()),
+                String.format("%s inventory   held %d/%d slots   on ground %d",
+                        key(Keybinds.Action.INVENTORY), usedSlots(), Inventory.SIZE, drops.size()),
                 String.format("sound %s   atlas %s   skin %s   lab blocks %d",
                         sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off",
                         atlasFromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural",
@@ -1737,19 +1931,56 @@ public class Main {
                                     ? String.format("swimming %.0f%%", player.submerged * 100)
                                 : player.onGround ? "on ground" : "in air",
                         player.vy, mode.label()),
-                mode.canFly()
-                        ? "Space x2 fly   Space/Ctrl up/down   Q drop   T time   V vsync   Esc pause"
-                        : "F fly   C noclip   1-9 slot   Q drop   T time   V vsync   Esc pause",
-                "F3 debug   F5 view   F6 texture lab   F11 fullscreen"
+                // Klávesy z Keybinds, ne natvrdo - po přebindování by nápověda lhala.
+                (mode.canFly()
+                        ? key(Keybinds.Action.JUMP) + " x2 fly   " + key(Keybinds.Action.JUMP) + "/"
+                                + key(Keybinds.Action.SNEAK) + " up/down"
+                        : key(Keybinds.Action.FLY) + " fly   " + key(Keybinds.Action.NOCLIP) + " noclip   "
+                                + key(Keybinds.Action.HOTBAR_1) + ".." + key(Keybinds.Action.HOTBAR_9) + " slot")
+                        + "   " + key(Keybinds.Action.DROP) + " drop   " + key(Keybinds.Action.SKIP_TIME)
+                        + " time   " + key(Keybinds.Action.VSYNC) + " vsync   Esc pause",
+                key(Keybinds.Action.DEBUG) + " debug   " + key(Keybinds.Action.VIEW) + " view   "
+                        + key(Keybinds.Action.LAB) + " lab   " + key(Keybinds.Action.FULLSCREEN) + " fullscreen"
         };
     }
 
-    private ItemStack[] inventorySnapshot() {
-        ItemStack[] stacks = new ItemStack[Inventory.SIZE];
-        for (int i = 0; i < Inventory.SIZE; i++) {
-            stacks[i] = inventory.get(i);
+    private static String key(Keybinds.Action action) {
+        return Keybinds.activeKeyName(action);
+    }
+
+    /**
+     * Co se ukládá jako inventář: nejdřív 36 slotů inventáře, za nimi obsah
+     * malé (4) a velké (9) crafting mřížky.
+     *
+     * ⚠️ MŘÍŽKY SE UKLÁDAJÍ TAKY. Co se při zavření obrazovky z mřížky do
+     * plného inventáře nevejde, v mřížce zůstane ("trvalý kontejner") - a bez
+     * uložení by to uložením a načtením světa zmizelo. Jsou až ZA inventářem,
+     * takže se formát world.dat nemění: délku pole soubor nese a restore()
+     * i starší build berou jen tolik slotů, kolik znají - starší build tedy
+     * mřížky jen přeskočí, jako dosud.
+     */
+    ItemStack[] inventorySnapshot() {
+        ItemStack[] stacks = new ItemStack[Inventory.SIZE + craftingSmall.size() + craftingLarge.size()];
+        int i = 0;
+
+        for (int slot = 0; slot < Inventory.SIZE; slot++) {
+            stacks[i++] = inventory.get(slot);
         }
+        for (int slot = 0; slot < craftingSmall.size(); slot++) {
+            stacks[i++] = craftingSmall.get(slot);
+        }
+        for (int slot = 0; slot < craftingLarge.size(); slot++) {
+            stacks[i++] = craftingLarge.get(slot);
+        }
+
         return stacks;
+    }
+
+    /** Vrátí do kontejneru sloty uložené od indexu from - když je soubor má. */
+    private static void restoreSlots(ItemStack[] saved, int from, Container into) {
+        for (int slot = 0; slot < into.size() && from + slot < saved.length; slot++) {
+            into.set(slot, saved[from + slot]);
+        }
     }
 
     private int usedSlots() {

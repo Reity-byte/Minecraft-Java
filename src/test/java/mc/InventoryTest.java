@@ -203,6 +203,8 @@ public class InventoryTest {
         takeAndInsert();
         shiftClick();
         dragging();
+        resultSlot();
+        otherBranches();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -501,5 +503,124 @@ public class InventoryTest {
         int used = 0;
         for (int i = 0; i < c.size(); i++) if (!c.get(i).isEmpty()) used++;
         return used;
+    }
+
+    // ==================================================================
+    // vystupni slot s necim v ruce (driv bez testu - a v ni byla duplikace)
+    // ==================================================================
+
+    /**
+     * BUG: s rukou plnou JINEHO bloku se vysledek posilal do inventare pres
+     * add(), ktere neni "vsechno, nebo nic" - dolije rozdelane hromadky
+     * a vrati jen zbytek. Pri nenulovem zbytku se skoncilo BEZ spotreby
+     * surovin, ale dolita cast v inventari zustala: vysledek sel brat
+     * zadarmo porad dokola.
+     */
+    static void resultSlot() {
+        System.out.println("\n-- vystupni slot s plnou rukou --");
+
+        // --- inventar, do ktereho se vysledek vejde jen z casti ---
+        Inventory inv = filled(World.DIRT);
+        Container grid = new Container(4);
+        Container result = new Container(1);
+        ContainerScreen screen = ContainerScreen.playerInventory(inv, grid, result);
+
+        for (int i = 0; i < 4; i++) grid.set(i, ItemStack.of(World.STONE, 1));
+        screen.refreshResult();
+        ItemStack made = result.get(0);
+        check("4 kameny neco vyrobi", !made.isEmpty() && made.block() != World.DIRT, made.toString());
+
+        // Rozdelana hromadka vysledku, do ktere se vejde o kus min, nez je potreba.
+        inv.set(0, ItemStack.of(made.block(), ItemStack.MAX_COUNT - made.count() + 1));
+        int before = inv.countOf(made.block());
+
+        // Pravym tlacitkem pulka hliny na kurzor - zadny slot neni prazdny.
+        screen.click(backpack(20)[0], backpack(20)[1], W, H, false, inv);
+        check("v ruce je hlina a zadny slot neni prazdny",
+                screen.held().block() == World.DIRT && inv.room(ItemStack.of(World.STONE, 1)) == 0,
+                screen.held().toString());
+
+        take(screen, result2(), inv);
+        check("kdyz se vysledek nevejde CELY, do inventare nejde nic (driv se dolil)",
+                inv.countOf(made.block()) == before, before + " -> " + inv.countOf(made.block()));
+        check("a suroviny zustaly", grid.get(0).count() == 1 && grid.get(3).count() == 1, "");
+        check("a vysledek je porad nabizeny", result.get(0).equals(made), result.get(0).toString());
+
+        take(screen, result2(), inv);
+        check("ani druhy klik nic nevyrobi zadarmo", inv.countOf(made.block()) == before, "");
+
+        // --- misto se uvolni: vysledek jde do inventare a suroviny se spotrebuji ---
+        inv.set(30, ItemStack.EMPTY);
+        take(screen, result2(), inv);
+        check("s mistem jde vysledek do inventare cely",
+                inv.countOf(made.block()) == before + made.count(), "" + inv.countOf(made.block()));
+        check("a suroviny se spotrebovaly", grid.isEmpty(), "");
+        check("hlina v ruce zustala", screen.held().block() == World.DIRT, screen.held().toString());
+
+        // --- v ruce tentyz blok, ale bez mista v ruce: jde do inventare ---
+        Inventory inv2 = new Inventory();
+        Container grid2 = new Container(4);
+        Container result2 = new Container(1);
+        ContainerScreen screen2 = ContainerScreen.playerInventory(inv2, grid2, result2);
+        inv2.set(0, ItemStack.of(made.block(), ItemStack.MAX_COUNT - 1));
+        take(screen2, hotbar(0), inv2);
+        for (int i = 0; i < 4; i++) grid2.set(i, ItemStack.of(World.STONE, 1));
+        screen2.refreshResult();
+
+        take(screen2, result2(), inv2);
+        check("tentyz blok bez mista v ruce: vysledek jde do inventare, ruka se nezmeni",
+                screen2.held().count() == ItemStack.MAX_COUNT - 1
+                        && inv2.countOf(made.block()) == made.count() && grid2.isEmpty(),
+                screen2.held() + " / " + inv2.countOf(made.block()));
+    }
+
+    static void otherBranches() {
+        System.out.println("\n-- dalsi vetve kontejneru --");
+
+        // --- Container.room ---
+        Container c = new Container(3);
+        c.set(0, ItemStack.of(World.STONE, 60));
+        c.set(1, ItemStack.of(World.SAND, 10));
+        check("room = mista v rozdelanych hromadkach + prazdne sloty",
+                c.room(ItemStack.of(World.STONE, 1)) == 4 + ItemStack.MAX_COUNT, "" + c.room(ItemStack.of(World.STONE, 1)));
+        check("room pro jiny blok jsou jen prazdne sloty",
+                c.room(ItemStack.of(World.DIRT, 1)) == ItemStack.MAX_COUNT, "");
+        check("room prazdne hromadky je 0", c.room(ItemStack.EMPTY) == 0, "");
+
+        // --- hromadka pres MAX_COUNT (napr. z rucne upraveneho souboru) ---
+        Container over = new Container(2);
+        over.set(0, ItemStack.of(World.STONE, 100));
+        ItemStack rest = over.add(ItemStack.of(World.STONE, 1));
+        check("pridani do prerostle hromadky z ni kusy neubere",
+                over.get(0).count() == 100 && over.get(1).count() == 1 && rest.isEmpty(),
+                over.get(0) + " / " + over.get(1));
+        Container overOnly = new Container(1);
+        overOnly.set(0, ItemStack.of(World.STONE, 100));
+        check("prerostla hromadka nema misto (ne zaporne)",
+                overOnly.room(ItemStack.of(World.STONE, 1)) == 0, "" + overOnly.room(ItemStack.of(World.STONE, 1)));
+
+        // --- polozeni jineho bloku na obsazeny slot: prohozeni ---
+        Inventory inv = new Inventory();
+        ContainerScreen screen = ContainerScreen.playerInventory(inv, new Container(4), new Container(1));
+        inv.set(0, ItemStack.of(World.STONE, 5));
+        inv.set(1, ItemStack.of(World.SAND, 7));
+        take(screen, hotbar(0), inv);
+        take(screen, hotbar(1), inv);
+        check("jiny blok na obsazenem slotu se prohodi",
+                inv.get(1).block() == World.STONE && inv.get(1).count() == 5
+                        && screen.held().block() == World.SAND && screen.held().count() == 7,
+                inv.get(1) + " / " + screen.held());
+
+        // --- zavreni: co se z mrizky do plneho inventare nevejde, zustane v ni ---
+        Inventory full = filled(World.DIRT);
+        Container grid = new Container(4);
+        grid.set(0, ItemStack.of(World.IRON_ORE, 5));
+        grid.set(1, ItemStack.of(World.DIRT, 3));
+        ContainerScreen closing = ContainerScreen.playerInventory(full, grid, new Container(1));
+        ItemStack leftover = closing.returnItems(full);
+        check("co se z mrizky nevejde, zustane v mrizce (nezmizi)",
+                grid.get(0).block() == World.IRON_ORE && grid.get(0).count() == 5
+                        && grid.get(1).count() == 3 && leftover.isEmpty(),
+                grid.get(0) + " / " + grid.get(1));
     }
 }

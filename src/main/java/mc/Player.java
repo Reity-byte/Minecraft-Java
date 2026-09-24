@@ -124,6 +124,27 @@ public class Player {
 
     // ------------------------------------------------------------------
 
+    /**
+     * Vrátí stav, který patří KONKRÉTNÍMU SVĚTU: let, noclip, rychlost
+     * a všechno odvozené z posledního kroku. Poloha se nastaví až spawnem
+     * nebo načtením světa.
+     *
+     * ⚠️ Player je jedna instance po celý běh hry (pole Main), takže bez
+     * tohohle nový survival svět začínal v letu po předchozím creative světě
+     * a noclip přecházel do každého dalšího světa. Volá Main.resetPlayerState().
+     */
+    public void resetForNewWorld()
+    {
+        flying = false;
+        noclip = false;
+        vx = vy = vz = 0;
+        onGround = false;
+        submerged = 0f;
+        inWater = false;
+        stepped = false;
+        stepBlock = World.AIR;
+    }
+
     /** Postaví hráče na povrch terénu v daném sloupci. */
     public void spawn(World world, float spawnX, float spawnZ)
     {

@@ -1,15 +1,10 @@
 package mc;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -334,78 +329,7 @@ public final class RecipeBook {
      */
     public boolean save(Path file)
     {
-        Path target = file.toAbsolutePath();
-        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
-        boolean moved = false;
-
-        try
-        {
-            Path parent = target.getParent();
-
-            if(parent != null)
-            {
-                Files.createDirectories(parent);
-            }
-
-            backupIfDamaged(target);
-
-            try(FileChannel channel = FileChannel.open(temp, StandardOpenOption.CREATE,
-                    StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING))
-            {
-                ByteBuffer bytes = ByteBuffer.wrap(toJson().getBytes(StandardCharsets.UTF_8));
-
-                while(bytes.hasRemaining())
-                {
-                    channel.write(bytes);
-                }
-
-                channel.force(true);
-            }
-
-            try
-            {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE);
-            }
-            catch(AtomicMoveNotSupportedException e)
-            {
-                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-
-            moved = true;
-            return true;
-        }
-        catch(IOException e)
-        {
-            System.err.println("Recepty " + file + " nejdou ulozit: " + e);
-            return false;
-        }
-        finally
-        {
-            if(!moved)
-            {
-                try
-                {
-                    Files.deleteIfExists(temp);
-                }
-                catch(IOException ignored)
-                {
-                    // Zbytek .tmp nevadí - příští zápis ho přepíše.
-                }
-            }
-        }
-    }
-
-    private static void backupIfDamaged(Path file) throws IOException
-    {
-        if(!Files.isRegularFile(file) || loadsCompletely(file))
-        {
-            return;
-        }
-
-        Path backup = file.resolveSibling(file.getFileName() + ".bak");
-        Files.copy(file, backup, StandardCopyOption.REPLACE_EXISTING);
-        System.err.println("Recepty " + file + ": puvodni soubor nesel cely nacist, zaloha je v " + backup);
+        return SafeFiles.writeAtomically(file, toJson(), RecipeBook::loadsCompletely, "Recepty");
     }
 
     private static boolean loadsCompletely(Path file)

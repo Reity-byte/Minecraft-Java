@@ -291,6 +291,7 @@ public class DroppedItemMesh {
 
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, vertexCount());
+        GlStats.countDraw();
         glBindVertexArray(0);
     }
 

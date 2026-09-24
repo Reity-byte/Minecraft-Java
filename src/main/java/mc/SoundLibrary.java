@@ -29,6 +29,14 @@ public final class SoundLibrary {
     /** Adresář se skutečnými zvuky, relativně k pracovnímu adresáři - jako saves/. */
     public static final Path SOUND_DIR = Path.of("sounds");
 
+    /**
+     * Největší soubor, který se vůbec zkusí číst. Zvuky hry jsou desetiny
+     * sekundy; 32 MB je přes tři minuty stereo 16 bit 44,1 kHz. Větší soubor
+     * (omylem pojmenovaná nahrávka) by přes readAllBytes a dekódování shodil
+     * hru OutOfMemoryError - a to "chyba zvuku hru nepoloží" nedovoluje.
+     */
+    static final long MAX_FILE_BYTES = 32L * 1024 * 1024;
+
     private SoundLibrary() {}
 
     /** Zvuk z adresáře, když tam je a jde přečíst; jinak syntetizovaný. */
@@ -40,6 +48,15 @@ public final class SoundLibrary {
         {
             try
             {
+                long size = Files.size(file);
+
+                if(size > MAX_FILE_BYTES)
+                {
+                    System.err.println("Zvuk " + file + " ma " + size / (1024 * 1024)
+                            + " MB, vic nez " + MAX_FILE_BYTES / (1024 * 1024) + " MB - hraje placeholder");
+                    return Wav.decode(SoundSynth.wav(sound));
+                }
+
                 Wav.Pcm recorded = Wav.decode(Files.readAllBytes(file));
 
                 if(recorded != null)
@@ -50,9 +67,12 @@ public final class SoundLibrary {
                 System.err.println("Zvuk " + file + ": nepodporovany format WAV"
                         + " (jen PCM 8/16 bit, mono/stereo) - hraje placeholder");
             }
-            catch(IOException e)
+            catch(IOException | RuntimeException e)
             {
-                System.err.println("Zvuk " + file + " nejde precist: " + e.getMessage()
+                // RuntimeException taky: vadný soubor nesmí propadnout až do
+                // SoundEngine.open() a vypnout všech 13 zvuků (a hláška
+                // "Zvuk vypnuty: null" neřekla, který soubor za to může).
+                System.err.println("Zvuk " + file + " nejde precist: " + e
                         + " - hraje placeholder");
             }
         }

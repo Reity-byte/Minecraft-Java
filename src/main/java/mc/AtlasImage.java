@@ -4,6 +4,7 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,6 +48,14 @@ public final class AtlasImage {
      *
      * flipRows = true u atlasu (pole má řádek 0 dole, obrázek nahoře),
      * false u skinu (pole i obrázek mají řádek 0 nahoře).
+     *
+     * ⚠️ PNG SE KÓDUJE DO PAMĚTI A NA DISK JDE PŘES SafeFiles. ImageIO.write
+     * do souboru cíl nejdřív SMAŽE a teprve pak píše, takže plný disk nebo
+     * pád uprostřed nechal useknutý atlas.png - a s ním byla pryč veškerá
+     * malba z labu včetně dlaždic bloků z blocks.json. Teď se píše do .tmp
+     * a přejmenuje, a soubor, který nejde načíst jako obrázek tohohle
+     * rozměru (poškozený, nebo třeba 256x256 připravený ručně), se před
+     * přepsáním zazálohuje do .bak - stejný vzor jako u JSON souborů.
      */
     public static boolean save(int[] pixels, Path file, int size, boolean flipRows)
     {
@@ -57,28 +66,24 @@ public final class AtlasImage {
             image.setRGB(0, flipRows ? size - 1 - y : y, size, 1, pixels, y * size, size);
         }
 
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+
         try
         {
-            Path parent = file.toAbsolutePath().getParent();
-
-            if(parent != null)
-            {
-                Files.createDirectories(parent);
-            }
-
-            if(!ImageIO.write(image, "png", file.toFile()))
+            if(!ImageIO.write(image, "png", png))
             {
                 System.err.println("Obrazek " + file + ": zadny zapisovac PNG");
                 return false;
             }
-
-            return true;
         }
         catch(IOException e)
         {
-            System.err.println("Obrazek " + file + " nejde ulozit: " + e.getMessage());
+            System.err.println("Obrazek " + file + " nejde zakodovat: " + e.getMessage());
             return false;
         }
+
+        return SafeFiles.writeAtomically(file, png.toByteArray(),
+                existing -> read(existing, size, flipRows).pixels() != null, "Obrazek");
     }
 
     /**

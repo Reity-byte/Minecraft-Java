@@ -193,6 +193,39 @@ public class AsyncTest {
         walk.shutdown();
         fresh.shutdown();
 
+        workerSurvivesException();
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+
+    /**
+     * BUG: vyjimka z generateColumn() zabila worker vlakno - klice zustaly
+     * navzdy "in flight", pendingColumns() nikdy neklesl na nulu a loading
+     * visel bez hlasky. Generator se tu rozbije schvalne (reflexi null misto
+     * generatoru); svet musi dal bezet a dojit do konce, jen s prazdnymi sloupci.
+     */
+    static void workerSurvivesException() {
+        System.out.println("\n-- vyjimka ve workeru nezastavi svet --");
+
+        World broken = new World();
+        broken.loadRadius = 2;
+        broken.unloadRadius = 4;
+
+        try {
+            java.lang.reflect.Field generator = World.class.getDeclaredField("generator");
+            generator.setAccessible(true);
+            generator.set(broken, null);
+        } catch (ReflectiveOperationException e) {
+            check("generator jde pro test rozbit", false, e.toString());
+            return;
+        }
+
+        System.out.println("  (nize ocekavane hlasky o selhanem generovani)");
+        int frames = pump(broken, 8f, 8f, 3000);
+        check("svet s rozbitym generatorem dojde do konce (loading nevisi)", frames > 0, frames + " framu");
+        check("worker vlakno porad zije", broken.isWorkerAlive(), "");
+        check("misto sloupcu jsou prazdne sloupce", broken.column(0, 0) != null
+                && !broken.isSolid(8, 10, 8), "");
+        broken.shutdown();
     }
 }

@@ -426,6 +426,16 @@ public final class Keybinds {
         return names;
     }
 
+    /**
+     * Jméno klávesy, na které akce AKTIVNĚ je - pro nápovědy v UI. Nápověda
+     * s klávesou napsanou natvrdo by po přebindování v Keybind Labu radila
+     * klávesu, která nic nedělá.
+     */
+    public static String activeKeyName(Action action)
+    {
+        return keyName(active().key(action));
+    }
+
     /** Jméno klávesy pro UI i pro soubor. Neznámý kód dostane tvar "#kód". */
     public static String keyName(int key)
     {
@@ -486,7 +496,24 @@ public final class Keybinds {
      */
     public static boolean isUsableKey(int key)
     {
-        return key > 0 && key <= GLFW_KEY_LAST;
+        // Od GLFW_KEY_SPACE (32): glfwGetKey kódy 1-31 odmítá jako
+        // GLFW_INVALID_ENUM, takže "#5" v souboru by se načetl a akce by
+        // tiše nikdy nesepnula.
+        return key >= GLFW_KEY_SPACE && key <= GLFW_KEY_LAST;
+    }
+
+    /**
+     * Smí tahle akce mít tuhle klávesu?
+     *
+     * ⚠️ ESC PATŘÍ JEN PAUZE. Esc je pojistka, kterou se zavírá každá
+     * obrazovka, i když je keybinds.json rozbitý - a Main ji testuje až za
+     * větvemi akcí, takže Esc přiřazený třeba celé obrazovce nebo vyhazování
+     * by ji přebil (Esc v inventáři by přepnul fullscreen místo zavření).
+     * Lab Esc přiřadit neumí (ruší čekání), tohle hlídá ručně upravený soubor.
+     */
+    public static boolean allowedFor(Action action, int key)
+    {
+        return key != GLFW_KEY_ESCAPE || action == Action.PAUSE;
     }
 
     // ------------------------------------------------------------------
@@ -661,6 +688,13 @@ public final class Keybinds {
             if(code == NONE && !name.trim().equalsIgnoreCase("NONE"))
             {
                 problems.add(action.id() + ": klavesu \"" + name + "\" neznam - vychozi "
+                        + keyName(action.defaultKey()));
+                continue;
+            }
+
+            if(!allowedFor(action, code))
+            {
+                problems.add(action.id() + ": Esc patri jen pauze (zavira vsechny obrazovky) - vychozi "
                         + keyName(action.defaultKey()));
                 continue;
             }

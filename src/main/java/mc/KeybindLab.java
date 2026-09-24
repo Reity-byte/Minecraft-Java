@@ -44,6 +44,29 @@ public final class KeybindLab implements LabMode {
     /** Akce, které se zrovna přiřazuje nová klávesa, nebo null. */
     private Keybinds.Action arming = null;
 
+    // ------------------------------------------------------------------
+    // hlášky
+    // ------------------------------------------------------------------
+
+    /** Poslední hláška - aby šla logika módu otestovat bez labu (a bez GL). */
+    private String lastMessage = "";
+
+    /** Hláška do stavového řádku labu. Bez labu (headless test) si ji jen zapamatuje. */
+    private void say(String message)
+    {
+        lastMessage = message;
+
+        if(lab != null)
+        {
+            lab.say(message);
+        }
+    }
+
+    String lastMessage()
+    {
+        return lastMessage;
+    }
+
     public KeybindLab(TextureLab lab, Renderer2D shapes, TextRenderer text)
     {
         this.lab = lab;
@@ -117,7 +140,7 @@ public final class KeybindLab implements LabMode {
     void arm(Keybinds.Action action)
     {
         arming = action;
-        lab.say("Press a key for " + action.label() + "  (Esc cancels)");
+        say("Press a key for " + action.label() + "  (Esc cancels)");
     }
 
     /**
@@ -139,7 +162,7 @@ public final class KeybindLab implements LabMode {
 
         if(!Keybinds.isUsableKey(key))
         {
-            lab.say("That key has no code GLFW knows - not assigned");
+            say("That key has no code GLFW knows - not assigned");
             return;
         }
 
@@ -147,12 +170,12 @@ public final class KeybindLab implements LabMode {
 
         if(draft.conflicted(action))
         {
-            lab.say(action.label() + " = " + Keybinds.keyName(key)
+            say(action.label() + " = " + Keybinds.keyName(key)
                     + " - clashes with another action, fix it before saving");
         }
         else
         {
-            lab.say(action.label() + " = " + Keybinds.keyName(key));
+            say(action.label() + " = " + Keybinds.keyName(key));
         }
     }
 
@@ -181,25 +204,25 @@ public final class KeybindLab implements LabMode {
 
         if(problem != null)
         {
-            lab.say(problem);
+            say(problem);
             return;
         }
 
         if(!draft.save(Keybinds.FILE))
         {
-            lab.say("Could not write " + Keybinds.FILE.toString().replace('\\', '/'));
+            say("Could not write " + Keybinds.FILE.toString().replace('\\', '/'));
             return;
         }
 
         Keybinds.activate(draft);
-        lab.say("Saved - the new keys work right now, no restart");
+        say("Saved - the new keys work right now, no restart");
     }
 
     void reset()
     {
         draft = Keybinds.defaults();
         arming = null;
-        lab.say("Back to the built-in keys - Save to keep it");
+        say("Back to the built-in keys - Save to keep it");
     }
 
     // ------------------------------------------------------------------
@@ -259,7 +282,7 @@ public final class KeybindLab implements LabMode {
 
         if(key == GLFW_KEY_ESCAPE)
         {
-            lab.say("Rebinding " + arming.label() + " cancelled");
+            say("Rebinding " + arming.label() + " cancelled");
             arming = null;
             return true;
         }

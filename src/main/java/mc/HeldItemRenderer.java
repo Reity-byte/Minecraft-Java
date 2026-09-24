@@ -144,6 +144,7 @@ public class HeldItemRenderer {
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, upload);
         glDrawArrays(GL_TRIANGLES, 0, floats / FLOATS_PER_VERTEX);
+        GlStats.countDraw();
         glBindVertexArray(0);
 
         glDisable(GL_BLEND);

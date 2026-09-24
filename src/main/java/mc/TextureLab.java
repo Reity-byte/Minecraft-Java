@@ -192,12 +192,17 @@ public class TextureLab {
      * obdélník nahraje do téže textury, takže náhled, hotbar i svět
      * (a postava ve třetí osobě) změnu vidí v tom samém framu.
      */
-    public TextureLab(int[] atlasPixels, Texture atlas, boolean fromFile,
-                      int[] skinPixels, Texture skinTexture, boolean skinFromFile,
+    public TextureLab(AtlasEditor editor, Texture atlas, boolean fromFile,
+                      SkinEditor skin, Texture skinTexture, boolean skinFromFile,
                       Renderer2D shapes, TextRenderer text)
     {
-        this.editor = new AtlasEditor(atlasPixels);
-        this.skin = new SkinEditor(skinPixels);
+        // ⚠️ Editory dostává lab ZVENKU a Main je drží po celý běh hry. Lab
+        // vzniká při každém otevření znovu, ale neuložené pixely zůstávají
+        // v poli hry i po jeho zavření - kdyby si lab editory stavěl sám,
+        // začínaly by pokaždé s "(unsaved)" = false a prázdným undo, a po
+        // F6 -> F6 by nic neříkalo, že je co ukládat.
+        this.editor = editor;
+        this.skin = skin;
         this.atlas = atlas;
         this.skinTexture = skinTexture;
         this.fromFile = fromFile;
@@ -406,8 +411,18 @@ public class TextureLab {
         current().release();
     }
 
+    /** Co se s klávesou v labu stalo - viz key(). */
+    public enum KeyResult {
+        /** Vzal si ji mód (psaní, Ctrl+Z, čekání na klávesu v Keybind Labu). */
+        CONSUMED,
+        /** Esc nebo klávesa labu, kterou si nevzal mód: lab se zavře. */
+        CLOSE,
+        /** Nikdo ji nechtěl - Main ji smí použít (celá obrazovka). */
+        UNUSED
+    }
+
     /**
-     * Klávesa. Vrací true, když se má lab ZAVŘÍT.
+     * Klávesa.
      *
      * ⚠️ O ZAVŘENÍ ROZHODUJE HUB, NE MÓD. Mód jen řekne, jestli si klávesu
      * vzal (`LabMode.key`); zavírá se, až když si ji nevzal nikdo a je to
@@ -417,18 +432,42 @@ public class TextureLab {
      * takže Delete v módu Recipes vymazal mřížku A ZAVŘEL LAB, kdežto Esc
      * v něm lab nezavíral vůbec. Tady je ta otázka jen jedna a ptá se na
      * ni jedno místo.
+     *
+     * Třetí výsledek UNUSED je kvůli celé obrazovce: F11 má přepínat
+     * odkudkoliv, ale v Keybind Labu při čekání na klávesu si ji mód musí
+     * vzít (jinak by nešla přiřadit) - proto to Main pozná až odsud.
      */
-    public boolean key(int key, int mods)
+    public KeyResult key(int key, int mods)
     {
-        if(current().key(key, mods))
+        return route(current(), key, mods);
+    }
+
+    /**
+     * Celé rozhodnutí hubu jako statická funkce, aby šla konvence
+     * `LabMode.key()` otestovat se skutečnými módy bez GL (LabModesTest).
+     */
+    static KeyResult route(LabMode mode, int key, int mods)
+    {
+        if(mode.key(key, mods))
         {
-            return false;
+            return KeyResult.CONSUMED;
         }
 
         // Klávesa labu zavírá lab, ať je přebindovaná kamkoliv; Esc platí
         // vždycky, aby se z labu šlo dostat i s rozbitým keybinds.json.
-        return key == GLFW_KEY_ESCAPE
-                || Keybinds.active().actionFor(key) == Keybinds.Action.LAB;
+        if(key == GLFW_KEY_ESCAPE
+                || Keybinds.active().actionFor(key) == Keybinds.Action.LAB)
+        {
+            return KeyResult.CLOSE;
+        }
+
+        return KeyResult.UNUSED;
+    }
+
+    /** Zavře tahle klávesa lab? Zkratka nad route() pro testy. */
+    static boolean closesLab(LabMode mode, int key, int mods)
+    {
+        return route(mode, key, mods) == KeyResult.CLOSE;
     }
 
     public void typed(int codepoint)
@@ -766,8 +805,14 @@ public class TextureLab {
     private void applyHsv()
     {
         // Z průhledné (gumy) přechod na HSV znamená "chci barvu" - plně krycí.
-        int alpha = editor.color() >>> 24;
-        editor.setColor(AtlasEditor.hsv(hue, saturation, value, alpha == 0 ? 0xFF : alpha));
+        //
+        // ⚠️ OBA EDITORY, jako setColor(): barva je společná. Dřív se tu
+        // nastavoval jen atlas, takže v módu Skin posuvníky hýbaly jen
+        // značkou a štětec, vzorek i hex zůstaly na staré barvě.
+        int alpha = active().color() >>> 24;
+        int argb = AtlasEditor.hsv(hue, saturation, value, alpha == 0 ? 0xFF : alpha);
+        editor.setColor(argb);
+        skin.setColor(argb);
     }
 
     void say(String message)
@@ -866,14 +911,25 @@ public class TextureLab {
             return;
         }
 
+        // ⚠️ Import jen tam, kde je vidět: v Recipes, Keys ani Biomes plátno
+        // není, změněný obdélník se na grafiku nenahrával a příští Save by
+        // zapsal obrázek, který uživatel nikdy neviděl (a do atlasu, nebo do
+        // kůže podle toho, který pixelový mód byl otevřený naposledy).
+        if(!(current() instanceof PixelMode))
+        {
+            say("Import works in Blocks and Skin - switch there and press Import PNG");
+            return;
+        }
+
         importImage();
     }
 
     private void updatePixel(float dt)
     {
+        // Hláška se odpočítává jednou, v update() hubu - dřív tu byl ještě
+        // druhý odpočet a hlášky v Blocks a Skin mizely po 2,5 s místo 5 s.
         preview.update(dt);
         skinPreview.update(dt);
-        statusLeft -= dt;
     }
 
     // ------------------------------------------------------------------
@@ -1110,7 +1166,7 @@ public class TextureLab {
 
         if(layout.hit(TextureLabLayout.HEX, mouseX, mouseY))
         {
-            hexInput = new StringBuilder(AtlasEditor.toHex(editor.color()).substring(1));
+            hexInput = new StringBuilder(AtlasEditor.toHex(active().color()).substring(1));
             return false;
         }
 
@@ -1943,7 +1999,7 @@ public class TextureLab {
         centered(layout, TextureLabLayout.REVERT, "Revert");
         centered(layout, TextureLabLayout.IMPORT, "Import PNG");
         centered(layout, TextureLabLayout.NEW_BLOCK, "New block");
-        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / F6)");
+        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / " + Keybinds.activeKeyName(Keybinds.Action.LAB) + ")");
     }
 
     /** Informace o vybrané stěně kůže - nalevo místo informací o dlaždici. */
@@ -1967,7 +2023,7 @@ public class TextureLab {
         centered(layout, TextureLabLayout.SAVE, "Save");
         centered(layout, TextureLabLayout.REVERT, "Revert");
         centered(layout, TextureLabLayout.IMPORT, "Import PNG");
-        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / F6)");
+        centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / " + Keybinds.activeKeyName(Keybinds.Action.LAB) + ")");
     }
 
     private void drawFormTexts(TextureLabLayout layout)
@@ -2090,25 +2146,24 @@ public class TextureLab {
     // pomocné kreslení (všechno v GUI pixelech panelu)
     // ------------------------------------------------------------------
 
-    /**
-     * Izometrické ikony bloků - tytéž kostky jako v hotbaru a ve slotech
-     * inventáře, takže blok vypadá v receptu stejně jako ve hře.
-     *
-     * ⚠️ JE TO TROJICE begin / draw / end, ne jedna metoda na ikonu. `begin()`
-     * naváže shader, texturu a VAO; kdyby se to dělalo na každou ikonu zvlášť,
-     * stál by přehled bloků v módu Recipes skoro devadesát změn stavu GL za
-     * frame - a lab má 8 draw callů místo 422 právě proto, že se stav
-     * nepřenastavuje zbytečně (viz "Výkon labu").
-     *
-     * Vlastní shader se musí navázat MIMO dávku `Renderer2D`, takže si o ikony
-     * mód říká až po `shapes.end()`.
-     */
     /** Atlas bloků - náhled stromu kreslí týmiž texturami jako hra. */
     Texture atlasTexture()
     {
         return atlas;
     }
 
+    /**
+     * Izometrické ikony bloků - tytéž kostky jako v hotbaru a ve slotech
+     * inventáře, takže blok vypadá v receptu stejně jako ve hře.
+     *
+     * ⚠️ JE TO TROJICE begin / draw / end, ne jedna metoda na ikonu. `begin()`
+     * naváže shader, texturu a VAO, `blockIcon()` jen přidá vrcholy do dávky
+     * a `end()` pošle všechny ikony JEDNÍM draw callem (viz BlockIcon) -
+     * přehled bloků v Recipes tak nestojí desítky draw callů za frame.
+     *
+     * Vlastní shader se musí navázat MIMO dávku `Renderer2D`, takže si o ikony
+     * mód říká až po `shapes.end()`.
+     */
     void blockIconsBegin(int screenWidth, int screenHeight)
     {
         blockIcons.begin(screenWidth, screenHeight);
@@ -2318,6 +2373,11 @@ public class TextureLab {
         // Zavření labu s rozepsaným blokem ho zahodí - dočasný registr
         // s návrhem nesmí zůstat aktivní ve hře.
         cancelBlock();
+
+        // Tah dokončený ve stejném framu jako zavření (malování a hned F6)
+        // by se jinak na grafiku dostal až při příštím otevření labu.
+        upload(editor, atlas);
+        upload(skin, skinTexture);
 
         images.delete();
         checker.delete();

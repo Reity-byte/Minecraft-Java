@@ -101,6 +101,21 @@ public final class CreateWorldScreen {
     // vstup
     // ------------------------------------------------------------------
 
+    /**
+     * Trefil poslední klik tlačítko, které obrazovka obsloužila sama (bez
+     * akce pro Main)? Main podle toho zahraje zvuk kliknutí - dřív zněla
+     * jen tlačítka, jejichž akci vracela obrazovka, a stejně vypadající
+     * přepínače vedle nich mlčely.
+     */
+    private boolean buttonClicked = false;
+
+    public boolean takeClicked()
+    {
+        boolean was = buttonClicked;
+        buttonClicked = false;
+        return was;
+    }
+
     public Action press(double mouseX, double mouseY, int screenWidth, int screenHeight)
     {
         ScreenLayout l = layout(screenWidth, screenHeight);
@@ -113,6 +128,7 @@ public final class CreateWorldScreen {
         if(l.hit(MODE, mouseX, mouseY))
         {
             mode = mode.next();
+            buttonClicked = true;
             return Action.NONE;
         }
 
@@ -139,11 +155,19 @@ public final class CreateWorldScreen {
      * Klávesa. Enter zakládá, Esc ruší, Tab přepíná pole, Ctrl+V vloží
      * schránku (seedy se obvykle odněkud kopírují).
      */
+    /**
+     * Je to vložení ze schránky? Ctrl+V, a na macOS Cmd+V (GLFW_MOD_SUPER) -
+     * hra Mac podporuje a tam se Ctrl+V nepoužívá. Main podle toho čte
+     * schránku jen tehdy, ne při každé klávese.
+     */
+    static boolean isPaste(int key, int mods)
+    {
+        return key == GLFW_KEY_V && (mods & (GLFW_MOD_CONTROL | GLFW_MOD_SUPER)) != 0;
+    }
+
     public Action key(int key, int mods, String clipboard)
     {
-        boolean ctrl = (mods & GLFW_MOD_CONTROL) != 0;
-
-        if(ctrl && key == GLFW_KEY_V)
+        if(isPaste(key, mods))
         {
             if(name.isFocused()) name.insert(clipboard);
             if(seed.isFocused()) seed.insert(clipboard);

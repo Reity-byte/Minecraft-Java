@@ -26,8 +26,8 @@ public final class OptionsScreen {
 
     /** Jedna položka: posuvník, nebo tlačítko (přepínač). */
     enum Item {
-        FULLSCREEN(0, 0, false, "Fullscreen: toggles with F11 too"),
-        VSYNC(1, 0, false, "VSync: wait for the monitor refresh (V in game)"),
+        FULLSCREEN(0, 0, false, "Fullscreen: toggles with %FULLSCREEN% too"),
+        VSYNC(1, 0, false, "VSync: wait for the monitor refresh (%VSYNC% in game)"),
         RENDER(0, 1, true, "How many chunks are drawn. Never more than simulation."),
         SIMULATION(1, 1, true, "How many chunks are loaded and lit. Render follows it down."),
         FOV(0, 2, true, "Field of view in degrees"),
@@ -47,6 +47,16 @@ public final class OptionsScreen {
             this.row = row;
             this.slider = slider;
             this.help = help;
+        }
+
+        /**
+         * Nápověda s aktuálními klávesami: %AKCE% se nahradí jménem klávesy
+         * z Keybinds. Natvrdo napsaná F11 by po přebindování lhala.
+         */
+        String help()
+        {
+            return help.replace("%FULLSCREEN%", Keybinds.activeKeyName(Keybinds.Action.FULLSCREEN))
+                    .replace("%VSYNC%", Keybinds.activeKeyName(Keybinds.Action.VSYNC));
         }
 
         /** Celý obdélník položky (tlačítko, nebo popisek s dráhou posuvníku). */
@@ -117,6 +127,21 @@ public final class OptionsScreen {
     // vstup
     // ------------------------------------------------------------------
 
+    /**
+     * Trefil poslední klik tlačítko, které obrazovka obsloužila sama (bez
+     * akce pro Main)? Main podle toho zahraje zvuk kliknutí - dřív zněla
+     * jen tlačítka, jejichž akci vracela obrazovka, a stejně vypadající
+     * přepínače vedle nich mlčely.
+     */
+    private boolean buttonClicked = false;
+
+    public boolean takeClicked()
+    {
+        boolean was = buttonClicked;
+        buttonClicked = false;
+        return was;
+    }
+
     /** Zmáčknutí levého tlačítka. Vrací true, když se má obrazovka zavřít (Done). */
     public boolean press(double mouseX, double mouseY, int screenWidth, int screenHeight)
     {
@@ -142,6 +167,7 @@ public final class OptionsScreen {
         else
         {
             toggle(item);
+            buttonClicked = true;
         }
 
         return false;
@@ -309,7 +335,7 @@ public final class OptionsScreen {
 
         if(hovered != null)
         {
-            widgets.muted(l, HELP.x(), HELP.y(), widgets.fit(hovered.help, HELP.w(), l.scale()));
+            widgets.muted(l, HELP.x(), HELP.y(), widgets.fit(hovered.help(), HELP.w(), l.scale()));
         }
 
         widgets.centered(l, DONE, "Done");
