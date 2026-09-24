@@ -131,8 +131,8 @@ public final class TerrainGenerator {
      * Hodnoty jsou doladěné podle měření v CaveTest: při 12 a 24 vycházelo
      * 37 uhlí na 1000 kamene, což byly celé stěny uhlí místo občasného nálezu.
      */
-    private static final int COAL_RARITY = 30;
-    private static final int IRON_RARITY = 60;
+    static final int COAL_RARITY = 30;
+    static final int IRON_RARITY = 60;
 
     /**
      * Železo v horách. Trojnásobek množství = třetina vzácnosti, protože

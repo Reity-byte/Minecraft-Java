@@ -72,7 +72,13 @@ public final class TreeShape {
             {
                 for(int dz = -radius; dz <= radius; dz++)
                 {
-                    if(trimCorners && Math.abs(dx) == radius && Math.abs(dz) == radius)
+                    // ⚠️ radius > 0: vrstva stažená deltou na poloměr 0 je
+                    // JEDEN blok, a ten je zároveň "roh". S ořezem by se
+                    // nepoložilo nic - dub a bříza s korunou 1 končily holým
+                    // špalkem (poslední vrstva má ořez) a s korunou 0 neměly
+                    // ani list; prales ztratil vršek už o krok pod výchozí.
+                    if(trimCorners && radius > 0
+                            && Math.abs(dx) == radius && Math.abs(dz) == radius)
                     {
                         continue;
                     }

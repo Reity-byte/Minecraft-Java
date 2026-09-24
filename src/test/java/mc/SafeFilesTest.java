@@ -110,7 +110,7 @@ public class SafeFilesTest {
     /**
      * Když jsou obsazené všechny zálohy, soubor se radši NEPŘEPÍŠE - stejné
      * pravidlo jako "když se zálohovat nepovede". Tahle větev dřív neměla
-     * test vůbec (a v audit ji to vedlo jako mezeru).
+     * test vůbec (audit ji vedl jako mezeru PER-8).
      */
     static void backupsFull(Path dir) throws IOException {
         System.out.println("\n-- kdyz zalohovat nejde, soubor se neprepise --");

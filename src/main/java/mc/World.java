@@ -211,7 +211,16 @@ public class World {
 
     public World(long seed)
     {
-        generator = new TerrainGenerator(seed);
+        this(seed, BiomeTuning.active());
+    }
+
+    /**
+     * Svět s daným tuningem generátoru místo aktivního - pro náhledy v labu,
+     * které musí stát na terénu, jaký znají (viz TreePreview.createWorld).
+     */
+    public World(long seed, BiomeTuning tuning)
+    {
+        generator = new TerrainGenerator(seed, tuning);
 
         worker = new Thread(this::generateLoop, "world-gen");
         // Daemon, aby nedržel JVM naživu, kdyby se zapomnělo na shutdown().
