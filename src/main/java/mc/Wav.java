@@ -93,7 +93,11 @@ public final class Wav {
         {
             int length = in.getInt(position + 4);
 
-            if(length < 0 || position + 8 + length > data.length)
+            // ⚠️ V long: délka kolem Integer.MAX_VALUE by v int přetekla do
+            // záporu, kontrola by prošla a pozice by pak skočila za pole
+            // (IndexOutOfBoundsException) - jeden vadný soubor tím dřív
+            // vypnul celý zvuk místo jednoho placeholderu.
+            if(length < 0 || (long) position + 8 + length > data.length)
             {
                 // Useknutý blok dat se ještě dá přečíst, co v něm je.
                 if(tag(in, position, "data"))
@@ -119,7 +123,8 @@ public final class Wav {
                 dataLength = length;
             }
 
-            // Bloky se zarovnávají na sudý počet bajtů.
+            // Bloky se zarovnávají na sudý počet bajtů. Délka je teď ověřená
+            // proti velikosti pole, takže součet se do int vejde.
             position += 8 + length + (length & 1);
         }
 
