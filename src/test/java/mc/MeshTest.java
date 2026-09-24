@@ -111,6 +111,104 @@ public class MeshTest {
         System.out.printf("Prestavba po rozbiti bloku = 1-4 sekce = ~%.2f ms  (frame ma 16.7 ms)%n", 4 * ms / built);
         System.out.printf("Naplneni dohledu pri startu = %d sekci = ~%.0f ms%n", built, ms);
 
+        w.shutdown();
+        dirtyIsComplete();
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+
+    // ==================================================================
+    // kazda sekce, ktere se zmenou zmenil mesh, je oznacena k prestavbe
+    // ==================================================================
+
+    /** Meshe vsech sekci ve 3x3 sloupcich kolem (cx, cz), jako pole floatu. */
+    static java.util.Map<String, float[]> meshes(World w, int cxC, int czC) {
+        java.util.Map<String, float[]> out = new java.util.HashMap<>();
+        ChunkMesh mesh = new ChunkMesh();
+        for (int cx = cxC - 1; cx <= cxC + 1; cx++)
+            for (int cz = czC - 1; cz <= czC + 1; cz++) {
+                ChunkColumn col = w.column(cx, cz);
+                if (col == null) continue;
+                for (int cy = 0; cy < ChunkColumn.SECTIONS; cy++) {
+                    Chunk sec = col.section(cy);
+                    float[] data = new float[0];
+                    if (sec != null) {
+                        mesh.build(w, sec, cx << Chunk.BITS, cy << Chunk.BITS, cz << Chunk.BITS);
+                        float[] a = mesh.opaqueData(), b = mesh.transparentData();
+                        data = java.util.Arrays.copyOf(a, a.length + b.length);
+                        System.arraycopy(b, 0, data, a.length, b.length);
+                    }
+                    out.put(cx + "," + cy + "," + cz, data);
+                }
+            }
+        return out;
+    }
+
+    /** Pocet sekci, kterym zmena zmenila mesh, a kolik z nich NENI oznacenych. */
+    static int unmarkedAfter(World w, int x, int z, Runnable edit) {
+        java.util.Map<String, float[]> before = meshes(w, x >> Chunk.BITS, z >> Chunk.BITS);
+        w.dirtySections().clear();
+        edit.run();
+        w.updateBlocking(x, z);
+
+        java.util.Set<String> dirty = new java.util.HashSet<>();
+        for (World.SectionPos p : w.dirtySections()) dirty.add(p.cx() + "," + p.cy() + "," + p.cz());
+
+        int unmarked = 0;
+        for (java.util.Map.Entry<String, float[]> e : meshes(w, x >> Chunk.BITS, z >> Chunk.BITS).entrySet()) {
+            if (!java.util.Arrays.equals(before.get(e.getKey()), e.getValue()) && !dirty.contains(e.getKey())) {
+                unmarked++;
+            }
+        }
+        return unmarked;
+    }
+
+    static int top(World w, int x, int z) {
+        for (int y = World.WORLD_HEIGHT - 1; y >= 0; y--) if (w.isSolid(x, y, z)) return y;
+        return -1;
+    }
+
+    /**
+     * BUG: znaceni sekci vychazelo z "face culling kouka jen na 6 sousedu",
+     * jenze plynule osvetleni a AO berou i bunky do strany a do rohu steny.
+     * Zmena na hrane nebo rohu sekce zmenila mesh i DIAGONALNI sekce a ta
+     * zustala se starym stinem. A svetlo, ktere po otevreni stropu spadlo
+     * do sachty, sekce pod ni neoznacilo vubec. Test prestavi meshe vsech
+     * sekci kolem zmeny pred ni a po ni a trva na tom, ze kazda zmenena je
+     * v dirtySections().
+     */
+    static void dirtyIsComplete() {
+        System.out.println("\n-- kazda sekce se zmenenym meshem je oznacena --");
+
+        World w = new World();
+        w.loadRadius = 3;
+        w.unloadRadius = 5;
+        w.updateBlocking(16f, 16f);
+
+        int unmarked = 0;
+        // Roh ctyr chunku, hrana chunku, stred chunku - a zaporne souradnice.
+        int[][] spots = {{16, 16}, {15, 15}, {0, 0}, {-1, -1}, {31, 16}, {8, 8}};
+        for (int[] spot : spots) {
+            int x = spot[0], z = spot[1];
+            int y = top(w, x, z) + 1;
+            unmarked += unmarkedAfter(w, x, z, () -> w.placeBlock(x, y, z, World.PLANKS));
+            unmarked += unmarkedAfter(w, x, z, () -> w.breakBlock(x, y, z));
+            unmarked += unmarkedAfter(w, x, z, () -> w.placeBlock(x, y, z, World.TORCH));
+            unmarked += unmarkedAfter(w, x, z, () -> w.breakBlock(x, y, z));
+        }
+        check("polozeni, rozbiti a pochoden na hranach a rozich sekci oznaci vsechny zmenene meshe",
+                unmarked == 0, unmarked + " sekci se zastaralym meshem");
+
+        // Sachta 1x1: zastropit, pak strop rozbit - slunce spadne az dolu.
+        int sx = 40, sz = 40;
+        w.updateBlocking(sx, sz);
+        int sy = top(w, sx, sz);
+        for (int y = sy; y > sy - 40 && y > 4; y--) w.breakBlock(sx, y, sz);
+        w.placeBlock(sx, sy + 1, sz, World.STONE);
+        w.updateBlocking(sx, sz);
+        check("otevreni stropu sachty oznaci i sekce hluboko pod nim",
+                unmarkedAfter(w, sx, sz, () -> w.breakBlock(sx, sy + 1, sz)) == 0, "");
+
+        w.shutdown();
     }
 }

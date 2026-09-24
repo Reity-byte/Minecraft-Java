@@ -1224,6 +1224,7 @@ public class Main {
 
         worldRenderer.reset();
         worldRenderer.setBuildBudget(WorldRenderer.BUILD_BUDGET_LOADING);
+        world.lightBudget = World.LIGHT_BUDGET_LOADING;
 
         drops.clear();
 
@@ -1534,8 +1535,13 @@ public class Main {
                 loadingProgress(missingColumns, pendingMeshes));
 
         // Pár framů rezervy, aby se fronty stihly vůbec naplnit.
-        if (missingColumns == 0 && pendingMeshes == 0 && loadingFrames > 3) {
+        // ⚠️ I světlo musí doběhnout: dřív se čekalo jen na sloupce a meshe,
+        // hra začala s ~700 000 nezpracovanými uzly světla a dosvícení pak
+        // přestavovalo sekce mimo rozpočet. S rozpočtem světla pro loading
+        // (12 ms) doběhne spolu se sloupci, takže loading to neprodlouží.
+        if (missingColumns == 0 && pendingMeshes == 0 && world.pendingLight() == 0 && loadingFrames > 3) {
             worldRenderer.setBuildBudget(WorldRenderer.BUILD_BUDGET_PLAYING);
+            world.lightBudget = World.LIGHT_BUDGET;
             setState(GameState.PLAYING);
             giveCreatedBlocks();
         }

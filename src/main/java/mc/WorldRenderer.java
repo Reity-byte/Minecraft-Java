@@ -429,12 +429,30 @@ public class WorldRenderer {
         pending.clear();
     }
 
+    /**
+     * Jsou načtení všichni sousedé sloupce - i DIAGONÁLNÍ?
+     *
+     * ⚠️ Osm, ne čtyři: plynulé osvětlení a AO čtou u rohových bloků
+     * i diagonální sloupec, a příchod sloupce sousední sekce k přestavbě
+     * neznačí. Sekce postavená bez diagonálního souseda by si nechala stín
+     * spočítaný proti "vzduchu", dokud by ji neoznačilo něco jiného.
+     * Díra na okraji dohledu tím nevznikne: načítá se čtverec o poloměru
+     * loadRadius = simulace + 2 chunky, kreslí se kruh o poloměru simulace.
+     */
     private static boolean neighboursLoaded(World world, int cx, int cz)
     {
-        return world.hasColumn(cx - 1, cz)
-                && world.hasColumn(cx + 1, cz)
-                && world.hasColumn(cx, cz - 1)
-                && world.hasColumn(cx, cz + 1);
+        for(int dx = -1; dx <= 1; dx++)
+        {
+            for(int dz = -1; dz <= 1; dz++)
+            {
+                if((dx != 0 || dz != 0) && !world.hasColumn(cx + dx, cz + dz))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /** Přestaví meshe sekcí, které World označil jako změněné. */

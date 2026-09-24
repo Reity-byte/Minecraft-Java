@@ -195,6 +195,17 @@ public class World {
     public static final long LIGHT_BUDGET = 2_000_000L;   // 2 ms
 
     /**
+     * Rozpočet světla při loadingu - obrazovka nic jiného nedělá, stejně jako
+     * u meshů (WorldRenderer.BUILD_BUDGET_LOADING). Loading čeká, až světlo
+     * doběhne (pendingLight() == 0), jinak by hra začala s nedosvíceným
+     * okolím a dosvícení by pak přestavovalo sekce mimo rozpočet.
+     */
+    public static final long LIGHT_BUDGET_LOADING = 12_000_000L;   // 12 ms
+
+    /** Kolik času na frame smí dostat šíření světla. Main ho přepíná jako rozpočet meshů. */
+    public long lightBudget = LIGHT_BUDGET;
+
+    /**
      * Generátor terénu tohohle světa.
      *
      * ⚠️ Neměnný, a proto z něj smí číst i worker vlákno bez zámku. Drží
@@ -279,8 +290,33 @@ public class World {
 
             if(key != null)
             {
-                finished.add(generateColumn(chunkX(key), chunkZ(key)));
+                finished.add(generateSafely(chunkX(key), chunkZ(key)));
             }
+        }
+    }
+
+    /**
+     * generateColumn() pro worker vlákno: výjimka nesmí vlákno zabít.
+     *
+     * ⚠️ Dřív tu try/catch nebyl. Výjimka z generátoru ukončila worker
+     * vlákno, klíč zůstal navždy "in flight", pendingColumns() nikdy
+     * neklesl na nulu a loading screen visel bez jediné hlášky. Teď se
+     * chyba vypíše a místo sloupce přijde prázdný (vzduch) - v terénu je
+     * díra, ale hra běží dál a o příčině se ví. Dnešní generátor na žádném
+     * známém vstupu nepadá (viz BiomeTuningTest, meze tuningu); je to
+     * pojistka pro příští změnu generátoru.
+     */
+    ChunkColumn generateSafely(int cx, int cz)
+    {
+        try
+        {
+            return generateColumn(cx, cz);
+        }
+        catch(RuntimeException | StackOverflowError e)
+        {
+            System.err.println("Generovani sloupce " + cx + ", " + cz + " selhalo: " + e
+                    + " - misto nej je prazdny sloupec");
+            return new ChunkColumn(cx, cz);
         }
     }
 
@@ -396,7 +432,7 @@ public class World {
 
         // Blokující varianta (testy, loading) musí dosvítit celý svět,
         // jinak by se četlo nedopočítané světlo.
-        light.process(blocking ? Long.MAX_VALUE / 2 : LIGHT_BUDGET);
+        light.process(blocking ? Long.MAX_VALUE / 2 : lightBudget);
     }
 
     /** Převezme, co worker mezitím vyrobil. */
@@ -436,7 +472,8 @@ public class World {
 
                 if(!columns.containsKey(k))
                 {
-                    insert(k, generateColumn(cx, cz));
+                    // Hlavní vlákno ve hře: výjimka generátoru by shodila hru.
+                    insert(k, generateSafely(cx, cz));
 
                     // Kdyby to zrovna měl rozpracované worker, jeho výsledek
                     // pak collectFinished zahodí - klíč už v mapě bude.
@@ -963,6 +1000,14 @@ public class World {
 
         byte previous = column.get(lx, y, lz);
 
+        // Zápis stejného bloku nic nemění. Bez tohohle "rozbití" vzduchu
+        // zapsalo změnu do uložených dat, pustilo sluneční paprsek (který
+        // kvůli zápisu světla alokoval prázdnou sekci) a přestavělo meshe.
+        if(previous == blockId)
+        {
+            return false;
+        }
+
         column.set(lx, y, lz, blockId);
         light.blockChanged(x, y, z, previous, blockId);
 
@@ -976,31 +1021,33 @@ public class World {
     }
 
     /**
-     * Označí k přestavbě sekci se změněným blokem a ty sousední, kterým se
-     * změnila viditelnost stěny na hranici.
+     * Označí k přestavbě každou sekci, jejíž mesh na tenhle blok může koukat.
      *
-     * Face culling kouká jen na 6 stěnových sousedů, ne na diagonály, takže
-     * blok na rohu sekce dotkne nejvýš 3 sousedních sekcí - ne 26.
+     * ⚠️ NE JEN 6 STĚNOVÝCH SOUSEDŮ, ALE CELÉ OKOLÍ 3x3x3. Dřív tu platilo
+     * "face culling kouká jen na 6 sousedů", jenže plynulé osvětlení a AO
+     * berou pro každý roh stěny i buňky do strany a do rohu - stěna bloku
+     * tedy závisí na všech 26 sousedech. Blok na hraně nebo rohu sekce
+     * mění mesh i DIAGONÁLNÍ sekce a ta zůstávala se starým stínem (po
+     * položení chyběl AO, po rozbití zůstal "stín duch"), dokud ji neoznačilo
+     * něco jiného. Uvnitř sekce je to pořád jedna sekce; na rohu nejvýš 8.
      */
     private void markDirtyAround(int x, int y, int z)
     {
-        int cx = toChunk(x);
-        int cz = toChunk(z);
-        int cy = y >> Chunk.BITS;
+        int cx0 = toChunk(x - 1), cx1 = toChunk(x + 1);
+        int cz0 = toChunk(z - 1), cz1 = toChunk(z + 1);
+        int cy0 = Math.max(0, (y - 1) >> Chunk.BITS);
+        int cy1 = Math.min(ChunkColumn.SECTIONS - 1, (y + 1) >> Chunk.BITS);
 
-        int lx = toLocal(x);
-        int lz = toLocal(z);
-        int ly = y & Chunk.MASK;
-
-        markDirty(cx, cy, cz);
-
-        if(lx == 0)          markDirty(cx - 1, cy, cz);
-        if(lx == Chunk.MASK) markDirty(cx + 1, cy, cz);
-        if(lz == 0)          markDirty(cx, cy, cz - 1);
-        if(lz == Chunk.MASK) markDirty(cx, cy, cz + 1);
-
-        if(ly == 0 && cy > 0)                            markDirty(cx, cy - 1, cz);
-        if(ly == Chunk.MASK && cy < ChunkColumn.SECTIONS - 1) markDirty(cx, cy + 1, cz);
+        for(int cx = cx0; cx <= cx1; cx++)
+        {
+            for(int cz = cz0; cz <= cz1; cz++)
+            {
+                for(int cy = cy0; cy <= cy1; cy++)
+                {
+                    markDirty(cx, cy, cz);
+                }
+            }
+        }
     }
 
     private void markDirty(int cx, int cy, int cz)
