@@ -45,6 +45,7 @@ public class MainStateTest {
         dayCycleValues();
         timeSurvivesSaveAndLoad();
         loadedWorldKeepsItsOwnState();
+        worldInPlayDecidesSaving();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -326,5 +327,58 @@ public class MainStateTest {
         check("crafting mrizka je i u nacteneho sveta prazdna", craftingEmpty, "");
 
         shutdown(main);
+    }
+
+    // ==================================================================
+    // Kdy se svet uklada pri zavreni okna (a kresli za Options a labem)
+    // ==================================================================
+
+    /**
+     * BUG: zavreni okna s otevrenym inventarem (CONTAINER) nebo v Options
+     * otevrenych z pauzy svet neulozilo. Podminka byla vlastni vycet stavu
+     * v Main.run(), inventar v nem chybel uplne a Options se ptaly na navrat
+     * do PLAYING - jenze se otviraji z PAUZY, takze to nikdy neplatilo.
+     *
+     * Rozhodnuti je ted jedina cista funkce Main.worldInPlay() se switchem
+     * bez default vetve (novy GameState neprojde prekladem bez rozhodnuti).
+     * Tenhle test prochazi VSECHNY stavy, takze zmena odpovedi u kterehokoliv
+     * z nich ho shodi.
+     */
+    static void worldInPlayDecidesSaving() {
+        System.out.println("\n-- Ukladani pri zavreni okna: ve kterych stavech se hraje svet --");
+
+        GameState menu = GameState.MAIN_MENU;
+
+        check("PLAYING se uklada", Main.worldInPlay(GameState.PLAYING, menu, menu), "");
+        check("PAUSED se uklada", Main.worldInPlay(GameState.PAUSED, menu, menu), "");
+        check("CONTAINER (inventar, crafting table) se uklada",
+                Main.worldInPlay(GameState.CONTAINER, menu, menu), "");
+
+        check("Options otevrene z PAUZY se ukladaji",
+                Main.worldInPlay(GameState.OPTIONS, GameState.PAUSED, menu), "");
+        check("Options otevrene z hlavniho menu se neukladaji",
+                !Main.worldInPlay(GameState.OPTIONS, menu, menu), "");
+
+        check("lab otevreny ze hry se uklada",
+                Main.worldInPlay(GameState.TEXTURE_LAB, menu, GameState.PLAYING), "");
+        check("lab otevreny z hlavniho menu se neuklada",
+                !Main.worldInPlay(GameState.TEXTURE_LAB, menu, menu), "");
+
+        // Vsechny ostatni stavy: zadny svet se v nich nehraje.
+        java.util.Set<GameState> inPlay = java.util.EnumSet.of(
+                GameState.PLAYING, GameState.PAUSED, GameState.CONTAINER);
+        java.util.List<GameState> wrong = new java.util.ArrayList<>();
+
+        for (GameState state : GameState.values()) {
+            if (state == GameState.OPTIONS || state == GameState.TEXTURE_LAB) {
+                continue;
+            }
+            if (Main.worldInPlay(state, menu, menu) != inPlay.contains(state)) {
+                wrong.add(state);
+            }
+        }
+
+        check("ostatni stavy (menu, loading, seznam a zakladani sveta) se neukladaji",
+                wrong.isEmpty(), wrong.toString());
     }
 }

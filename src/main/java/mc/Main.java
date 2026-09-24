@@ -225,22 +225,88 @@ public class Main {
 
     public void run() {
         init();
-        loop();
 
-        // GL objekty se musí uvolnit, dokud je kontext ještě aktivní
-        // Zavření okna uprostřed hry je běžný způsob, jak skončit - svět
-        // se proto uloží i tady, ne jen při odchodu do menu.
-        if (state == GameState.PLAYING || state == GameState.PAUSED
-                || (state == GameState.OPTIONS && optionsReturnState == GameState.PLAYING)
-                || (state == GameState.TEXTURE_LAB && labReturnState == GameState.PLAYING)) {
-            // Zavřít okno uprostřed hry je běžný způsob, jak skončit - svět
-            // se proto uloží i s náhledem, stejně jako při odchodu do menu.
-            captureThumbnail();
+        // ⚠️ finally, ne kód za smyčkou: výjimka kdekoliv ve hře (i z callbacku
+        // GLFW přes glfwPollEvents) by jinak přeskočila uložení a hráč by
+        // přišel o celou session. Výjimka se po uložení stejně propaguje dál.
+        try {
+            loop();
+        } finally {
+            try {
+                saveOnExit();
+            } finally {
+                releaseGl();
+            }
+        }
+    }
+
+    /**
+     * Zavření okna uprostřed hry je běžný způsob, jak skončit - svět se proto
+     * uloží i tady, ne jen při odchodu do menu.
+     *
+     * ⚠️ Otevřená obrazovka se nejdřív ZAVŘE STEJNĚ JAKO BĚŽNĚ: inventář vrátí
+     * kurzor a mřížku do batohu, lab předá hromádku založeného bloku, Options
+     * se uloží. Teprve pak se rozhoduje o uložení světa, a to jedinou funkcí
+     * worldInPlay() - dřív tu byl vlastní výčet stavů, který zapomněl na
+     * inventář i na Options otevřené z pauzy.
+     */
+    private void saveOnExit() {
+        try {
+            closeScreenForExit();
+        } catch (RuntimeException e) {
+            System.err.println("Zavreni obrazovky pri ukonceni selhalo: " + e);
+        }
+
+        if (worldInPlay(state)) {
+            // Svět napřed, náhled až po něm: náhled je postradatelný, svět ne.
             saveWorld();
+
+            try {
+                captureThumbnail();
+            } catch (RuntimeException e) {
+                System.err.println("Nahled sveta pri ukonceni se nepovedl: " + e);
+            }
         }
 
         saveOptions();
+    }
 
+    /** Zavře obrazovku nad světem tak, jako by ji zavřel hráč. */
+    private void closeScreenForExit() {
+        switch (state) {
+            case CONTAINER -> closeContainer();
+            case TEXTURE_LAB -> closeTextureLab();
+            case OPTIONS -> closeOptions();
+            default -> { }
+        }
+    }
+
+    /**
+     * Hraje se v tomhle stavu svět (i když stojí za obrazovkou)? Podle toho
+     * se ukládá při zavření okna a kreslí svět za Options a labem.
+     *
+     * ⚠️ Switch je schválně BEZ default větve: nový GameState neprojde
+     * překladem, dokud se tady o něm nerozhodne. Přesně tohle se stalo
+     * inventáři (CONTAINER) - v ručním výčtu chyběl a zavření okna s otevřeným
+     * inventářem svět neuložilo. Options se otevírají z PAUZY, ne ze hry,
+     * takže dřívější test "návrat do PLAYING" nikdy neplatil.
+     */
+    static boolean worldInPlay(GameState state, GameState optionsReturn, GameState labReturn) {
+        return switch (state) {
+            case PLAYING, PAUSED, CONTAINER -> true;
+            case OPTIONS -> worldInPlay(optionsReturn, GameState.MAIN_MENU, GameState.MAIN_MENU);
+            case TEXTURE_LAB -> worldInPlay(labReturn, GameState.MAIN_MENU, GameState.MAIN_MENU);
+            case MAIN_MENU, CREATING_WORLD, SELECT_WORLD, CREATE_WORLD -> false;
+        };
+    }
+
+    /** worldInPlay() pro aktuální návratové stavy Options a labu. */
+    private boolean worldInPlay(GameState state) {
+        return worldInPlay(state, optionsReturnState, labReturnState);
+    }
+
+    /** GL objekty se musí uvolnit, dokud je kontext ještě aktivní. */
+    private void releaseGl() {
         if (lab != null) {
             lab.delete();
         }
@@ -921,7 +987,11 @@ public class Main {
                 case OPTIONS -> {
                     // Z pauzy se za nastavením dál kreslí (a generuje) svět -
                     // posunutí render distance je tak vidět rovnou při tažení.
-                    if (optionsReturnState == GameState.PLAYING) {
+                    // ⚠️ Options se otevírají z PAUZY, ne ze hry, proto
+                    // worldInPlay() a ne srovnání s PLAYING.
+                    boolean overWorld = worldInPlay(optionsReturnState);
+
+                    if (overWorld) {
                         world.update(player.x, player.z);
                         renderWorld();
                     } else {
@@ -929,8 +999,7 @@ public class Main {
                         background.draw(width, height, Palette.BACKGROUND_TINT);
                     }
 
-                    optionsScreen.render(width, height, mouseX, mouseY,
-                            optionsReturnState == GameState.PLAYING);
+                    optionsScreen.render(width, height, mouseX, mouseY, overWorld);
 
                     if (optionsScreen.takeChanged()) {
                         applyOptions();
@@ -949,7 +1018,7 @@ public class Main {
                 case TEXTURE_LAB -> {
                     // Otevřený ze hry: svět za labem se kreslí dál, i s upraveným
                     // atlasem. Z menu: pozadí menu.
-                    if (labReturnState == GameState.PLAYING) {
+                    if (worldInPlay(labReturnState)) {
                         world.update(player.x, player.z);
                         renderWorld();
                     } else {
@@ -1236,20 +1305,33 @@ public class Main {
             return;
         }
 
-        WorldStorage.save(currentWorld.worldFile(), new WorldStorage.Save(
+        boolean saved = WorldStorage.save(currentWorld.worldFile(), new WorldStorage.Save(
                 player.x, player.y, player.z,
                 camera.yaw, camera.pitch,
                 player.flying, selectedSlot,
                 world.changes(), inventorySnapshot(), day.time()));
 
-        // Poslední hraní se posune až po uložení - seznam světů se podle něj řadí.
+        // ⚠️ Poslední hraní se posune JEN po úspěšném uložení - seznam světů
+        // se podle něj řadí a nový čas by tvrdil, že se svět uložil.
+        if (!saved) {
+            System.err.println("Svet " + currentWorld.folder() + " se NEULOZIL - zmeny od posledniho ulozeni chybi");
+            return;
+        }
+
         currentWorld = WorldSaves.touch(currentWorld, System.currentTimeMillis());
     }
 
     /** Uloží svět i s náhledem a vrátí se do hlavního menu. */
     private void quitToTitle() {
-        captureThumbnail();
+        // Svět napřed, náhled až po něm - náhled je postradatelný, svět ne.
         saveWorld();
+
+        try {
+            captureThumbnail();
+        } catch (RuntimeException e) {
+            System.err.println("Nahled sveta se nepovedl: " + e);
+        }
+
         currentWorld = null;
 
         // V menu se na mód nikdo neptá, ale ať tam po creative světě nezůstane

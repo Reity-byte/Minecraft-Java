@@ -6,6 +6,16 @@ Audit je **jen report**. V herním kódu, v testech ani v `ARCHITECTURE.md` se n
 neměnilo. Popis toho, co existuje a proč, je v `ARCHITECTURE.md`. Tento soubor
 obsahuje jen to, co je špatně nebo nekonzistentní.
 
+## Stav oprav
+
+Opravy jdou podle doporučeného pořadí na konci souboru, každý bod jako
+samostatný commit. Nálezy níž zůstávají v původním znění (popisují stav
+v `75b3270`), tady se jen odškrtávají.
+
+| bod | nálezy | stav |
+|---|---|---|
+| 1. Ukládání při ukončení | MAIN-1, MAIN-6, MAIN-8, MAIN-9 | ✅ opraveno: `Main.worldInPlay()` (switch bez default) + test v `MainStateTest`; při zavření okna se obrazovka nejdřív zavře jako běžně, pak se uloží svět a až po něm náhled, vše ve `finally`; `lastPlayed` jen po úspěšném uložení. Ověřeno i naživo (Xvfb): zavření okna z inventáře i z Options otevřených z pauzy svět uloží, za Options z pauzy je vidět svět. |
+
 ---
 
 ## 0. Build a testy (fakta)
