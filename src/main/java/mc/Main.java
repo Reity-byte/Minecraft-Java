@@ -137,6 +137,14 @@ public class Main {
      * nahraná textura, a texture lab ho upravuje na místě a přenahrává.
      */
     private int[] skinPixels;
+
+    /**
+     * Editory labu nad atlasPixels a skinPixels. Žijí po celý běh hry, ne
+     * s labem: neuložené úpravy zůstávají ve hře i po zavření labu, takže
+     * s nimi musí zůstat i příznak "(unsaved)" a undo. Zakládají se v init().
+     */
+    private AtlasEditor atlasEditor;
+    private SkinEditor skinEditor;
     private boolean skinFromFile;
 
     /** Obrazovky mimo lab: nastavení, výběr a založení světa. */
@@ -852,6 +860,10 @@ public class Main {
         System.out.println("Kuze postavy: " + (skinFromFile
                 ? Textures.SKIN_FILE.toAbsolutePath() : "vestavena (" + Textures.SKIN_FILE + " neni)"));
         playerSkin = Textures.playerSkin(skinPixels);
+
+        atlasEditor = new AtlasEditor(atlasPixels);
+        skinEditor = new SkinEditor(skinPixels);
+
         worldRenderer = new WorldRenderer(blockAtlas, playerSkin);
         sky = new SkyRenderer();
         heldItem = new HeldItemRenderer(blockAtlas, playerSkin);
@@ -1259,8 +1271,8 @@ public class Main {
      * se hra neukončí.
      */
     private void openTextureLab() {
-        lab = new TextureLab(atlasPixels, blockAtlas, atlasFromFile,
-                skinPixels, playerSkin, skinFromFile, shapes, text);
+        lab = new TextureLab(atlasEditor, blockAtlas, atlasFromFile,
+                skinEditor, playerSkin, skinFromFile, shapes, text);
         labReturnState = state;
         setState(GameState.TEXTURE_LAB);
     }

@@ -81,6 +81,29 @@ public final class BiomeTunerLab implements LabMode {
      */
     private TerrainGenerator generator = new TerrainGenerator(World.DEFAULT_SEED, draft);
 
+    // ------------------------------------------------------------------
+    // hlášky
+    // ------------------------------------------------------------------
+
+    /** Poslední hláška - aby šla logika módu otestovat bez labu (a bez GL). */
+    private String lastMessage = "";
+
+    /** Hláška do stavového řádku labu. Bez labu (headless test) si ji jen zapamatuje. */
+    private void say(String message)
+    {
+        lastMessage = message;
+
+        if(lab != null)
+        {
+            lab.say(message);
+        }
+    }
+
+    String lastMessage()
+    {
+        return lastMessage;
+    }
+
     public BiomeTunerLab(TextureLab lab, Renderer2D shapes, TextRenderer text)
     {
         this.lab = lab;
@@ -133,14 +156,23 @@ public final class BiomeTunerLab implements LabMode {
     @Override
     public void onEnter()
     {
-        draft = BiomeTuning.active();
-        generator = new TerrainGenerator(World.DEFAULT_SEED, draft);
-
+        // Náhled (GL) se zakládá napřed, edit() ho pak rovnou postaví.
         if(preview == null)
         {
             preview = new TreePreview();
         }
 
+        edit(BiomeTuning.active());
+    }
+
+    /**
+     * Začne upravovat tenhle tuning. Bez GL: náhled se jen obnoví, když už
+     * existuje - takže logiku módu (step, select, save) jde testovat headless.
+     */
+    void edit(BiomeTuning tuning)
+    {
+        draft = tuning;
+        generator = new TerrainGenerator(World.DEFAULT_SEED, draft);
         refreshPreview();
     }
 
@@ -176,7 +208,7 @@ public final class BiomeTunerLab implements LabMode {
 
         selected = biome;
         refreshPreview();
-        lab.say(name(biome) + ": " + describeTrees(draft.tune(biome), biome));
+        say(name(biome) + ": " + describeTrees(draft.tune(biome), biome));
     }
 
     /**
@@ -256,7 +288,7 @@ public final class BiomeTunerLab implements LabMode {
 
         preview.reroll();
         refreshPreview();
-        lab.say("Another random tree from the same range: "
+        say("Another random tree from the same range: "
                 + describeShown());
     }
 
@@ -272,12 +304,12 @@ public final class BiomeTunerLab implements LabMode {
     {
         if(!draft.save(BiomeTuning.FILE))
         {
-            lab.say("Could not write " + BiomeTuning.FILE.toString().replace('\\', '/'));
+            say("Could not write " + BiomeTuning.FILE.toString().replace('\\', '/'));
             return;
         }
 
         BiomeTuning.activate(draft);
-        lab.say("Saved - applies to the next world you create or load, not this one");
+        say("Saved - applies to the next world you create or load, not this one");
     }
 
     void reset()
@@ -285,7 +317,7 @@ public final class BiomeTunerLab implements LabMode {
         draft = BiomeTuning.defaults();
         generator = new TerrainGenerator(World.DEFAULT_SEED, draft);
         refreshPreview();
-        lab.say("Back to the built-in numbers - Save to keep it");
+        say("Back to the built-in numbers - Save to keep it");
     }
 
     // ------------------------------------------------------------------

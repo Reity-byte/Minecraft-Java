@@ -192,12 +192,17 @@ public class TextureLab {
      * obdélník nahraje do téže textury, takže náhled, hotbar i svět
      * (a postava ve třetí osobě) změnu vidí v tom samém framu.
      */
-    public TextureLab(int[] atlasPixels, Texture atlas, boolean fromFile,
-                      int[] skinPixels, Texture skinTexture, boolean skinFromFile,
+    public TextureLab(AtlasEditor editor, Texture atlas, boolean fromFile,
+                      SkinEditor skin, Texture skinTexture, boolean skinFromFile,
                       Renderer2D shapes, TextRenderer text)
     {
-        this.editor = new AtlasEditor(atlasPixels);
-        this.skin = new SkinEditor(skinPixels);
+        // ⚠️ Editory dostává lab ZVENKU a Main je drží po celý běh hry. Lab
+        // vzniká při každém otevření znovu, ale neuložené pixely zůstávají
+        // v poli hry i po jeho zavření - kdyby si lab editory stavěl sám,
+        // začínaly by pokaždé s "(unsaved)" = false a prázdným undo, a po
+        // F6 -> F6 by nic neříkalo, že je co ukládat.
+        this.editor = editor;
+        this.skin = skin;
         this.atlas = atlas;
         this.skinTexture = skinTexture;
         this.fromFile = fromFile;
@@ -420,7 +425,16 @@ public class TextureLab {
      */
     public boolean key(int key, int mods)
     {
-        if(current().key(key, mods))
+        return closesLab(current(), key, mods);
+    }
+
+    /**
+     * Celé rozhodnutí hubu jako statická funkce, aby šla konvence
+     * `LabMode.key()` otestovat se skutečnými módy bez GL (LabModesTest).
+     */
+    static boolean closesLab(LabMode mode, int key, int mods)
+    {
+        if(mode.key(key, mods))
         {
             return false;
         }
@@ -766,8 +780,14 @@ public class TextureLab {
     private void applyHsv()
     {
         // Z průhledné (gumy) přechod na HSV znamená "chci barvu" - plně krycí.
-        int alpha = editor.color() >>> 24;
-        editor.setColor(AtlasEditor.hsv(hue, saturation, value, alpha == 0 ? 0xFF : alpha));
+        //
+        // ⚠️ OBA EDITORY, jako setColor(): barva je společná. Dřív se tu
+        // nastavoval jen atlas, takže v módu Skin posuvníky hýbaly jen
+        // značkou a štětec, vzorek i hex zůstaly na staré barvě.
+        int alpha = active().color() >>> 24;
+        int argb = AtlasEditor.hsv(hue, saturation, value, alpha == 0 ? 0xFF : alpha);
+        editor.setColor(argb);
+        skin.setColor(argb);
     }
 
     void say(String message)
@@ -866,14 +886,25 @@ public class TextureLab {
             return;
         }
 
+        // ⚠️ Import jen tam, kde je vidět: v Recipes, Keys ani Biomes plátno
+        // není, změněný obdélník se na grafiku nenahrával a příští Save by
+        // zapsal obrázek, který uživatel nikdy neviděl (a do atlasu, nebo do
+        // kůže podle toho, který pixelový mód byl otevřený naposledy).
+        if(!(current() instanceof PixelMode))
+        {
+            say("Import works in Blocks and Skin - switch there and press Import PNG");
+            return;
+        }
+
         importImage();
     }
 
     private void updatePixel(float dt)
     {
+        // Hláška se odpočítává jednou, v update() hubu - dřív tu byl ještě
+        // druhý odpočet a hlášky v Blocks a Skin mizely po 2,5 s místo 5 s.
         preview.update(dt);
         skinPreview.update(dt);
-        statusLeft -= dt;
     }
 
     // ------------------------------------------------------------------
@@ -1110,7 +1141,7 @@ public class TextureLab {
 
         if(layout.hit(TextureLabLayout.HEX, mouseX, mouseY))
         {
-            hexInput = new StringBuilder(AtlasEditor.toHex(editor.color()).substring(1));
+            hexInput = new StringBuilder(AtlasEditor.toHex(active().color()).substring(1));
             return false;
         }
 
@@ -2318,6 +2349,11 @@ public class TextureLab {
         // Zavření labu s rozepsaným blokem ho zahodí - dočasný registr
         // s návrhem nesmí zůstat aktivní ve hře.
         cancelBlock();
+
+        // Tah dokončený ve stejném framu jako zavření (malování a hned F6)
+        // by se jinak na grafiku dostal až při příštím otevření labu.
+        upload(editor, atlas);
+        upload(skin, skinTexture);
 
         images.delete();
         checker.delete();

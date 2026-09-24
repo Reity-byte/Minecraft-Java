@@ -129,6 +129,10 @@ public class AllTests {
         BiomeTuningTest.main(args);
         failures += BiomeTuningTest.failures;
 
+        System.out.println(NEWLINE + "========== LabModesTest ==========");
+        LabModesTest.main(args);
+        failures += LabModesTest.failures;
+
         System.out.println(NEWLINE + "========== LabBlockTest ==========");
         LabBlockTest.main(args);
         failures += LabBlockTest.failures;
