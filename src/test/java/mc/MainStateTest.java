@@ -46,6 +46,7 @@ public class MainStateTest {
         timeSurvivesSaveAndLoad();
         loadedWorldKeepsItsOwnState();
         worldInPlayDecidesSaving();
+        craftingGridsAreSaved();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -319,9 +320,10 @@ public class MainStateTest {
         check("a ve svete A je porad noc", main.day.isNight(),
                 String.format("%.1f h", main.day.hours()));
 
-        // Crafting mrizka se uklada jen pres reset - v ulozenem souboru neni,
-        // takze nacteny svet ji ma prazdnou. To je dnesni chovani, jen ted
-        // po nacteni ciziho sveta nezustanou suroviny z toho predchoziho.
+        // Soubor bez mrizek (tady rucne poskladany snapshot jen s inventarem,
+        // stejne jako ze starsi verze hry) dava prazdnou mrizku - a hlavne
+        // se v ni po nacteni ciziho sveta neobjevi suroviny z predchoziho.
+        // Ulozeni mrizek samotne hlida craftingGridsAreSaved().
         boolean craftingEmpty = true;
         for (int i = 0; i < 4; i++) if (!main.craftingSmall.get(i).isEmpty()) craftingEmpty = false;
         check("crafting mrizka je i u nacteneho sveta prazdna", craftingEmpty, "");
@@ -380,5 +382,50 @@ public class MainStateTest {
 
         check("ostatni stavy (menu, loading, seznam a zakladani sveta) se neukladaji",
                 wrong.isEmpty(), wrong.toString());
+    }
+
+    // ==================================================================
+    // crafting mrizky se ukladaji se svetem
+    // ==================================================================
+
+    /**
+     * BUG: co se pri zavreni obrazovky z mrizky do plneho inventare nevejde,
+     * v mrizce zustane ("trvaly kontejner") - ale world.dat mrizky neukladal,
+     * takze ulozeni a nacteni sveta ty predmety smazalo. Mrizky jsou ted
+     * v ulozenem poli ZA inventarem; starsi build je jen preskoci.
+     */
+    static void craftingGridsAreSaved() throws IOException {
+        System.out.println("\n-- crafting mrizky preziji ulozeni --");
+
+        Main main = headlessMain();
+        main.inventory.set(3, ItemStack.of(World.STONE, 9));
+        main.craftingSmall.set(1, ItemStack.of(World.IRON_ORE, 5));
+        main.craftingLarge.set(8, ItemStack.of(World.PLANKS, 2));
+
+        ItemStack[] snapshot = main.inventorySnapshot();
+        check("ulozene pole ma inventar a za nim obe mrizky",
+                snapshot.length == Inventory.SIZE + 4 + 9, "" + snapshot.length);
+        check("prvnich 36 polozek je presne inventar (starsi build cte jen je)",
+                snapshot[3].block() == World.STONE && snapshot[3].count() == 9
+                        && snapshot[Inventory.SIZE + 1].block() == World.IRON_ORE, "");
+
+        Path dir = Files.createTempDirectory("mc-grids");
+        Path file = dir.resolve("world.dat");
+        check("ulozeni projde", WorldStorage.save(file, new WorldStorage.Save(
+                1, 70, 1, 0, 0, false, 0, main.world.changes(), snapshot, 100f)), "");
+
+        main.resetPlayerState();
+        check("reset mrizky vyprazdni", main.craftingSmall.isEmpty() && main.craftingLarge.isEmpty(), "");
+
+        main.restore(WorldStorage.load(file));
+        check("mala mrizka se po nacteni vrati",
+                main.craftingSmall.get(1).block() == World.IRON_ORE && main.craftingSmall.get(1).count() == 5,
+                main.craftingSmall.get(1).toString());
+        check("velka mrizka se po nacteni vrati",
+                main.craftingLarge.get(8).block() == World.PLANKS && main.craftingLarge.get(8).count() == 2,
+                main.craftingLarge.get(8).toString());
+        check("inventar taky", main.inventory.get(3).count() == 9, main.inventory.get(3).toString());
+
+        shutdown(main);
     }
 }

@@ -75,6 +75,9 @@ public final class WorldStorage {
      * dayTime je poloha v denním cyklu v sekundách (viz DayCycle). Soubory
      * z verze 1 a 2 ji nemají a dostanou DayCycle.START_TIME, takže se
      * otevřou dopoledne jako nový svět.
+     *
+     * inventory je libovolně dlouhé pole slotů; Main do něj za 36 slotů
+     * inventáře ukládá i obě crafting mřížky (Main.inventorySnapshot()).
      */
     public record Save(float x, float y, float z,
                        float yaw, float pitch,
@@ -83,6 +86,12 @@ public final class WorldStorage {
                        Map<Long, Map<Integer, Byte>> changes,
                        ItemStack[] inventory,
                        float dayTime) {}
+
+    /** Kam se hráč postaví, když uložená poloha nedává smysl (NaN, nekonečno, mimo svět). */
+    static final float FALLBACK_XZ = 8.5f;
+
+    /** Poloha y dál než tohle od nuly je nesmysl - svět má 128 bloků. */
+    static final float MAX_SANE_Y = 4096f;
 
     private WorldStorage() {}
 
@@ -204,6 +213,28 @@ public final class WorldStorage {
             float z = in.readFloat();
             float yaw = in.readFloat();
             float pitch = in.readFloat();
+
+            // ⚠️ Hodnoty ze souboru se ořezávají, stejně jako denní doba
+            // (DayCycle.setTime): NaN v poloze nebo v kameře by dal černý
+            // obraz bez jediné hlášky a první uložení by ho zapsalo zpátky.
+            // Svět se kvůli tomu NEZAHAZUJE - hráč jen přistane jinde.
+            if(!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z)
+                    || Math.abs(y) > MAX_SANE_Y)
+            {
+                report.accept("Ulozeny svet ma nesmyslnou polohu hrace (" + x + ", " + y + ", " + z
+                        + ") - hrac zacne nad " + FALLBACK_XZ + ", " + FALLBACK_XZ);
+                x = FALLBACK_XZ;
+                z = FALLBACK_XZ;
+                y = World.WORLD_HEIGHT;
+            }
+
+            if(!Float.isFinite(yaw))
+            {
+                yaw = 0f;
+            }
+
+            pitch = Float.isFinite(pitch) ? Math.max(-Camera.MAX_PITCH, Math.min(Camera.MAX_PITCH, pitch)) : 0f;
+
             boolean flying = in.readBoolean();
             int selectedSlot = in.readInt();
 
@@ -251,12 +282,28 @@ public final class WorldStorage {
                 }
 
                 inventory = new ItemStack[slots];
+                int clamped = 0;
 
                 for(int i = 0; i < slots; i++)
                 {
                     byte block = in.readByte();
                     int count = in.readInt();
+
+                    // Hromádka přes MAX_COUNT by rozbila slévání (záporné
+                    // místo ve slotu) - ořízne se a ohlásí, soubor se nezahodí.
+                    if(count > ItemStack.MAX_COUNT)
+                    {
+                        count = ItemStack.MAX_COUNT;
+                        clamped++;
+                    }
+
                     inventory[i] = ItemStack.of(block, count);
+                }
+
+                if(clamped > 0)
+                {
+                    report.accept("Ulozeny svet ma " + clamped + " hromadek pres "
+                            + ItemStack.MAX_COUNT + " kusu - oriznuty na " + ItemStack.MAX_COUNT);
                 }
             }
 

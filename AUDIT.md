@@ -16,6 +16,7 @@ v `75b3270`), tady se jen odškrtávají.
 |---|---|---|
 | 1. Ukládání při ukončení | MAIN-1, MAIN-6, MAIN-8, MAIN-9 | ✅ opraveno: `Main.worldInPlay()` (switch bez default) + test v `MainStateTest`; při zavření okna se obrazovka nejdřív zavře jako běžně, pak se uloží svět a až po něm náhled, vše ve `finally`; `lastPlayed` jen po úspěšném uložení. Ověřeno i naživo (Xvfb): zavření okna z inventáře i z Options otevřených z pauzy svět uloží, za Options z pauzy je vidět svět. |
 | 2. Bezpečný zápis všude | PER-1, PER-2, PER-3, PER-8 | ✅ opraveno: `world.dat`, `atlas.png` a `skin.png` jdou přes `SafeFiles` (kódování do paměti → `.tmp` → `force` → přejmenování, nečitelný soubor do `.bak`); existující záloha se nikdy nepřepíše (stejný obsah se nezálohuje, jiný jde do `.bak.1`…`.bak.9`, když jsou plné, soubor se nepřepíše); `BlockRegistry`/`RecipeBook` místo vlastních kopií volají `SafeFiles`; `WorldSaves.touch()` bere migraci ze zálohy. Nový `SafeFilesTest` (vč. MCW1 a selhaného zápisu), regrese v `WorldSavesTest`; ověřeno, že proti starému kódu testy selžou. |
+| 3. Duplikace a ztráta předmětů | INV-1, INV-2, INV-4, PER-6 | ✅ opraveno: `takeResult` přidává výsledek jen celý (`Container.room()`), `insert()` z přerostlé hromádky neubírá; obě crafting mřížky se ukládají za inventářem (formát `world.dat` beze změny, starší build je přeskočí); `world.dat` ořízne NaN/nekonečnou polohu, pitch na `Camera.MAX_PITCH` a hromádky nad 64 (svět se nezahodí). Testy výstupního slotu s plnou rukou, prohození, zbytku v mřížce, `room()`, ukládání mřížek a ořezu hodnot. |
 
 ---
 

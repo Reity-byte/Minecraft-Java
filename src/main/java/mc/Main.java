@@ -1111,9 +1111,12 @@ public class Main {
 
         selectedSlot = Math.floorMod(save.selectedSlot(), Inventory.HOTBAR_SIZE);
         inventory.clear();
-        for (int i = 0; i < Math.min(Inventory.SIZE, save.inventory().length); i++) {
-            inventory.set(i, save.inventory()[i]);
-        }
+        restoreSlots(save.inventory(), 0, inventory);
+
+        // Obě crafting mřížky leží za inventářem - viz inventorySnapshot().
+        // Soubor ze starší verze je nemá, takže zůstanou prázdné z resetu.
+        restoreSlots(save.inventory(), Inventory.SIZE, craftingSmall);
+        restoreSlots(save.inventory(), Inventory.SIZE + craftingSmall.size(), craftingLarge);
 
         // Denní doba je uložená se světem (formát MCW3). Soubor ze starší
         // verze ji nemá a WorldStorage za něj dosadí DayCycle.START_TIME,
@@ -1826,12 +1829,39 @@ public class Main {
         };
     }
 
-    private ItemStack[] inventorySnapshot() {
-        ItemStack[] stacks = new ItemStack[Inventory.SIZE];
-        for (int i = 0; i < Inventory.SIZE; i++) {
-            stacks[i] = inventory.get(i);
+    /**
+     * Co se ukládá jako inventář: nejdřív 36 slotů inventáře, za nimi obsah
+     * malé (4) a velké (9) crafting mřížky.
+     *
+     * ⚠️ MŘÍŽKY SE UKLÁDAJÍ TAKY. Co se při zavření obrazovky z mřížky do
+     * plného inventáře nevejde, v mřížce zůstane ("trvalý kontejner") - a bez
+     * uložení by to uložením a načtením světa zmizelo. Jsou až ZA inventářem,
+     * takže se formát world.dat nemění: délku pole soubor nese a restore()
+     * i starší build berou jen tolik slotů, kolik znají - starší build tedy
+     * mřížky jen přeskočí, jako dosud.
+     */
+    ItemStack[] inventorySnapshot() {
+        ItemStack[] stacks = new ItemStack[Inventory.SIZE + craftingSmall.size() + craftingLarge.size()];
+        int i = 0;
+
+        for (int slot = 0; slot < Inventory.SIZE; slot++) {
+            stacks[i++] = inventory.get(slot);
         }
+        for (int slot = 0; slot < craftingSmall.size(); slot++) {
+            stacks[i++] = craftingSmall.get(slot);
+        }
+        for (int slot = 0; slot < craftingLarge.size(); slot++) {
+            stacks[i++] = craftingLarge.get(slot);
+        }
+
         return stacks;
+    }
+
+    /** Vrátí do kontejneru sloty uložené od indexu from - když je soubor má. */
+    private static void restoreSlots(ItemStack[] saved, int from, Container into) {
+        for (int slot = 0; slot < into.size() && from + slot < saved.length; slot++) {
+            into.set(slot, saved[from + slot]);
+        }
     }
 
     private int usedSlots() {

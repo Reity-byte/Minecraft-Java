@@ -732,12 +732,18 @@ public class ContainerScreen {
         else
         {
             // Kurzor je plný něčím jiným - výsledek putuje rovnou do batohu.
-            ItemStack leftover = playerInventory.add(result);
-
-            if(!leftover.isEmpty())
+            //
+            // ⚠️ VŠECHNO, NEBO NIC. add() není atomické: nejdřív dolije
+            // rozdělané hromádky a vrátí jen zbytek. Dřív se tu add() zavolalo
+            // rovnou a při nenulovém zbytku se skončilo BEZ spotřeby surovin -
+            // jenže dolitá část už v inventáři zůstala, takže šel výsledek brát
+            // zadarmo pořád dokola. Proto se nejdřív zjistí, jestli se vejde celý.
+            if(playerInventory.room(result) < result.count())
             {
                 return;   // není kam, takže se nic nespotřebuje
             }
+
+            playerInventory.add(result);
         }
 
         Recipes.consume(craftingGrid);

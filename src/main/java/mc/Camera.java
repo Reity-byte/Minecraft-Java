@@ -47,12 +47,19 @@ public class Camera {
     public float mouseSensitivity = DEFAULT_SENSITIVITY;
     public boolean invertMouseY = false;
 
+    /**
+     * Nejvíc nahoru / dolů ve stupních. Přesně 90 by dalo pohled rovnoběžný
+     * s vektorem "nahoru" a setLookAt by vrátil NaN matici (černý obraz).
+     * Stejnou mezí se ořezává i pitch načtený z world.dat.
+     */
+    public static final float MAX_PITCH = 89f;
+
     public void processMouse(double dx, double dy) {
         yaw += (float) (dx * mouseSensitivity);
         pitch += (float) ((invertMouseY ? -dy : dy) * mouseSensitivity);
 
-        if (pitch > 89f) pitch = 89f;
-        if (pitch < -89f) pitch = -89f;
+        if (pitch > MAX_PITCH) pitch = MAX_PITCH;
+        if (pitch < -MAX_PITCH) pitch = -MAX_PITCH;
     }
 
     public void setPosition(float x, float y, float z)

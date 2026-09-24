@@ -99,7 +99,9 @@ public class Container {
                 continue;
             }
 
-            int moved = Math.min(slot.space(), remaining);
+            // max(0, ...): hromádka přes MAX_COUNT (třeba z ručně upraveného
+            // souboru) má místo záporné a "přidání" by z ní kusy ubralo.
+            int moved = Math.min(Math.max(0, slot.space()), remaining);
             slots[i] = slot.plus(moved);
             remaining -= moved;
         }
@@ -117,6 +119,35 @@ public class Container {
         }
 
         return ItemStack.of(stack.block(), remaining);
+    }
+
+    /**
+     * Kolik kusů téhle hromádky se do kontejneru vejde - stejnými pravidly
+     * jako add(), jen bez přidání. Když je to aspoň stack.count(), add()
+     * vrátí prázdný zbytek. Pro místa, kde se musí přidat všechno, nebo nic.
+     */
+    public int room(ItemStack stack)
+    {
+        if(stack.isEmpty())
+        {
+            return 0;
+        }
+
+        int room = 0;
+
+        for(ItemStack slot : slots)
+        {
+            if(slot.isEmpty())
+            {
+                room += ItemStack.MAX_COUNT;
+            }
+            else if(slot.block() == stack.block())
+            {
+                room += Math.max(0, slot.space());
+            }
+        }
+
+        return room;
     }
 
     /** Ubere jeden kus ze slotu. Používá pokládání bloku z hotbaru. */
