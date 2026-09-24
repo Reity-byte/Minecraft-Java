@@ -20,7 +20,15 @@ public final class GlStats {
 
     private static int drawCalls = 0;
 
-    /** Volá každé glDrawArrays v UI vrstvě (Renderer2D, ImageRenderer, TextRenderer, náhledy). */
+    /**
+     * Volá KAŽDÉ glDrawArrays ve hře - UI (Renderer2D, ImageRenderer,
+     * TextRenderer, BlockIcon, pozadí) i svět (sekce, obloha, ruka, položky
+     * na zemi, postava, praskliny, obrys).
+     *
+     * ⚠️ Nové glDrawArrays bez countDraw() je neviditelné: ikony (BlockIcon)
+     * dlouho kreslily draw call za kvádr a F3 v labu to neukázalo, protože
+     * se nepočítaly. Hlídá to RenderSourceTest.
+     */
     public static void countDraw()
     {
         drawCalls++;

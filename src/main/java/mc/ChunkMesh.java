@@ -59,13 +59,34 @@ public class ChunkMesh {
     // kreslí dvěma glDrawArrays se stejným VAO - jen s jiným offsetem.
     // Oddělené být musí: průhledné stěny se kreslí až po VŠECH neprůhledných
     // ze všech sekcí a odzadu dopředu, jinak by voda přebila to, co je za ní.
+    //
+    // ⚠️ OBĚ POLE JSOU JEN PRACOVNÍ A PATŘÍ VLÁKNU, NE MESHI. Dřív si každý
+    // mesh držel vlastní dvojici napořád: pole se zdvojovala, nikdy
+    // nezmenšovala a po upload() ležela v paměti dál, i když data už byla
+    // na grafice - při dohledu 6 to bylo 52,6 MB (33 MB platných), při 16
+    // přes 330 MB haldy navíc. Teď se staví do sdílených polí vlákna
+    // (SCRATCH), mesh si z nich vezme jen přesně velkou kopii (`vertices`)
+    // a upload() ji po nahrání zahodí.
     // ------------------------------------------------------------------
 
-    private float[] opaque = new float[FLOATS_PER_FACE * 128];
+    private static final class Scratch {
+        float[] opaque = new float[FLOATS_PER_FACE * 128];
+        float[] transparent = new float[FLOATS_PER_FACE * 16];
+    }
+
+    private static final ThreadLocal<Scratch> SCRATCH = ThreadLocal.withInitial(Scratch::new);
+
+    private static final float[] NO_VERTICES = new float[0];
+
+    /** Pracovní pole jen během build() - jinak null. */
+    private float[] opaque;
     private int opaqueFloats = 0;
 
-    private float[] transparent = new float[FLOATS_PER_FACE * 16];
+    private float[] transparent;
     private int transparentFloats = 0;
+
+    /** Postavené vrcholy čekající na upload(): neprůhledné, za nimi průhledné. */
+    private float[] vertices = NO_VERTICES;
 
     private int opaqueVertices = 0;
     private int transparentVertices = 0;
@@ -87,6 +108,9 @@ public class ChunkMesh {
      */
     public void build(World world, Chunk chunk, int baseX, int baseY, int baseZ)
     {
+        Scratch scratch = SCRATCH.get();
+        opaque = scratch.opaque;
+        transparent = scratch.transparent;
         opaqueFloats = 0;
         transparentFloats = 0;
 
@@ -121,7 +145,7 @@ public class ChunkMesh {
 
                     // Blok uvnitř sekce (ne na jejím povrchu) má všech 6 sousedů
                     // ve stejném poli - čtou se přímo, bez cesty přes World,
-                    // tedy bez vyhledání sloupce v HashMap. Vnitřek je 14^3 ze
+                    // tedy bez vyhledání sloupce. Vnitřek je 14^3 ze
                     // 16^3, tedy 67 % bloků, takže tímhle odpadne většina lookupů.
                     // Bloky na povrchu sekce musí dál přes World, protože jejich
                     // sousedi leží v jiném chunku.
@@ -157,6 +181,17 @@ public class ChunkMesh {
 
         opaqueVertices = opaqueFloats / FLOATS_PER_VERTEX;
         transparentVertices = transparentFloats / FLOATS_PER_VERTEX;
+
+        // Obě sady do jednoho pole, neprůhledné první - přesně tak půjdou
+        // do VBO. Zvětšená pracovní pole si nechá vlákno pro další stavbu.
+        vertices = new float[opaqueFloats + transparentFloats];
+        System.arraycopy(opaque, 0, vertices, 0, opaqueFloats);
+        System.arraycopy(transparent, 0, vertices, opaqueFloats, transparentFloats);
+
+        scratch.opaque = opaque;
+        scratch.transparent = transparent;
+        opaque = null;
+        transparent = null;
     }
 
     /**
@@ -463,11 +498,17 @@ public class ChunkMesh {
     // nahrání na grafiku
     // ------------------------------------------------------------------
 
-    /** Musí se volat na vlákně s aktivním GL kontextem. */
+    /**
+     * Musí se volat na vlákně s aktivním GL kontextem.
+     *
+     * Po nahrání se CPU kopie vrcholů zahodí - na grafice už leží a znovu
+     * se nahrává jen po novém build().
+     */
     public void upload()
     {
         if(opaqueVertices == 0 && transparentVertices == 0)
         {
+            vertices = NO_VERTICES;
             return;
         }
 
@@ -480,13 +521,10 @@ public class ChunkMesh {
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-        // Obě sady do jednoho bufferu, neprůhledné první. Kreslení pak jen
+        // Obě sady v jednom bufferu, neprůhledné první. Kreslení pak jen
         // posune offset, takže dva průchody nestojí druhý VAO ani druhý VBO.
-        float[] combined = new float[opaqueFloats + transparentFloats];
-        System.arraycopy(opaque, 0, combined, 0, opaqueFloats);
-        System.arraycopy(transparent, 0, combined, opaqueFloats, transparentFloats);
-
-        glBufferData(GL_ARRAY_BUFFER, combined, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW);
+        vertices = NO_VERTICES;
 
         int stride = FLOATS_PER_VERTEX * Float.BYTES;
 
@@ -545,6 +583,7 @@ public class ChunkMesh {
         transparentVertices = 0;
         opaqueFloats = 0;
         transparentFloats = 0;
+        vertices = NO_VERTICES;
     }
 
     public boolean isEmpty()
@@ -557,7 +596,13 @@ public class ChunkMesh {
         return (opaqueVertices + transparentVertices) / VERTICES_PER_FACE;
     }
 
-    /** Pro testy: postavené vrcholy obou sad, jak by šly na grafiku. */
-    float[] opaqueData()      { return Arrays.copyOf(opaque, opaqueFloats); }
-    float[] transparentData() { return Arrays.copyOf(transparent, transparentFloats); }
+    /**
+     * Pro testy: postavené vrcholy obou sad, jak by šly na grafiku.
+     * Jen mezi build() a upload() - pak už leží jen na grafice.
+     */
+    float[] opaqueData()      { return Arrays.copyOfRange(vertices, 0, opaqueFloats); }
+    float[] transparentData() { return Arrays.copyOfRange(vertices, opaqueFloats, opaqueFloats + transparentFloats); }
+
+    /** Pro testy: kolik floatů mesh drží na CPU (po upload() nula). */
+    int retainedFloats()      { return vertices.length; }
 }

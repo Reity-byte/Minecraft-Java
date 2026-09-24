@@ -98,6 +98,7 @@ public class BackgroundRenderer {
         glBufferSubData(GL_ARRAY_BUFFER, 0, upload);
 
         glDrawArrays(GL_TRIANGLES, 0, VERTICES);
+        GlStats.countDraw();
 
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);

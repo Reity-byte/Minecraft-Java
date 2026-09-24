@@ -110,7 +110,7 @@ public class World {
      * Načtené sloupce, klíč = zabalené souřadnice chunku (cx, cz).
      * ⚠️ Sahá na ně JEN hlavní vlákno. Worker sem nikdy nezapisuje.
      */
-    private final Map<Long, ChunkColumn> columns = new HashMap<>();
+    private final LongMap<ChunkColumn> columns = new LongMap<>(512);
 
     // ------------------------------------------------------------------
     // asynchronní generování
@@ -487,7 +487,7 @@ public class World {
      * Zadá workerovi chybějící sloupce, od nejbližšího.
      *
      * Pořadí je podstatné: bez něj se svět dosypává v náhodných ostrovech,
-     * protože pořadí HashMap je libovolné. Stejný důvod, proč řadí frontu
+     * protože pořadí mapy sloupců je libovolné. Stejný důvod, proč řadí frontu
      * i WorldRenderer.
      */
     /**
@@ -588,11 +588,8 @@ public class World {
 
     private void unloadFar(int centerCx, int centerCz)
     {
-        columns.entrySet().removeIf(entry ->
-        {
-            ChunkColumn column = entry.getValue();
-            return !withinRadius(column.cx, column.cz, centerCx, centerCz, unloadRadius);
-        });
+        columns.removeIf((key, column) ->
+                !withinRadius(column.cx, column.cz, centerCx, centerCz, unloadRadius));
     }
 
     /**
@@ -867,7 +864,7 @@ public class World {
      *
      * ⚠️ Existuje kvůli plynulému osvětlení. To se ptá na čtyři buňky kolem
      * každého rohu stěny, tedy 24krát na blok - a každý zvlášť položený dotaz
-     * je jedno vyhledání v HashMap. Sloučením tří dotazů do jednoho spadla
+     * je jedno vyhledání v mapě sloupců. Sloučením tří dotazů do jednoho spadla
      * stavba meshe na třetinu.
      */
     public int cellAt(int x, int y, int z)

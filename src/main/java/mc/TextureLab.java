@@ -2146,25 +2146,24 @@ public class TextureLab {
     // pomocné kreslení (všechno v GUI pixelech panelu)
     // ------------------------------------------------------------------
 
-    /**
-     * Izometrické ikony bloků - tytéž kostky jako v hotbaru a ve slotech
-     * inventáře, takže blok vypadá v receptu stejně jako ve hře.
-     *
-     * ⚠️ JE TO TROJICE begin / draw / end, ne jedna metoda na ikonu. `begin()`
-     * naváže shader, texturu a VAO; kdyby se to dělalo na každou ikonu zvlášť,
-     * stál by přehled bloků v módu Recipes skoro devadesát změn stavu GL za
-     * frame - a lab má 8 draw callů místo 422 právě proto, že se stav
-     * nepřenastavuje zbytečně (viz "Výkon labu").
-     *
-     * Vlastní shader se musí navázat MIMO dávku `Renderer2D`, takže si o ikony
-     * mód říká až po `shapes.end()`.
-     */
     /** Atlas bloků - náhled stromu kreslí týmiž texturami jako hra. */
     Texture atlasTexture()
     {
         return atlas;
     }
 
+    /**
+     * Izometrické ikony bloků - tytéž kostky jako v hotbaru a ve slotech
+     * inventáře, takže blok vypadá v receptu stejně jako ve hře.
+     *
+     * ⚠️ JE TO TROJICE begin / draw / end, ne jedna metoda na ikonu. `begin()`
+     * naváže shader, texturu a VAO, `blockIcon()` jen přidá vrcholy do dávky
+     * a `end()` pošle všechny ikony JEDNÍM draw callem (viz BlockIcon) -
+     * přehled bloků v Recipes tak nestojí desítky draw callů za frame.
+     *
+     * Vlastní shader se musí navázat MIMO dávku `Renderer2D`, takže si o ikony
+     * mód říká až po `shapes.end()`.
+     */
     void blockIconsBegin(int screenWidth, int screenHeight)
     {
         blockIcons.begin(screenWidth, screenHeight);

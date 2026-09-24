@@ -4,10 +4,7 @@ import org.joml.Matrix4f;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static org.lwjgl.opengl.GL33.*;
@@ -70,7 +67,7 @@ public class WorldRenderer {
     private final Texture skin;
 
     /** Meshe po sloupcích, stejný klíč jako používá World. Pole má jednu položku na sekci. */
-    private final Map<Long, ChunkMesh[]> columnMeshes = new HashMap<>();
+    private final LongMap<ChunkMesh[]> columnMeshes = new LongMap<>(512);
 
     // Matice se drží jako pole, ne aby se každý frame alokovaly nové.
     private final Matrix4f projection = new Matrix4f();
@@ -219,9 +216,14 @@ public class WorldRenderer {
 
                 if(meshes == null)
                 {
-                    meshes = columnMeshes.computeIfAbsent(
-                            World.key(column.cx, column.cz),
-                            k -> new ChunkMesh[ChunkColumn.SECTIONS]);
+                    long key = World.key(column.cx, column.cz);
+                    meshes = columnMeshes.get(key);
+
+                    if(meshes == null)
+                    {
+                        meshes = new ChunkMesh[ChunkColumn.SECTIONS];
+                        columnMeshes.put(key, meshes);
+                    }
                 }
 
                 ChunkMesh mesh = meshes[s];
@@ -376,7 +378,7 @@ public class WorldRenderer {
      * Postaví meshe z fronty, nejbližší nejdřív, dokud nedojde časový rozpočet.
      *
      * Nejbližší nejdřív je důležité: svět se pak dosypává v kruhu kolem hráče
-     * místo v náhodných ostrovech (pořadí HashMapy je libovolné). Zbytek fronty
+     * místo v náhodných ostrovech (pořadí mapy sloupců je libovolné). Zbytek fronty
      * se zahodí a příští frame se nasbírá znovu z aktuální pozice kamery -
      * díky tomu se fronta sama přeuspořádá, když se hráč pohne, a nemůže
      * zůstat viset odkaz na mezitím uvolněný sloupec.
@@ -498,18 +500,14 @@ public class WorldRenderer {
     /** Uvolní VBO sloupců, které World mezitím zahodil - jinak by paměť grafiky rostla donekonečna. */
     private void evictUnloadedColumns(World world)
     {
-        Iterator<Map.Entry<Long, ChunkMesh[]>> it = columnMeshes.entrySet().iterator();
-
-        while(it.hasNext())
+        columnMeshes.removeIf((key, meshes) ->
         {
-            Map.Entry<Long, ChunkMesh[]> entry = it.next();
-
-            if(world.hasColumn(entry.getKey()))
+            if(world.hasColumn(key))
             {
-                continue;
+                return false;
             }
 
-            for(ChunkMesh mesh : entry.getValue())
+            for(ChunkMesh mesh : meshes)
             {
                 if(mesh != null)
                 {
@@ -517,8 +515,8 @@ public class WorldRenderer {
                 }
             }
 
-            it.remove();
-        }
+            return true;
+        });
     }
 
     /**
@@ -681,6 +679,7 @@ public class WorldRenderer {
         glBindBuffer(GL_ARRAY_BUFFER, crackVbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, crackUpload);
         glDrawArrays(GL_TRIANGLES, 0, 36);
+        GlStats.countDraw();
         glBindVertexArray(0);
 
         glDepthMask(true);
@@ -749,6 +748,7 @@ public class WorldRenderer {
 
         glBindVertexArray(outlineVao);
         glDrawArrays(GL_LINES, 0, 24);
+        GlStats.countDraw();
         glBindVertexArray(0);
 
         glLineWidth(1f);

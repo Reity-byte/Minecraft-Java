@@ -199,13 +199,16 @@ public class SkyRenderer {
         {
             shader.setVector4("uColor", STAR_COLOR[0], STAR_COLOR[1], STAR_COLOR[2], night);
             glDrawArrays(GL_TRIANGLES, STAR_FIRST, STAR_COUNT * VERTICES_PER_QUAD);
+            GlStats.countDraw();
         }
 
         shader.setVector4("uColor", SUN_COLOR[0], SUN_COLOR[1], SUN_COLOR[2], SUN_COLOR[3]);
         glDrawArrays(GL_TRIANGLES, SUN_FIRST, VERTICES_PER_QUAD);
+        GlStats.countDraw();
 
         shader.setVector4("uColor", MOON_COLOR[0], MOON_COLOR[1], MOON_COLOR[2], MOON_COLOR[3]);
         glDrawArrays(GL_TRIANGLES, MOON_FIRST, VERTICES_PER_QUAD);
+        GlStats.countDraw();
 
         glBindVertexArray(0);
 

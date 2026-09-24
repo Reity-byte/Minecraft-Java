@@ -29,6 +29,10 @@ public class AllTests {
         MeshTest.main(args);
         failures += MeshTest.failures;
 
+        System.out.println("\n========== PerfTest ==========");
+        PerfTest.main(args);
+        failures += PerfTest.failures;
+
         System.out.println("\n========== PhysicsTest ==========");
         PhysicsTest.main(args);
         failures += PhysicsTest.failures;
