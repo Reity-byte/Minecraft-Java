@@ -39,8 +39,9 @@ public class Main {
     private long window;
     private int width = 1024, height = 768;
 
-    private final Camera camera = new Camera();
-    private final Player player = new Player();
+    // Package-private kvůli MainStateTest (reset stavu mezi světy).
+    final Camera camera = new Camera();
+    final Player player = new Player();
     World world = new World(); // nahrazuje se při vytvoření nového světa
 
     /**
@@ -1142,8 +1143,12 @@ public class Main {
      * si nový svět bral inventář i denní dobu po tom předchozím v témže běhu hry.
      *
      * Pravidlo pro příští pole: co drží `Main` a co se vztahuje ke KONKRÉTNÍMU
-     * světu, patří sem. `MainStateTest` prochází tenhle seznam a kdyby se sem
-     * přidalo pole a zapomnělo na reset, spadne.
+     * světu, patří sem. `MainStateTest.everyFieldIsClassified()` prochází
+     * reflexí VŠECHNA pole Main, Player a Camera a každé musí mít zapsané,
+     * jestli patří světu, nebo přežije jeho výměnu - nové pole bez
+     * rozhodnutí test shodí. (Dřív tu stálo, že test "prochází seznam", ale
+     * kontroloval jen čtyři natvrdo vyjmenované věci; let a noclip tím
+     * prošly bez resetu.)
      *
      * Načtený svět si potom svoje hodnoty vrátí v `restore()` - resetuje se
      * VŽDYCKY a přepisuje se až potom, aby nebyl rozdíl mezi "nový svět"
@@ -1176,11 +1181,12 @@ public class Main {
     }
 
     /**
-     * Stav hráče, který nepatří světu, ale sezení - vrátit na výchozí.
+     * Stav, který drží Main (a jeho Player a Camera) po celý běh hry, ale
+     * patří konkrétnímu světu - vrátit na výchozí.
      *
      * Je to vlastní metoda, a ne pár řádků uvnitř `freshWorld()`, aby šla
      * zavolat z testu bez GL, GLFW i OpenAL. `MainStateTest` na ní ověřuje
-     * obě opravené chyby.
+     * všechny tři opravené chyby (inventář, denní doba, let a pohled).
      */
     void resetPlayerState() {
         // Nový svět = nový začátek. Bez tohohle ukázal inventář věci
@@ -1198,6 +1204,21 @@ public class Main {
         // Denní doba je pole Main, ne World - bez resetu začne nový svět
         // v tu dobu, ve kterou skončil ten předchozí.
         day.reset();
+
+        // Hráč a kamera jsou taky jedna instance po celý běh hry. Bez resetu
+        // začal nový survival svět v letu po creative světě, noclip přecházel
+        // do každého dalšího světa a pohled zůstal natočený jako ve starém.
+        // Pohled F5, citlivost a obrácená osa jsou nastavení hráče, ne světa -
+        // ty zůstávají.
+        player.resetForNewWorld();
+        camera.yaw = Camera.DEFAULT_YAW;
+        camera.pitch = Camera.DEFAULT_PITCH;
+
+        // Rozdělaný dvojstisk, kopání a zaměřený blok patří starému světu.
+        flyTap.reset();
+        mining.cancel();
+        miningHeld = false;
+        hit = null;
     }
 
     /**

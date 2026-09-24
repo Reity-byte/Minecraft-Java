@@ -35,8 +35,12 @@ public class Camera {
     static final float CAMERA_RADIUS = 0.1f;
 
     public float x = 8, y = 80, z = 8; // start above the terrain (ground is around y=64)
-    public float yaw = -90f;   // facing -Z initially
-    public float pitch = 0f;
+    /** Kam se kamera dívá v novém světě: yaw -90 je směr -Z, pitch 0 vodorovně. */
+    public static final float DEFAULT_YAW = -90f;
+    public static final float DEFAULT_PITCH = 0f;
+
+    public float yaw = DEFAULT_YAW;
+    public float pitch = DEFAULT_PITCH;
 
     public View view = View.FIRST_PERSON;
 

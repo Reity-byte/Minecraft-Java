@@ -47,6 +47,8 @@ public class MainStateTest {
         loadedWorldKeepsItsOwnState();
         worldInPlayDecidesSaving();
         craftingGridsAreSaved();
+        playerAndCameraReset();
+        everyFieldIsClassified();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -427,5 +429,125 @@ public class MainStateTest {
         check("inventar taky", main.inventory.get(3).count() == 9, main.inventory.get(3).toString());
 
         shutdown(main);
+    }
+
+    // ==================================================================
+    // hrac a kamera mezi svety
+    // ==================================================================
+
+    /**
+     * BUG 3: Player a Camera jsou taky jedna instance po cely beh hry. Novy
+     * svet po creative svete zacinal v letu (i survival), noclip prechazel
+     * do kazdeho dalsiho sveta a pohled zustal natoceny jako ve starem.
+     */
+    static void playerAndCameraReset() {
+        System.out.println("\n-- Bug 3: novy svet nezdedi let, noclip ani pohled --");
+
+        Main main = headlessMain();
+        main.player.flying = true;
+        main.player.noclip = true;
+        main.player.vx = 3f;
+        main.player.vy = -7f;
+        main.camera.yaw = 1234f;
+        main.camera.pitch = -80f;
+        main.camera.view = Camera.View.THIRD_PERSON_BACK;
+        main.camera.mouseSensitivity = 0.3f;
+
+        main.resetPlayerState();
+
+        check("let je vypnuty", !main.player.flying, "");
+        check("noclip je vypnuty", !main.player.noclip, "");
+        check("rychlost je nulova", main.player.vx == 0 && main.player.vy == 0 && main.player.vz == 0, "");
+        check("pohled je vychozi (yaw, pitch)",
+                main.camera.yaw == Camera.DEFAULT_YAW && main.camera.pitch == Camera.DEFAULT_PITCH,
+                main.camera.yaw + " / " + main.camera.pitch);
+        check("pohled F5 a citlivost jsou nastaveni hrace - zustanou",
+                main.camera.view == Camera.View.THIRD_PERSON_BACK && main.camera.mouseSensitivity == 0.3f, "");
+
+        // Nacteny svet si let vrati ze souboru, noclip ne (ten se neuklada).
+        main.player.noclip = true;
+        main.resetPlayerState();
+        main.restore(new WorldStorage.Save(1, 70, 1, 45f, 10f, true, 0,
+                main.world.changes(), new ItemStack[0], 100f));
+        check("nacteny svet vrati let ze souboru", main.player.flying, "");
+        check("nacteny svet noclip nezdedi", !main.player.noclip, "");
+        check("nacteny svet vrati svuj pohled", main.camera.yaw == 45f && main.camera.pitch == 10f, "");
+
+        shutdown(main);
+    }
+
+    // ==================================================================
+    // kazde pole Main, Player a Camera je zarazene
+    // ==================================================================
+
+    /**
+     * Javadoc freshWorld() dlouho tvrdil, ze tenhle test "prochazi seznam"
+     * a spadne, kdyz nekdo prida pole a zapomene na reset. Neprochazel nic -
+     * kontroloval ctyri natvrdo vyjmenovane veci, a proto prosel Bug 3.
+     *
+     * Ted ano: KAZDE instancni pole Main, Player a Camera musi byt tady
+     * v jednom ze seznamu - bud patri konkretnimu svetu (a pak ho musi
+     * resetovat resetPlayerState() nebo nastavit freshWorld()/restore()),
+     * nebo prezije vymenu sveta (okno, GL, nastaveni, obrazovky). Nove pole,
+     * ktere v seznamu neni, test shodi - a s nim otazku, kam patri.
+     */
+    static void everyFieldIsClassified() {
+        System.out.println("\n-- kazde pole Main/Player/Camera je rozhodnute: svet, nebo sezeni --");
+
+        // Patri svetu: resetPlayerState() ho vrati, nebo ho nastavi freshWorld()/restore().
+        java.util.Set<String> mainWorld = java.util.Set.of(
+                "world", "selectedSlot", "inventory", "craftingSmall", "craftingLarge", "craftingResult",
+                "day", "flyTap", "mining", "miningHeld", "hit", "drops", "currentWorld", "mode",
+                "screen", "spawnDone", "loadingFrames", "loadingTitle", "worldCenterX", "worldCenterZ",
+                "columnsTotal", "meshesTotal");
+
+        // Prezije svet: okno, GL objekty, nastaveni, obrazovky, mys, pocitadla.
+        java.util.Set<String> mainSession = java.util.Set.of(
+                "options", "windowMode", "limiter", "window", "width", "height", "camera", "player",
+                "sound", "worldRenderer", "shapes", "text", "font", "background", "dirtTile", "hud",
+                "state", "mainMenu", "pauseMenu", "lastX", "lastY", "firstMouse", "mouseX", "mouseY",
+                "mouseScale", "glReady", "blockAtlas", "playerSkin", "atlasPixels", "atlasFromFile",
+                "skinPixels", "skinFromFile", "widgets", "images", "optionsScreen", "selectScreen",
+                "createScreen", "optionsReturnState", "lab", "createdBlocks", "labReturnState",
+                "showDebug", "icons", "sky", "heldItem", "swing", "animation", "playerMesh",
+                "frameCount", "fpsTimer", "currentFps");
+
+        // Player: stav pohybu patri svetu (resetForNewWorld + spawn/restore). Vstup se plni
+        // kazdy frame a rozesly krok (footsteps) klidne pretece - je to zlomek kroku.
+        java.util.Set<String> playerWorld = java.util.Set.of(
+                "x", "y", "z", "vx", "vy", "vz", "onGround", "submerged", "inWater", "flying", "noclip",
+                "stepped", "stepBlock");
+        java.util.Set<String> playerSession = java.util.Set.of(
+                "inputForward", "inputStrafe", "inputJump", "inputDescend", "inputSprint", "inputSneak",
+                "footsteps");
+
+        java.util.Set<String> cameraWorld = java.util.Set.of("x", "y", "z", "yaw", "pitch");
+        java.util.Set<String> cameraSession = java.util.Set.of("view", "mouseSensitivity", "invertMouseY");
+
+        classified(Main.class, mainWorld, mainSession);
+        classified(Player.class, playerWorld, playerSession);
+        classified(Camera.class, cameraWorld, cameraSession);
+    }
+
+    static void classified(Class<?> type, java.util.Set<String> world, java.util.Set<String> session) {
+        java.util.List<String> unknown = new java.util.ArrayList<>();
+        java.util.Set<String> present = new java.util.HashSet<>();
+
+        for (java.lang.reflect.Field f : type.getDeclaredFields()) {
+            if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || f.isSynthetic()) continue;
+            present.add(f.getName());
+            if (!world.contains(f.getName()) && !session.contains(f.getName())) unknown.add(f.getName());
+        }
+
+        check(type.getSimpleName() + ": kazde pole je zarazene (svet / sezeni)",
+                unknown.isEmpty(),
+                unknown.isEmpty() ? "" : "nova pole " + unknown + " - patri do resetPlayerState(), nebo preziji svet?");
+
+        java.util.List<String> stale = new java.util.ArrayList<>();
+        for (String name : world) if (!present.contains(name)) stale.add(name);
+        for (String name : session) if (!present.contains(name)) stale.add(name);
+
+        check(type.getSimpleName() + ": seznam neobsahuje pole, ktera uz neexistuji",
+                stale.isEmpty(), stale.toString());
     }
 }
