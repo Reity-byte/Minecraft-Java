@@ -2,6 +2,7 @@ package mc;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.function.Consumer;
 
 /**
  * Uložení a načtení světa.
@@ -92,19 +94,22 @@ public final class WorldStorage {
     /**
      * Zapíše svět. Vrací false, když se to nepovedlo - hra kvůli neúspěšnému
      * uložení nemá padat, jen o tom musí být vidět zpráva.
+     *
+     * ⚠️ NEPÍŠE SE PŘÍMO DO world.dat. Svět se nejdřív celý zakóduje do paměti
+     * a na disk jde přes SafeFiles (.tmp, force, přejmenování). Dřív se cíl
+     * otevřel s TRUNCATE_EXISTING, takže plný disk nebo zabití procesu při
+     * ukládání v okamžiku zavření okna nechalo useknutý soubor - a svět, který
+     * nejde načíst, playWorld() záměrně nehraje. Byl by pryč celý, ne jen
+     * poslední session. world.dat je jediná část světa, kterou nejde dopočítat.
+     * Soubor, který nejde načíst, se navíc před přepsáním zazálohuje do .bak.
      */
     public static boolean save(Path path, Save save)
     {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+
         try
         {
-            Path parent = path.getParent();
-            if(parent != null)
-            {
-                Files.createDirectories(parent);
-            }
-
-            try(DataOutputStream out = new DataOutputStream(
-                    new BufferedOutputStream(Files.newOutputStream(path))))
+            try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(bytes)))
             {
                 out.writeInt(MAGIC_V3);
                 out.writeInt(GENERATOR_VERSION);
@@ -144,21 +149,34 @@ public final class WorldStorage {
                 // Denní doba, až úplně na konci - viz poznámka u MAGIC.
                 out.writeFloat(save.dayTime());
             }
-
-            return true;
         }
         catch(IOException e)
         {
+            // Do paměti se zapsat nepovede jen výjimečně, ale DataOutputStream to deklaruje.
             System.err.println("Ulozeni sveta selhalo: " + e);
             return false;
         }
+
+        return SafeFiles.writeAtomically(path, bytes.toByteArray(), WorldStorage::readsCompletely, "Svet");
+    }
+
+    /** Jde dosavadní soubor načíst? Tiše - na stderr píše jen skutečné načítání. */
+    private static boolean readsCompletely(Path path)
+    {
+        return read(path, message -> { }) != null;
     }
 
     /**
      * Načte svět. Vrací null, když soubor neexistuje, je poškozený nebo to
-     * není náš formát - volající si pak založí nový svět.
+     * není náš formát - důvod napíše na stderr a volající svět nehraje.
      */
     public static Save load(Path path)
+    {
+        return read(path, System.err::println);
+    }
+
+    /** Vlastní čtení; zprávy jdou do report (stderr, nebo nikam u tiché kontroly). */
+    private static Save read(Path path, Consumer<String> report)
     {
         try(DataInputStream in = new DataInputStream(
                 new BufferedInputStream(Files.newInputStream(path))))
@@ -167,7 +185,7 @@ public final class WorldStorage {
 
             if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3)
             {
-                System.err.println("Ulozeny svet ma cizi format: " + path);
+                report.accept("Ulozeny svet ma cizi format: " + path);
                 return null;
             }
 
@@ -176,7 +194,7 @@ public final class WorldStorage {
             {
                 // Nenacist by znamenalo prijit o vsechno postavene. Terén se
                 // posune, stavby zůstanou - to je z těch dvou možností lepší.
-                System.err.println("Ulozeny svet je z generatoru verze " + version
+                report.accept("Ulozeny svet je z generatoru verze " + version
                         + ", ted je " + GENERATOR_VERSION
                         + " - teren pod stavbami muze byt jiny.");
             }
@@ -192,7 +210,7 @@ public final class WorldStorage {
             int columnCount = in.readInt();
             if(columnCount < 0)
             {
-                System.err.println("Ulozeny svet je poskozeny: zaporny pocet sloupcu");
+                report.accept("Ulozeny svet je poskozeny: zaporny pocet sloupcu");
                 return null;
             }
 
@@ -205,7 +223,7 @@ public final class WorldStorage {
 
                 if(blockCount < 0)
                 {
-                    System.err.println("Ulozeny svet je poskozeny: zaporny pocet bloku");
+                    report.accept("Ulozeny svet je poskozeny: zaporny pocet bloku");
                     return null;
                 }
 
@@ -228,7 +246,7 @@ public final class WorldStorage {
 
                 if(slots < 0 || slots > 1024)
                 {
-                    System.err.println("Ulozeny svet je poskozeny: divny pocet slotu");
+                    report.accept("Ulozeny svet je poskozeny: divny pocet slotu");
                     return null;
                 }
 
@@ -263,7 +281,7 @@ public final class WorldStorage {
 
             if(!unknown.isEmpty())
             {
-                System.err.println("Ulozeny svet obsahuje bloky z labu " + unknown + ", ktere "
+                report.accept("Ulozeny svet obsahuje bloky z labu " + unknown + ", ktere "
                         + BlockRegistry.FILE + " nezna - ukazou se jako neznamy blok.");
             }
 
@@ -272,7 +290,7 @@ public final class WorldStorage {
         catch(IOException e)
         {
             // Sem spadne i useknuty soubor - readInt na konci hodi EOFException.
-            System.err.println("Nacteni sveta selhalo: " + e);
+            report.accept("Nacteni sveta selhalo: " + e);
             return null;
         }
     }

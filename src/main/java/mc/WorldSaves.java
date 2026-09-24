@@ -759,9 +759,23 @@ public final class WorldSaves {
     }
 
     /** Migrační údaje ze souboru, nebo null. Nic nevypisuje. */
+    /**
+     * Migrační údaje světa. Když world.json nejde přečíst, vezmou se ze
+     * zálohy .bak - z té, ze které readInfo() vzala jméno a seed.
+     *
+     * ⚠️ Bez toho touch() přes poškozený world.json zapsal metadata BEZ
+     * migrace, a starý saves/world.dat by se pak při příštím startu přenesl
+     * podruhé jako "Old World (2)".
+     */
     private static Migrated migrationOf(Path file)
     {
         Meta meta = migrationMeta(file);
+
+        if(meta == null)
+        {
+            meta = migrationMeta(SafeFiles.backupOf(file));
+        }
+
         return meta == null ? null : meta.migrated();
     }
 

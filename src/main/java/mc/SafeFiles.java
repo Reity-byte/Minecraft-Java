@@ -12,7 +12,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.function.Predicate;
 
 /**
- * Bezpečný zápis malých souborů hry (options.json, metadata světů).
+ * Bezpečný zápis souborů hry.
  *
  * ---------------------------------------------------------------------------
  * Stejný vzor jako textures/blocks.json (BlockRegistry.save), vytažený na
@@ -26,6 +26,17 @@ import java.util.function.Predicate;
  * <jméno>.bak. Načetl se jen zčásti (nebo vůbec), takže to, co je v paměti,
  * nemá všechno, co v něm je - první uložení by zbytek tiše smazalo. Když se
  * zálohovat nepovede, soubor se radši nepřepíše.
+ *
+ * ⚠️ EXISTUJÍCÍ ZÁLOHA SE NIKDY NEPŘEPISUJE. Dřív šla každá další záloha
+ * přes tu první (REPLACE_EXISTING), takže druhé poškození smazalo, co
+ * zachránilo první - a u world.json i migrační údaje, podle kterých se
+ * pozná už přenesený starý svět. Teď: stejný obsah se nezálohuje podruhé,
+ * jiný jde do první volné z .bak, .bak.1 ... .bak.9. Když jsou obsazené
+ * všechny, soubor se radši nepřepíše (stejně jako při selhání zálohy).
+ *
+ * Používají ho všechny soubory hry: JSON nastavení, klávesy, tuning, bloky
+ * a recepty z labu, metadata i data světů (world.json, world.dat) a obrázky
+ * z labu (atlas.png, skin.png).
  * ---------------------------------------------------------------------------
  *
  * Nesahá na GL.
@@ -34,20 +45,35 @@ final class SafeFiles {
 
     private SafeFiles() {}
 
-    /** Kam jde záloha souboru, který nešel celý načíst: vedle něj, s příponou .bak. */
+    /** Kolik záloh jednoho souboru nejvýš vedle sebe leží (.bak a .bak.1 až .bak.9). */
+    static final int MAX_BACKUPS = 10;
+
+    /** Kam jde první záloha souboru, který nešel celý načíst: vedle něj, s příponou .bak. */
     static Path backupOf(Path file)
     {
         return file.resolveSibling(file.getFileName() + ".bak");
     }
 
+    /** n-tá záloha: 0 je .bak, další .bak.1, .bak.2 ... */
+    static Path backupOf(Path file, int n)
+    {
+        return n == 0 ? backupOf(file) : file.resolveSibling(file.getFileName() + ".bak." + n);
+    }
+
     /**
      * Atomicky zapíše text v UTF-8. readsCompletely říká, jestli dosavadní
      * soubor jde načíst celý (bez jediné výhrady) - když ne, nejdřív se
-     * zkopíruje do .bak. label je začátek zprávy na stderr ("Nastaveni").
+     * zazálohuje (viz backup()). label je začátek zprávy na stderr ("Nastaveni").
      *
      * Chyba hru nepoloží: vrátí false a důvod napíše na stderr.
      */
     static boolean writeAtomically(Path file, String content, Predicate<Path> readsCompletely, String label)
+    {
+        return writeAtomically(file, content.getBytes(StandardCharsets.UTF_8), readsCompletely, label);
+    }
+
+    /** Totéž pro bajty - world.dat a obrázky PNG. */
+    static boolean writeAtomically(Path file, byte[] content, Predicate<Path> readsCompletely, String label)
     {
         Path target = file.toAbsolutePath();
         Path temp = target.resolveSibling(target.getFileName() + ".tmp");
@@ -64,8 +90,7 @@ final class SafeFiles {
 
             if(Files.isRegularFile(target) && !completely(readsCompletely, target))
             {
-                Path backup = backupOf(target);
-                Files.copy(target, backup, StandardCopyOption.REPLACE_EXISTING);
+                Path backup = backup(target);
                 System.err.println(label + " " + file + ": puvodni soubor nesel cely nacist, zaloha je v " + backup);
             }
 
@@ -74,7 +99,7 @@ final class SafeFiles {
             try(FileChannel channel = FileChannel.open(temp, StandardOpenOption.CREATE,
                     StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING))
             {
-                ByteBuffer bytes = ByteBuffer.wrap(content.getBytes(StandardCharsets.UTF_8));
+                ByteBuffer bytes = ByteBuffer.wrap(content);
 
                 while(bytes.hasRemaining())
                 {
@@ -107,6 +132,34 @@ final class SafeFiles {
                 }
             }
         }
+    }
+
+    /**
+     * Zazálohuje soubor a vrátí, kde záloha leží. Existující zálohu nikdy
+     * nepřepíše: když už některá má bajt po bajtu týž obsah, vrátí ji;
+     * jinak zapíše do první volné. Když volná není, hodí IOException -
+     * volající pak soubor radši nepřepíše.
+     */
+    static Path backup(Path file) throws IOException
+    {
+        for(int n = 0; n < MAX_BACKUPS; n++)
+        {
+            Path candidate = backupOf(file, n);
+
+            if(!Files.exists(candidate))
+            {
+                Files.copy(file, candidate);
+                return candidate;
+            }
+
+            if(Files.isRegularFile(candidate) && Files.mismatch(file, candidate) == -1)
+            {
+                return candidate;
+            }
+        }
+
+        throw new IOException("vsech " + MAX_BACKUPS + " zaloh (" + backupOf(file).getFileName()
+                + " az .bak." + (MAX_BACKUPS - 1) + ") je obsazenych - uklid je a zkus to znovu");
     }
 
     /**

@@ -545,6 +545,32 @@ public class WorldSavesTest {
         check("a soubor se schoval jako -3",
                 Files.isRegularFile(root.resolve(WorldSaves.WORLD_FILE
                         + WorldSaves.MIGRATED_SUFFIX + "-3")), "");
+
+        // BUG: s dobrou zalohou world.json.bak a poskozenym world.json zapsal
+        // touch() metadata BEZ migrace (cetl ji z poskozeneho souboru) a pak
+        // SafeFiles prepsal dobrou zalohu tim poskozenym. Stary soubor by se
+        // pak prenesl podruhe jako "Old World (2)".
+        WorldSaves.WorldInfo again = WorldSaves.list(root).get(0);
+        byte[] goodMeta = Files.readAllBytes(again.metaFile());
+        Files.write(SafeFiles.backupOf(again.metaFile()), goodMeta);
+        Files.write(again.metaFile(), "{ poskozeno".getBytes(StandardCharsets.UTF_8));
+
+        WorldSaves.touch(WorldSaves.list(root).get(0), 23456789L);
+
+        check("touch pres poskozeny world.json vezme migraci ze zalohy",
+                text(again.metaFile()).contains("\"migratedFrom\""), text(again.metaFile()));
+        check("dobra zaloha .bak zustala beze zmeny",
+                java.util.Arrays.equals(Files.readAllBytes(SafeFiles.backupOf(again.metaFile())), goodMeta), "");
+        check("poskozeny soubor je v dalsi zaloze .bak.1",
+                text(SafeFiles.backupOf(again.metaFile(), 1)).equals("{ poskozeno"), "");
+
+        Files.copy(root.resolve(WorldSaves.WORLD_FILE + WorldSaves.MIGRATED_SUFFIX),
+                root.resolve(WorldSaves.WORLD_FILE));
+
+        check("stary soubor se ani po poskozeni metadat neprenese podruhe",
+                WorldSaves.migrateLegacy(root) == WorldSaves.Migration.FINISHED_EARLIER, "");
+        check("a svet je porad jeden", WorldSaves.list(root).size() == 1,
+                "" + WorldSaves.list(root).size());
     }
 
     static void migrationCrashes() throws IOException {
