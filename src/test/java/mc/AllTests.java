@@ -185,6 +185,10 @@ public class AllTests {
         AmbienceTest.main(args);
         failures += AmbienceTest.failures;
 
+        System.out.println(NEWLINE + "========== ItemTest ==========");
+        ItemTest.main(args);
+        failures += ItemTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

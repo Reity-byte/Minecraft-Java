@@ -133,6 +133,15 @@ public class Main {
     private Texture playerSkin;
 
     /**
+     * Atlas předmětů (klacek, uhlí, předměty z labu) a jeho pixely - pixely
+     * se drží ze stejného důvodu jako atlasPixels, a navíc z nich 3D model
+     * předmětu v ruce a na zemi bere, které pixely jsou plné.
+     */
+    private Texture itemAtlas;
+    private int[] itemPixels;
+    private boolean itemsFromFile;
+
+    /**
      * Pixely atlasu, ze kterých je nahraná textura blockAtlas. Drží se, protože
      * je texture lab upravuje na místě a přenahrává do téže textury.
      */
@@ -351,6 +360,7 @@ public class Main {
         playerMesh.delete();
         playerSkin.delete();
         blockAtlas.delete();
+        itemAtlas.delete();
         sky.delete();
         shapes.delete();
 
@@ -768,7 +778,9 @@ public class Main {
                 // se dá zazdít sám do sebe pohledem pod nohy.
                 ItemStack selected = inventory.hotbar(selectedSlot);
 
-                if (!selected.isEmpty() && !player.intersectsBlock(px, py, pz)
+                // Předmět (klacek, nástroj) se nepokládá - isBlock(), ne
+                // !isEmpty(): block() by u něj dal vzduch a "položil" ho.
+                if (selected.isBlock() && !player.intersectsBlock(px, py, pz)
                         && world.placeBlock(px, py, pz, selected.block())) {
                     // V creative se z hotbaru neubírá - hráč má čehokoliv
                     // v ruce nekonečno. Rozhoduje o tom mód, ne tenhle kód.
@@ -886,6 +898,13 @@ public class Main {
         // Recepty z labu (textures/recipes.json). AŽ PO blocích, protože
         // recept smí odkazovat na blok z labu a neznámý blok recept vyřadí.
         // Chybějící soubor = prázdný seznam a jen vestavěné recepty.
+        // Předměty z labu (textures/items.json) PŘED recepty - recept smí
+        // odkazovat na předmět z labu, stejně jako na blok.
+        ItemRegistry.activate(ItemRegistry.load(ItemRegistry.FILE));
+        System.out.println("Predmety z labu: " + ItemRegistry.active().labItems().size()
+                + (Files.isRegularFile(ItemRegistry.FILE) ? " (" + ItemRegistry.FILE.toAbsolutePath() + ")"
+                : " (" + ItemRegistry.FILE + " neni)"));
+
         RecipeBook.activate(RecipeBook.load(RecipeBook.FILE));
 
         // Klávesy z labu (keybinds.json). Nezávislé na všem ostatním -
@@ -916,7 +935,16 @@ public class Main {
         System.out.println("Atlas bloku: " + (atlasFromFile
                 ? Textures.ATLAS_FILE.toAbsolutePath() : "proceduralni (" + Textures.ATLAS_FILE + " neni)"));
         blockAtlas = Textures.blockAtlas(atlasPixels);
-        icons = new BlockIcon(blockAtlas);
+
+        // textures/items.png, když existuje; jinak procedurální klacek a uhlí.
+        Textures.AtlasPixels itemSource = ItemTextures.pixels(ItemTextures.FILE, ItemRegistry.active());
+        itemPixels = itemSource.pixels();
+        itemsFromFile = itemSource.fromFile();
+        System.out.println("Atlas predmetu: " + (itemsFromFile
+                ? ItemTextures.FILE.toAbsolutePath() : "proceduralni (" + ItemTextures.FILE + " neni)"));
+        itemAtlas = ItemTextures.texture(itemPixels);
+
+        icons = new BlockIcon(blockAtlas, itemAtlas);
 
         // textures/skin.png z texture labu, když existuje; jinak vygenerovaná.
         Textures.SkinPixels skinSource = Textures.skinPixels(Textures.SKIN_FILE);
@@ -1359,7 +1387,7 @@ public class Main {
     private void openInventory() {
         screen = mode == GameMode.CREATIVE
                 ? ContainerScreen.creativeInventory(
-                        CreativeInventory.container(BlockRegistry.active()), inventory)
+                        CreativeInventory.container(BlockRegistry.active(), ItemRegistry.active()), inventory)
                 : ContainerScreen.playerInventory(inventory, craftingSmall, craftingResult);
 
         screen.refreshResult();

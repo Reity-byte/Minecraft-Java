@@ -51,7 +51,8 @@ public final class Items {
 
     /**
      * Existuje taková věc? Vzduch ne. Pro blok: vestavěný, nebo z labu,
-     * který aktivní BlockRegistry zná. Předměty zatím žádné nejsou.
+     * který aktivní BlockRegistry zná. Pro předmět: vestavěný, nebo z labu,
+     * který zná aktivní ItemRegistry.
      */
     public static boolean exists(int id)
     {
@@ -67,6 +68,24 @@ public final class Items {
                     : id <= World.LAST_BUILT_IN;
         }
 
-        return false;
+        return ItemRegistry.lookup(id) != null;
+    }
+
+    /** Předmět podle id, nebo null (blok, neznámé id). */
+    public static ItemDef item(int id)
+    {
+        return isItem(id) ? ItemRegistry.lookup(id) : null;
+    }
+
+    /** Jméno věci pro UI (anglicky - font je jen ASCII). */
+    public static String name(int id)
+    {
+        if(isBlock(id))
+        {
+            return TextureLab.blockName((byte) id);
+        }
+
+        ItemDef def = item(id);
+        return def != null ? def.name() : "Unknown item " + id;
     }
 }

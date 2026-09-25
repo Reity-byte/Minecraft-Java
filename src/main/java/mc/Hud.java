@@ -183,7 +183,7 @@ public class Hud {
             }
 
             float slotX = barX + HOTBAR_BORDER * scale + i * SLOT_SIZE * scale;
-            icons.draw(slotX + inset, slotY + inset, ICON_SIZE * scale, stack.block());
+            icons.draw(slotX + inset, slotY + inset, ICON_SIZE * scale, stack.id());
         }
 
         icons.end();

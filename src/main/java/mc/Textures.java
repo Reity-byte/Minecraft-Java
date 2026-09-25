@@ -348,7 +348,7 @@ public final class Textures {
     }
 
     /** Šachovnice magenta/černá - "tady chybí textura". */
-    private static int unknown(int x, int y)
+    static int unknown(int x, int y)
     {
         return ((x >> 3) ^ (y >> 3)) == 0 ? UNKNOWN_A : UNKNOWN_B;
     }

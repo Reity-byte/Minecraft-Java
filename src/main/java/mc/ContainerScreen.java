@@ -890,7 +890,7 @@ public class ContainerScreen {
 
                     icons.draw(slotX(grid, column, screenWidth, scale) + scale,
                             slotY(grid, row, screenHeight, scale) + scale,
-                            SLOT_INNER * scale, stack.block());
+                            SLOT_INNER * scale, stack.id());
                 }
             }
         }
@@ -911,7 +911,7 @@ public class ContainerScreen {
 
         icons.begin(screenWidth, screenHeight);
         icons.draw(heldX(mouseX, scale), heldY(mouseY, screenHeight, scale),
-                SLOT_INNER * scale, cursor.block());
+                SLOT_INNER * scale, cursor.id());
         icons.end();
 
         if(cursor.count() > 1)

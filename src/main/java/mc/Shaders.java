@@ -325,19 +325,22 @@ public class Shaders {
             layout (location = 0) in vec2 aPos;    // v pixelech, (0,0) vlevo dole
             layout (location = 1) in vec2 aUv;
             layout (location = 2) in float aShade;
-            layout (location = 3) in float aKeepAlpha;   // 1 = voda, 0 = ostatní
+            layout (location = 3) in float aKeepAlpha;   // 1 = voda a předměty, 0 = ostatní
+            layout (location = 4) in float aSource;      // 0 = atlas bloků, 1 = atlas předmětů
 
             uniform vec2 uScreenSize;
 
             out vec2 vUv;
             out float vShade;
             out float vKeepAlpha;
+            out float vSource;
 
             void main()
             {
                 vUv = aUv;
                 vShade = aShade;
                 vKeepAlpha = aKeepAlpha;
+                vSource = aSource;
 
                 vec2 ndc = (aPos / uScreenSize) * 2.0 - 1.0;
                 gl_Position = vec4(ndc, 0.0, 1.0);
@@ -350,14 +353,17 @@ public class Shaders {
             in vec2 vUv;
             in float vShade;
             in float vKeepAlpha;
+            in float vSource;
 
             uniform sampler2D uAtlas;
+            uniform sampler2D uItems;
 
             out vec4 fragColor;
 
             void main()
             {
-                vec4 texel = texture(uAtlas, vUv);
+                // Oba atlasy mají tutéž mřížku, takže UV platí v obou.
+                vec4 texel = vSource > 0.5 ? texture(uItems, vUv) : texture(uAtlas, vUv);
                 // Alfa jen u bloku, který je průhledný i ve světě (voda).
                 // Ostatní jdou ve světě neprůhledným průchodem, kde se alfa
                 // zahodí - průhledný pixel tam má svou barvu, tak i tady.

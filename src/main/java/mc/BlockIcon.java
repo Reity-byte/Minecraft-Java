@@ -8,7 +8,8 @@ import java.util.Arrays;
 import static org.lwjgl.opengl.GL33.*;
 
 /**
- * Izometrická ikona bloku - do hotbaru i do slotů inventáře.
+ * Izometrická ikona bloku - do hotbaru i do slotů inventáře. Předmět
+ * (Items.isItem) je plochý obrázek z atlasu předmětů, jako v Minecraftu.
  *
  * ---------------------------------------------------------------------------
  * Kreslí se podle MODELU bloku, ne jako pevná krychle. Pochodeň je v ikoně
@@ -19,7 +20,10 @@ import static org.lwjgl.opengl.GL33.*;
  * v ChunkMesh, takže ikona a blok ve světě vypadají stejně.
  *
  * Vlastní shader a VAO: vertex je pozice(2) + uv(2) + odstín(1) + "alfa
- * platí"(1), což se do formátu Renderer2D (pozice + barva) nevejde.
+ * platí"(1) + zdroj(1), což se do formátu Renderer2D (pozice + barva) nevejde.
+ * Zdroj 0 = atlas bloků (jednotka 0), 1 = atlas předmětů (jednotka 1) -
+ * bloky i předměty tak zůstávají v JEDNÉ dávce a kurzor nakreslený
+ * naposled je pořád nahoře.
  *
  * ⚠️ PRŮHLEDNÝ PIXEL JE V IKONĚ TÍMŽ, ČÍM VE SVĚTĚ. Svět kreslí bloky
  * neprůhledným průchodem, takže pixel s alfou 0 má svou barvu (guma =
@@ -49,7 +53,7 @@ public class BlockIcon {
     static final float SHADE_LEFT  = 0.80f;   // stěna +Z
     static final float SHADE_RIGHT = 0.60f;   // stěna +X
 
-    static final int FLOATS_PER_VERTEX = 6;
+    static final int FLOATS_PER_VERTEX = 7;
     static final int VERTICES_PER_QUAD = 6;
 
     /** Tři viditelné stěny na kvádr. */
@@ -63,6 +67,9 @@ public class BlockIcon {
 
     private final Texture atlas;
 
+    /** Atlas předmětů, nebo null (lab bez předmětů) - pak se předmět ukáže jako neznámý. */
+    private final Texture items;
+
     private final int vao;
     private final int vbo;
 
@@ -73,7 +80,13 @@ public class BlockIcon {
 
     public BlockIcon(Texture atlas)
     {
+        this(atlas, null);
+    }
+
+    public BlockIcon(Texture atlas, Texture items)
+    {
         this.atlas = atlas;
+        this.items = items;
 
         vao = glGenVertexArrays();
         vbo = glGenBuffers();
@@ -91,6 +104,8 @@ public class BlockIcon {
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(3, 1, GL_FLOAT, false, stride, 5L * Float.BYTES);
         glEnableVertexAttribArray(3);
+        glVertexAttribPointer(4, 1, GL_FLOAT, false, stride, 6L * Float.BYTES);
+        glEnableVertexAttribArray(4);
 
         glBindVertexArray(0);
     }
@@ -103,6 +118,10 @@ public class BlockIcon {
 
         shader.bind();
         shader.setVector2("uScreenSize", screenWidth, screenHeight);
+
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, items != null ? items.id() : 0);
+        shader.setInt("uItems", 1);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, atlas.id());
@@ -119,25 +138,29 @@ public class BlockIcon {
         flush();
 
         glBindVertexArray(0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_BLEND);
         glEnable(GL_DEPTH_TEST);
     }
 
     /**
-     * Nakreslí blok jako izometrický tvar do čtverce o straně size.
-     * Jen složí vrcholy do dávky; na grafiku jdou až v end().
+     * Nakreslí věc do čtverce o straně size: blok jako izometrický tvar,
+     * předmět jako plochý obrázek. Jen složí vrcholy do dávky; na grafiku
+     * jdou až v end().
      */
-    public void draw(float x, float y, float size, byte block)
+    public void draw(float x, float y, float size, int id)
     {
-        int needed = floatsFor(block);
+        int needed = floatsFor(id);
 
         if(floats + needed > scratch.length)
         {
             scratch = Arrays.copyOf(scratch, Math.max(scratch.length * 2, floats + needed));
         }
 
-        floats = build(block, x, y, size, scratch, floats);
+        floats = build(id, x, y, size, items != null, scratch, floats);
     }
 
     // ------------------------------------------------------------------
@@ -154,6 +177,55 @@ public class BlockIcon {
     static int floatsFor(byte block)
     {
         return BlockModels.of(block).length * FLOATS_PER_BOX;
+    }
+
+    /** Kolik floatů zabere ikona věci - předmět je jeden čtverec. */
+    static int floatsFor(int id)
+    {
+        return Items.isItem(id) ? VERTICES_PER_QUAD * FLOATS_PER_VERTEX : floatsFor((byte) id);
+    }
+
+    /**
+     * Vrcholy ikony věci: předmět jako plochý obrázek, blok izometricky.
+     * hasItemAtlas = false (lab bez atlasu předmětů) i neznámý předmět
+     * nakreslí šachovnici "neznámý blok" z atlasu bloků.
+     */
+    static int build(int id, float x, float y, float size, boolean hasItemAtlas, float[] out, int offset)
+    {
+        if(!Items.isItem(id))
+        {
+            return build((byte) id, x, y, size, out, offset);
+        }
+
+        ItemDef def = Items.item(id);
+
+        if(def == null || !hasItemAtlas)
+        {
+            return flat(out, offset, x, y, size, BlockAtlas.TILE_UNKNOWN, 0f);
+        }
+
+        return flat(out, offset, x, y, size, def.tile(), 1f);
+    }
+
+    /**
+     * Plochý obrázek dlaždice přes celý čtverec. Alfa platí vždycky -
+     * předmět je obrys na průhledném pozadí. Obrazovka má (0,0) vlevo dole
+     * a atlas řádek 0 dole, takže spodní hrana = v0.
+     */
+    private static int flat(float[] out, int at, float x, float y, float size, int tile, float source)
+    {
+        float u0 = BlockAtlas.u0(tile), u1 = BlockAtlas.u1(tile);
+        float v0 = BlockAtlas.v0(tile), v1 = BlockAtlas.v1(tile);
+        float x1 = x + size, y1 = y + size;
+
+        at = vertex(out, at, x, y, u0, v0, 1f, 1f, source);
+        at = vertex(out, at, x1, y, u1, v0, 1f, 1f, source);
+        at = vertex(out, at, x1, y1, u1, v1, 1f, 1f, source);
+
+        at = vertex(out, at, x, y, u0, v0, 1f, 1f, source);
+        at = vertex(out, at, x1, y1, u1, v1, 1f, 1f, source);
+        at = vertex(out, at, x, y1, u0, v1, 1f, 1f, source);
+        return at;
     }
 
     /**
@@ -246,8 +318,15 @@ public class BlockIcon {
         return a + (b - a) * t;
     }
 
+    /** Vrchol z atlasu bloků (zdroj 0). */
     private static int vertex(float[] out, int at, float x, float y, float u, float v,
                               float shade, float alpha)
+    {
+        return vertex(out, at, x, y, u, v, shade, alpha, 0f);
+    }
+
+    private static int vertex(float[] out, int at, float x, float y, float u, float v,
+                              float shade, float alpha, float source)
     {
         out[at++] = x;
         out[at++] = y;
@@ -255,6 +334,7 @@ public class BlockIcon {
         out[at++] = v;
         out[at++] = shade;
         out[at++] = alpha;
+        out[at++] = source;
         return at;
     }
 

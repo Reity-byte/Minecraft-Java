@@ -1005,7 +1005,9 @@ public class World {
         // zasypat a paprsek by kvůli průhlednosti mířil někam za něj.
         byte existing = getBlock(x, y, z);
 
-        if(existing != AIR && existing != WATER)
+        // "Položit vzduch" není položení - to je breakBlock. Pojistka pro
+        // hromádku předmětu, jejíž block() je vzduch (Items).
+        if(blockId == AIR || (existing != AIR && existing != WATER))
         {
             return false;
         }

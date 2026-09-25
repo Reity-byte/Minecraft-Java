@@ -73,13 +73,45 @@ public final class CreativeInventory {
     }
 
     /**
-     * Přehled jako kontejner - přesně tolik slotů, kolik je bloků, každý
-     * s jedním kusem. Volá se při každém otevření obrazovky, takže blok
-     * právě založený v labu je v něm hned.
+     * Id všeho do přehledu: bloky (viz blocks()), za nimi předměty -
+     * vestavěné, pak z labu, každé podle id.
      */
+    public static List<Integer> ids(BlockRegistry blocks, ItemRegistry items)
+    {
+        List<Integer> ids = new ArrayList<>();
+
+        for(byte block : blocks(blocks))
+        {
+            ids.add((int) block);
+        }
+
+        // null = jen bloky. ItemRegistry.empty() by nestačil - vestavěné
+        // předměty (klacek, uhlí) jsou v každém registru.
+        if(items != null)
+        {
+            for(ItemDef def : items.items())
+            {
+                ids.add(def.id());
+            }
+        }
+
+        return ids;
+    }
+
+    /** Přehled jen s bloky - jako dřív (a pro testy, které předměty nezajímají). */
     public static Container container(BlockRegistry registry)
     {
-        List<Byte> ids = blocks(registry);
+        return container(registry, null);
+    }
+
+    /**
+     * Přehled jako kontejner - přesně tolik slotů, kolik je věcí, každý
+     * s jedním kusem. Volá se při každém otevření obrazovky, takže blok
+     * nebo předmět právě založený v labu je v něm hned.
+     */
+    public static Container container(BlockRegistry blocks, ItemRegistry items)
+    {
+        List<Integer> ids = ids(blocks, items);
         Container source = new Container(ids.size());
 
         for(int i = 0; i < ids.size(); i++)
