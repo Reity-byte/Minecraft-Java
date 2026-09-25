@@ -197,6 +197,10 @@ public class AllTests {
         GameDirsTest.main(args);
         failures += GameDirsTest.failures;
 
+        System.out.println(NEWLINE + "========== LauncherTest ==========");
+        LauncherTest.main(args);
+        failures += LauncherTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

@@ -11,7 +11,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $jar = Get-ChildItem "$root\target\minecraft-base-*.jar" | Where-Object { $_.Name -notlike 'original-*' } | Select-Object -First 1
 if (-not $jar) { throw "Chybi fat jar - nejdriv mvn package" }
 
-$version = ($jar.BaseName -replace '^minecraft-base-', '')
+# Jen cisla (1.0) - jpackage jine verze nebere (jar muze byt i ...-shaded).
+$version = [regex]::Match($jar.BaseName, '\d+(\.\d+)*').Value
 $stage = "$root\target\jpackage-input"
 $dist = "$root\dist"
 Remove-Item -Recurse -Force $stage, "$dist\MinecraftClaude" -ErrorAction SilentlyContinue
@@ -38,3 +39,21 @@ Remove-Item -Force $zip -ErrorAction SilentlyContinue
 Compress-Archive -Path "$dist\MinecraftClaude" -DestinationPath $zip
 Write-Host "Hotovo: $dist\MinecraftClaude\MinecraftClaude.exe"
 Write-Host "Zip:    $zip"
+
+# Launcher: totez jadro, jina vstupni trida (LauncherMain) - hru si stahne z GitHub Releases.
+Remove-Item -Recurse -Force "$dist\MinecraftClaudeLauncher" -ErrorAction SilentlyContinue
+& $jpackage --type app-image `
+    --name MinecraftClaudeLauncher `
+    --app-version $version `
+    --input $stage `
+    --main-jar $jar.Name `
+    --main-class mc.LauncherMain `
+    --add-modules java.base,java.desktop,java.logging,java.net.http,jdk.unsupported `
+    --dest $dist
+if ($LASTEXITCODE -ne 0) { throw "jpackage launcheru selhal" }
+
+$launcherZip = "$dist\MinecraftClaudeLauncher-$version-windows.zip"
+Remove-Item -Force $launcherZip -ErrorAction SilentlyContinue
+Compress-Archive -Path "$dist\MinecraftClaudeLauncher" -DestinationPath $launcherZip
+Write-Host "Launcher: $dist\MinecraftClaudeLauncher\MinecraftClaudeLauncher.exe"
+Write-Host "Zip:      $launcherZip"

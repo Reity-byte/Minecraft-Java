@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           JAR=$(ls target/minecraft-base-*.jar | grep -v original | head -n 1)
-          VERSION=$(basename "$JAR" .jar | sed 's/minecraft-base-//')
+          VERSION=$(basename "$JAR" .jar | grep -oE '[0-9]+(\.[0-9]+)*' | head -n 1)
           mkdir -p target/jpackage-input dist
           cp "$JAR" target/jpackage-input/
           EXTRA=""
@@ -64,19 +64,29 @@ jobs:
             --java-options -Djava.awt.headless=true \
             --java-options --enable-native-access=ALL-UNNAMED \
             $EXTRA --dest dist
+          # Launcher: totez jadro, vstup LauncherMain; hru si stahne odtud z Releases.
+          jpackage --type app-image --name MinecraftClaudeLauncher --app-version "$VERSION" \
+            --input target/jpackage-input --main-jar "$(basename "$JAR")" --main-class mc.LauncherMain \
+            --add-modules java.base,java.desktop,java.logging,java.net.http,jdk.unsupported \
+            --dest dist
           cd dist
           if [ "$RUNNER_OS" = "Windows" ]; then
             7z a -tzip "MinecraftClaude-${{ matrix.name }}.zip" MinecraftClaude > /dev/null
+            7z a -tzip "MinecraftClaudeLauncher-${{ matrix.name }}.zip" MinecraftClaudeLauncher > /dev/null
           elif [ "$RUNNER_OS" = "macOS" ]; then
             ditto -c -k --keepParent MinecraftClaude.app "MinecraftClaude-${{ matrix.name }}.zip"
+            ditto -c -k --keepParent MinecraftClaudeLauncher.app "MinecraftClaudeLauncher-${{ matrix.name }}.zip"
           else
             tar czf "MinecraftClaude-${{ matrix.name }}.tar.gz" MinecraftClaude
+            tar czf "MinecraftClaudeLauncher-${{ matrix.name }}.tar.gz" MinecraftClaudeLauncher
           fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: MinecraftClaude-${{ matrix.name }}
-          path: dist/MinecraftClaude-${{ matrix.name }}.*
+          path: |
+            dist/MinecraftClaude-${{ matrix.name }}.*
+            dist/MinecraftClaudeLauncher-${{ matrix.name }}.*
 
   release:
     needs: package
