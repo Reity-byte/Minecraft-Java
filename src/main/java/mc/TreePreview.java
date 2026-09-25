@@ -326,6 +326,9 @@ public class TreePreview {
         int baseX = (X >> Chunk.BITS) << Chunk.BITS;
         int baseZ = (Z >> Chunk.BITS) << Chunk.BITS;
 
+        // Neprůhledný průchod bez míchání, jako ve světě (viz BlockPreview).
+        glDisable(GL_BLEND);
+
         for(int section = 0; section < meshes.length; section++)
         {
             if(meshes[section] == null)

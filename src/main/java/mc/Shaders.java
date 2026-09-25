@@ -157,13 +157,15 @@ public class Shaders {
 
             uniform sampler2D uAtlas;
             uniform float uLight;
+            uniform float uKeepAlpha;   // 1 = voda v ruce, 0 = ostatní i holá ruka
 
             out vec4 fragColor;
 
             void main()
             {
                 vec4 texel = texture(uAtlas, vUv);
-                fragColor = vec4(texel.rgb * vShade * uLight, texel.a);
+                // Stejné pravidlo jako ikona a svět: alfa platí jen u vody.
+                fragColor = vec4(texel.rgb * vShade * uLight, mix(1.0, texel.a, uKeepAlpha));
             }
             """;
 
@@ -323,16 +325,19 @@ public class Shaders {
             layout (location = 0) in vec2 aPos;    // v pixelech, (0,0) vlevo dole
             layout (location = 1) in vec2 aUv;
             layout (location = 2) in float aShade;
+            layout (location = 3) in float aKeepAlpha;   // 1 = voda, 0 = ostatní
 
             uniform vec2 uScreenSize;
 
             out vec2 vUv;
             out float vShade;
+            out float vKeepAlpha;
 
             void main()
             {
                 vUv = aUv;
                 vShade = aShade;
+                vKeepAlpha = aKeepAlpha;
 
                 vec2 ndc = (aPos / uScreenSize) * 2.0 - 1.0;
                 gl_Position = vec4(ndc, 0.0, 1.0);
@@ -344,6 +349,7 @@ public class Shaders {
 
             in vec2 vUv;
             in float vShade;
+            in float vKeepAlpha;
 
             uniform sampler2D uAtlas;
 
@@ -352,7 +358,10 @@ public class Shaders {
             void main()
             {
                 vec4 texel = texture(uAtlas, vUv);
-                fragColor = vec4(texel.rgb * vShade, texel.a);
+                // Alfa jen u bloku, který je průhledný i ve světě (voda).
+                // Ostatní jdou ve světě neprůhledným průchodem, kde se alfa
+                // zahodí - průhledný pixel tam má svou barvu, tak i tady.
+                fragColor = vec4(texel.rgb * vShade, mix(1.0, texel.a, vKeepAlpha));
             }
             """;
 

@@ -135,7 +135,7 @@ public class ChunkMesh {
 
                     // Voda jde do průhledného bufferu a řídí se jiným pravidlem
                     // viditelnosti - viz visible().
-                    emitTransparent = id == World.WATER;
+                    emitTransparent = World.isTranslucent(id);
 
                     int wx = baseX + lx;
                     int wy = baseY + ly;

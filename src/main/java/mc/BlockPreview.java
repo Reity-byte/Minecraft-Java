@@ -182,6 +182,9 @@ public class BlockPreview {
         glBindTexture(GL_TEXTURE_2D, atlas.id());
         shader.setInt("uAtlas", 0);
 
+        // Neprůhledný průchod bez míchání, jako ve světě - průhledný pixel
+        // bloku z labu má svou barvu. Výslovně: náhled leží uprostřed UI.
+        glDisable(GL_BLEND);
         mesh.drawOpaque();
 
         // Voda: druhý průchod s mícháním a bez zápisu hloubky, jako ve světě.

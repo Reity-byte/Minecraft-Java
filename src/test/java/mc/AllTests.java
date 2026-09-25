@@ -173,6 +173,10 @@ public class AllTests {
         CreativeTest.main(args);
         failures += CreativeTest.failures;
 
+        System.out.println(NEWLINE + "========== BlockIconTest ==========");
+        BlockIconTest.main(args);
+        failures += BlockIconTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

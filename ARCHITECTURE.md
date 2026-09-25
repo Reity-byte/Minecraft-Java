@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2256 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2296 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -79,6 +79,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `AsyncTest` | Async generování: shoda se synchronním blok po bloku, nejhorší `update()` při chůzi, omezený počet sloupců, kritický okruh, `shutdown()` |
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
+| `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty |
 | `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků** (podle tvaru každého druhu), kmen stojí na zemi, řetěz kmen→prkna→stůl pro všechna tři dřeva, vlastní dlaždice každého druhu, a **změřená hustota a druh stromu v každém biomu** |
 | `AtlasTest` | Mapování blok+stěna → dlaždice, UV uvnitř atlasu, půltexelové zúžení, obsah a determinismus textur |
@@ -188,7 +189,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `Hud` — zaměřovač, hotbar s izometrickými kostkami, ladicí výpis, loading screen
 - `Menu` — tlačítka s bevelem, animované zvýraznění, hit-testing
 - `ContainerScreen` — kreslení a myš (klik, shift-klik, tažení) nad **seznamem mřížek**; jedna třída pro inventář, crafting table i creative přehled (mřížka s příznakem `infinite` a rolováním)
-- `BlockIcon` — izometrická kostka bloku, sdílená hotbarem i sloty
+- `BlockIcon` — izometrická kostka bloku, sdílená hotbarem i sloty; stavba vrcholů je statická čistá funkce `build()` (**testovatelná bez GL**)
 
 **Lab (F6)**
 - `TextureLab` — **hub labu**: seznam módů, boční panel, panel, stavový řádek; a k tomu
@@ -1819,6 +1820,16 @@ postavě se stýkají v hranách, a rukáv, který na plátně navazuje, může 
 vedle. Póza je jedna, klidová (`PlayerPose.REST`). **Otáčí se kamera, ne postava** — ztmavení
 stěn je vázané na osy SVĚTA, takže otáčením postavy by se točily i odstíny a náhled by
 ukazoval něco, co ve hře nikdy neuvidíš.
+
+**⚠️ Průhledný pixel (guma) je VŠUDE tím, čím ve světě: svou barvou, tedy černý.** Svět
+kreslí bloky i postavu ve třetí osobě neprůhledným průchodem, kde se alfa zahodí — jen voda
+jde průhledným (`World.isTranslucent()`, jediné místo, kde to je napsané; ptá se ho i
+mesher). Náhled kůže, holá ruka, blok v ruce a ikona dřív alfu míchaly, takže vygumovaný
+pixel trička byl v náhledu díra a ve hře po F5 černá skvrna, a blok z labu měl v inventáři
+díru a ve světě černou skvrnu. Teď: náhledy (kůže, bloku, stromu) kreslí neprůhledný průchod
+výslovně bez míchání, ruka má uniform `uKeepAlpha` a ikona příznak „alfa platí“ ve vrcholu
+— obojí 1 jen u vody. Ověřeno sondou s GL: vygumovaný kámen je v ikoně, v ruce i v náhledu
+černý, voda v ikoně průhledná. Odpovídá to i vanille (základní vrstva kůže je krycí).
 
 **⚠️ Mesh náhledu se staví JEDNOU.** Vrcholy jsou stavěné s kamerou v počátku a kamera
 obíhá jen uniformem `uChunkOffset` — kdyby byly relativní k oku jako ve hře, musel by se

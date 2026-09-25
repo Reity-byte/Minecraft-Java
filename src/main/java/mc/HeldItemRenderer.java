@@ -133,6 +133,11 @@ public class HeldItemRenderer {
         glBindTexture(GL_TEXTURE_2D, isBareHand(block) ? skin.id() : atlas.id());
         shader.setInt("uAtlas", 0);
 
+        // Alfa jen u vody, jako ve světě: blok z labu s vygumovaným pixelem
+        // má v ruce černou skvrnu stejně jako položený, a holá ruka taky -
+        // postava ve třetí osobě se kreslí bez míchání.
+        shader.setFloat("uKeepAlpha", !isBareHand(block) && World.isTranslucent(block) ? 1f : 0f);
+
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 

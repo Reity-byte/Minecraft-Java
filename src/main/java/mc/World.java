@@ -764,6 +764,18 @@ public class World {
      * Voda: nic z toho. Pochodeň: jde rozbít, ale projde se skrz a nezakrývá.
      * Plot: zastaví hráče, ale nezakrývá - je to jen sloupek uprostřed bloku.
      */
+    /**
+     * Kreslí se blok průhledným průchodem, kde platí alfa textury? Jen voda.
+     *
+     * ⚠️ Všechno ostatní jde neprůhledným průchodem a alfa se tam zahodí:
+     * pixel s alfou 0 má ve světě svou barvu (guma z labu = černá). Ikona,
+     * ruka i náhled kůže se tímhle řídí taky, aby ukazovaly totéž co svět.
+     */
+    public static boolean isTranslucent(byte blockId)
+    {
+        return blockId == WATER;
+    }
+
     public static boolean isOpaque(byte blockId)
     {
         // Blok z labu je vždycky plná krychle, takže rozhodují jen jeho data.

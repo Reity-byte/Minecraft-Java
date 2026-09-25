@@ -133,12 +133,14 @@ public class SkinPreview {
         glBindTexture(GL_TEXTURE_2D, skin.id());
         shader.setInt("uAtlas", 0);
 
-        // Průhledné pixely skinu (nepokrytá místa šablony) se musí míchat,
-        // jinak by z nich byly černé díry.
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        mesh.drawSkin();
+        // ⚠️ BEZ MÍCHÁNÍ, stejně jako postava ve třetí osobě (WorldRenderer.
+        // drawPlayer). Náhled dřív míchal, takže vygumovaný pixel trička byl
+        // tady díra a ve hře po F5 černá skvrna - náhled, který má ukazovat
+        // hru, lhal. Model sahá jen na pokryté části šablony, takže nepokrytá
+        // (průhledná) místa kůže se na něm neobjeví ani tak. Vypíná se
+        // výslovně: náhled se kreslí uprostřed UI, které míchání zapíná.
         glDisable(GL_BLEND);
+        mesh.drawSkin();
 
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);

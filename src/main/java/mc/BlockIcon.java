@@ -18,8 +18,14 @@ import static org.lwjgl.opengl.GL33.*;
  * Textura se bere z blokového atlasu a UV z rozsahu kvádru - přesně jako
  * v ChunkMesh, takže ikona a blok ve světě vypadají stejně.
  *
- * Vlastní shader a VAO: vertex je pozice(2) + uv(2) + odstín(1), což se
- * do formátu Renderer2D (pozice + barva) nevejde.
+ * Vlastní shader a VAO: vertex je pozice(2) + uv(2) + odstín(1) + "alfa
+ * platí"(1), což se do formátu Renderer2D (pozice + barva) nevejde.
+ *
+ * ⚠️ PRŮHLEDNÝ PIXEL JE V IKONĚ TÍMŽ, ČÍM VE SVĚTĚ. Svět kreslí bloky
+ * neprůhledným průchodem, takže pixel s alfou 0 má svou barvu (guma =
+ * černá) - jen voda jde průhledným. Ikona dřív alfu míchala všem, takže
+ * blok z labu měl v inventáři díru a ve světě černou skvrnu. Teď alfu
+ * bere jen blok, který je průhledný i ve světě (World.isTranslucent).
  *
  * ⚠️ JEDEN DRAW CALL NA CELOU DÁVKU begin() … end(), NE NA KVÁDR. Dřív
  * každý kvádr každé ikony dělal vlastní glBufferSubData do téhož místa téhož
@@ -39,15 +45,15 @@ import static org.lwjgl.opengl.GL33.*;
 public class BlockIcon {
 
     // Stejné odstíny jako SHADE_* v ChunkMesh, aby ikona seděla se světem.
-    private static final float SHADE_TOP   = 1.00f;
-    private static final float SHADE_LEFT  = 0.80f;   // stěna +Z
-    private static final float SHADE_RIGHT = 0.60f;   // stěna +X
+    static final float SHADE_TOP   = 1.00f;
+    static final float SHADE_LEFT  = 0.80f;   // stěna +Z
+    static final float SHADE_RIGHT = 0.60f;   // stěna +X
 
-    private static final int FLOATS_PER_VERTEX = 5;
-    private static final int VERTICES_PER_QUAD = 6;
+    static final int FLOATS_PER_VERTEX = 6;
+    static final int VERTICES_PER_QUAD = 6;
 
     /** Tři viditelné stěny na kvádr. */
-    private static final int FLOATS_PER_BOX = 3 * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+    static final int FLOATS_PER_BOX = 3 * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
 
     /** Počáteční místo: zhruba plný creative inventář krychlí. Roste podle potřeby. */
     private static final int INITIAL_FLOATS = 96 * FLOATS_PER_BOX;
@@ -64,9 +70,6 @@ public class BlockIcon {
     private FloatBuffer upload = BufferUtils.createFloatBuffer(INITIAL_FLOATS);
 
     private int floats = 0;
-
-    // Střed a měřítko aktuálně kreslené ikony - viz project().
-    private float centerX, centerY, halfWidth, quarter;
 
     public BlockIcon(Texture atlas)
     {
@@ -86,6 +89,8 @@ public class BlockIcon {
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(2, 1, GL_FLOAT, false, stride, 4L * Float.BYTES);
         glEnableVertexAttribArray(2);
+        glVertexAttribPointer(3, 1, GL_FLOAT, false, stride, 5L * Float.BYTES);
+        glEnableVertexAttribArray(3);
 
         glBindVertexArray(0);
     }
@@ -121,54 +126,80 @@ public class BlockIcon {
 
     /**
      * Nakreslí blok jako izometrický tvar do čtverce o straně size.
+     * Jen složí vrcholy do dávky; na grafiku jdou až v end().
+     */
+    public void draw(float x, float y, float size, byte block)
+    {
+        int needed = floatsFor(block);
+
+        if(floats + needed > scratch.length)
+        {
+            scratch = Arrays.copyOf(scratch, Math.max(scratch.length * 2, floats + needed));
+        }
+
+        floats = build(block, x, y, size, scratch, floats);
+    }
+
+    // ------------------------------------------------------------------
+    // geometrie - čistá funkce, bez GL (testuje BlockIconTest)
+    // ------------------------------------------------------------------
+    //
+    // ⚠️ PROČ STATICKY. GL je už v konstruktoru (shader, VAO), takže dokud
+    // stavba vrcholů byla metoda instance, nešlo pořadí rohů, UV ani odstíny
+    // ověřit bez okna. U ruky, postavy i položek na zemi je stavba čistá
+    // funkce a testovaná - a chyba "culling potichu schová celou oblohu"
+    // už jednou nastala (kvůli ní je SkyTest).
+
+    /** Kolik floatů zabere ikona tohohle bloku. */
+    static int floatsFor(byte block)
+    {
+        return BlockModels.of(block).length * FLOATS_PER_BOX;
+    }
+
+    /**
+     * Vrcholy ikony do out od offset; vrací offset za posledním zapsaným.
      *
      * Vidět jsou vždycky jen tři stěny každého kvádru: horní (+Y), levá (+Z)
      * a pravá (+X). Zbylé tři jsou odvrácené, takže se nekreslí vůbec - žádný
      * depth test tu není a kreslit je by znamenalo, že by mohly přebít ty přední.
+     *
+     * Vrchol je pozice(2) + uv(2) + odstín(1) + "alfa platí"(1), viz
+     * `World.isTranslucent()`.
      */
-    public void draw(float x, float y, float size, byte block)
+    static int build(byte block, float x, float y, float size, float[] out, int offset)
     {
-        centerX = x + size / 2f;
-        centerY = y + size / 2f;
-        halfWidth = size / 2f;
-        quarter = size / 4f;
+        Iso iso = new Iso(x + size / 2f, y + size / 2f, size / 2f, size / 4f);
+        float alpha = World.isTranslucent(block) ? 1f : 0f;
 
         int top = BlockAtlas.tile(block, BlockAtlas.FACE_TOP);
         int side = BlockAtlas.tile(block, BlockAtlas.FACE_SIDE);
+        int at = offset;
 
         for(BlockModels.BlockBox box : BlockModels.of(block))
         {
-            ensureRoom();
-
             // Horní stěna (+Y): u podle x, v podle z.
-            face(top, SHADE_TOP,
+            at = face(out, at, iso, top, SHADE_TOP, alpha,
                     box.minX(), box.maxY(), box.minZ(),  box.minX(), box.minZ(),
                     box.minX(), box.maxY(), box.maxZ(),  box.minX(), box.maxZ(),
                     box.maxX(), box.maxY(), box.maxZ(),  box.maxX(), box.maxZ(),
                     box.maxX(), box.maxY(), box.minZ(),  box.maxX(), box.minZ());
 
             // Levá stěna (+Z): u podle x, v podle y.
-            face(side, SHADE_LEFT,
+            at = face(out, at, iso, side, SHADE_LEFT, alpha,
                     box.maxX(), box.maxY(), box.maxZ(),  box.maxX(), box.maxY(),
                     box.minX(), box.maxY(), box.maxZ(),  box.minX(), box.maxY(),
                     box.minX(), box.minY(), box.maxZ(),  box.minX(), box.minY(),
                     box.maxX(), box.minY(), box.maxZ(),  box.maxX(), box.minY());
 
             // Pravá stěna (+X): u podle z, v podle y.
-            face(side, SHADE_RIGHT,
+            at = face(out, at, iso, side, SHADE_RIGHT, alpha,
                     box.maxX(), box.maxY(), box.maxZ(),  box.maxZ(), box.maxY(),
                     box.maxX(), box.minY(), box.maxZ(),  box.maxZ(), box.minY(),
                     box.maxX(), box.minY(), box.minZ(),  box.minZ(), box.minY(),
                     box.maxX(), box.maxY(), box.minZ(),  box.minZ(), box.maxY());
         }
-    }
 
-    private void ensureRoom()
-    {
-        if(floats + FLOATS_PER_BOX > scratch.length)
-        {
-            scratch = Arrays.copyOf(scratch, scratch.length * 2);
-        }
+        return at;
     }
 
     /**
@@ -177,33 +208,37 @@ public class BlockIcon {
      * Poměr 2:1 - posun o blok do strany je půl šířky ikony vodorovně
      * a čtvrtina svisle, posun nahoru je polovina výšky.
      */
-    private float projectX(float bx, float bz)
-    {
-        return centerX + (bx - bz) * halfWidth;
-    }
+    private record Iso(float centerX, float centerY, float halfWidth, float quarter) {
 
-    private float projectY(float bx, float by, float bz)
-    {
-        return centerY + (2f - bx - bz) * quarter + (by - 1f) * 2f * quarter;
+        float x(float bx, float bz)
+        {
+            return centerX + (bx - bz) * halfWidth;
+        }
+
+        float y(float bx, float by, float bz)
+        {
+            return centerY + (2f - bx - bz) * quarter + (by - 1f) * 2f * quarter;
+        }
     }
 
     /** Jedna stěna: čtyři rohy, každý se svou pozicí v bloku a svým (u, v) v dlaždici. */
-    private void face(int tile, float shade,
-                      float ax, float ay, float az, float au, float av,
-                      float bx, float by, float bz, float bu, float bv,
-                      float cx, float cy, float cz, float cu, float cv,
-                      float dx, float dy, float dz, float du, float dv)
+    private static int face(float[] out, int at, Iso iso, int tile, float shade, float alpha,
+                            float ax, float ay, float az, float au, float av,
+                            float bx, float by, float bz, float bu, float bv,
+                            float cx, float cy, float cz, float cu, float cv,
+                            float dx, float dy, float dz, float du, float dv)
     {
         float u0 = BlockAtlas.u0(tile), u1 = BlockAtlas.u1(tile);
         float v0 = BlockAtlas.v0(tile), v1 = BlockAtlas.v1(tile);
 
-        vertex(projectX(ax, az), projectY(ax, ay, az), lerp(u0, u1, au), lerp(v0, v1, av), shade);
-        vertex(projectX(bx, bz), projectY(bx, by, bz), lerp(u0, u1, bu), lerp(v0, v1, bv), shade);
-        vertex(projectX(cx, cz), projectY(cx, cy, cz), lerp(u0, u1, cu), lerp(v0, v1, cv), shade);
+        at = vertex(out, at, iso.x(ax, az), iso.y(ax, ay, az), lerp(u0, u1, au), lerp(v0, v1, av), shade, alpha);
+        at = vertex(out, at, iso.x(bx, bz), iso.y(bx, by, bz), lerp(u0, u1, bu), lerp(v0, v1, bv), shade, alpha);
+        at = vertex(out, at, iso.x(cx, cz), iso.y(cx, cy, cz), lerp(u0, u1, cu), lerp(v0, v1, cv), shade, alpha);
 
-        vertex(projectX(ax, az), projectY(ax, ay, az), lerp(u0, u1, au), lerp(v0, v1, av), shade);
-        vertex(projectX(cx, cz), projectY(cx, cy, cz), lerp(u0, u1, cu), lerp(v0, v1, cv), shade);
-        vertex(projectX(dx, dz), projectY(dx, dy, dz), lerp(u0, u1, du), lerp(v0, v1, dv), shade);
+        at = vertex(out, at, iso.x(ax, az), iso.y(ax, ay, az), lerp(u0, u1, au), lerp(v0, v1, av), shade, alpha);
+        at = vertex(out, at, iso.x(cx, cz), iso.y(cx, cy, cz), lerp(u0, u1, cu), lerp(v0, v1, cv), shade, alpha);
+        at = vertex(out, at, iso.x(dx, dz), iso.y(dx, dy, dz), lerp(u0, u1, du), lerp(v0, v1, dv), shade, alpha);
+        return at;
     }
 
     private static float lerp(float a, float b, float t)
@@ -211,13 +246,16 @@ public class BlockIcon {
         return a + (b - a) * t;
     }
 
-    private void vertex(float x, float y, float u, float v, float shade)
+    private static int vertex(float[] out, int at, float x, float y, float u, float v,
+                              float shade, float alpha)
     {
-        scratch[floats++] = x;
-        scratch[floats++] = y;
-        scratch[floats++] = u;
-        scratch[floats++] = v;
-        scratch[floats++] = shade;
+        out[at++] = x;
+        out[at++] = y;
+        out[at++] = u;
+        out[at++] = v;
+        out[at++] = shade;
+        out[at++] = alpha;
+        return at;
     }
 
     private void flush()
