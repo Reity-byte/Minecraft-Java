@@ -56,6 +56,17 @@ public final class RecipeLab implements LabMode {
     private int result = World.STONE;
     private int resultCount = 1;
 
+    /**
+     * Režim Smelting: recept pro pec (SmeltBook) místo crafting receptu.
+     * Surovina je jedna věc v prostředním políčku; výsledek a počet sdílí
+     * s craftingem. Obě rozepsané práce přežijí přepnutí režimu.
+     */
+    private boolean smelting = false;
+    private ItemStack smeltInput = ItemStack.EMPTY;
+
+    /** Prostřední políčko mřížky 3x3 - tam leží surovina tavení. */
+    static final int SMELT_CELL = 4;
+
     /** O kolik řádků je přehled bloků odrolovaný. */
     private int pickerScroll = 0;
 
@@ -150,7 +161,104 @@ public final class RecipeLab implements LabMode {
     public boolean unsaved()
     {
         Recipes.Recipe draft = draft();
-        return draft != null && !RecipeBook.active().containsPattern(draft);
+        Smelting.Recipe smelt = smeltDraft();
+        return (draft != null && !RecipeBook.active().containsPattern(draft))
+                || (smelt != null && !smelt.equals(SmeltBook.active().find(smelt.input())));
+    }
+
+    // ------------------------------------------------------------------
+    // tavení
+    // ------------------------------------------------------------------
+
+    boolean isSmelting()
+    {
+        return smelting;
+    }
+
+    void setSmelting(boolean on)
+    {
+        smelting = on;
+    }
+
+    void setSmeltInput(int id)
+    {
+        smeltInput = ItemStack.of(id, 1);
+    }
+
+    /** Rozepsaný recept tavení, nebo null bez suroviny. */
+    Smelting.Recipe smeltDraft()
+    {
+        return smeltInput.isEmpty() ? null : new Smelting.Recipe(smeltInput.id(), result, resultCount);
+    }
+
+    /** Proč recept tavení nejde uložit, nebo null. */
+    String smeltProblem()
+    {
+        Smelting.Recipe draft = smeltDraft();
+
+        if(draft == null)
+        {
+            return "Put one block or item in the middle";
+        }
+
+        String invalid = SmeltBook.validate(draft);
+
+        if(invalid != null)
+        {
+            return invalid;
+        }
+
+        if(draft.equals(SmeltBook.active().find(draft.input())))
+        {
+            return "This smelting recipe is already saved";
+        }
+
+        return null;
+    }
+
+    /** Uloží recept tavení (nahradí dosavadní pro tutéž surovinu) a aktivuje ho. */
+    void saveSmelting()
+    {
+        String problem = smeltProblem();
+
+        if(problem != null)
+        {
+            say(problem);
+            return;
+        }
+
+        SmeltBook updated = SmeltBook.active().with(smeltDraft());
+
+        if(!updated.save(SmeltBook.FILE))
+        {
+            say(SafeFiles.writeFailed(SmeltBook.FILE));
+            return;
+        }
+
+        SmeltBook.activate(updated);
+        say("Saved - " + Items.name(smeltInput.id()) + " smelts to " + Items.name(result)
+                + " x" + resultCount + ", works right now");
+    }
+
+    /** Smaže recept tavení z labu pro surovinu v políčku. */
+    void deleteSmelting()
+    {
+        SmeltBook updated = SmeltBook.active().without(smeltInput.id());
+
+        if(!updated.save(SmeltBook.FILE))
+        {
+            say(SafeFiles.writeFailed(SmeltBook.FILE));
+            return;
+        }
+
+        SmeltBook.activate(updated);
+        say("Deleted the smelting recipe for " + Items.name(smeltInput.id()));
+    }
+
+    /** Má surovina v políčku recept tavení z labu (ten jde smazat)? */
+    private boolean hasLabSmelting()
+    {
+        return !smeltInput.isEmpty() && SmeltBook.active().find(smeltInput.id()) != null;
     }
 
     /**
@@ -278,6 +386,14 @@ public final class RecipeLab implements LabMode {
 
         if(cell >= 0)
         {
+            // Tavení má jen jednu surovinu - kamkoliv do mřížky se klikne,
+            // jde do prostředního políčka.
+            if(smelting)
+            {
+                smeltInput = left ? ItemStack.of(picked, 1) : ItemStack.EMPTY;
+                return false;
+            }
+
             // Levé tlačítko položí vybraný blok, pravé buňku vyprázdní -
             // stejné rozdělení jako u malování a kapátka v ostatních módech.
             grid.set(cell, left ? ItemStack.of(picked, 1) : ItemStack.EMPTY);
@@ -319,16 +435,43 @@ public final class RecipeLab implements LabMode {
             return false;
         }
 
+        if(layout.hit(TextureLabLayout.RECIPE_KIND, mouseX, mouseY))
+        {
+            smelting = !smelting;
+            say(smelting ? "Smelting: one item in the middle, set the result, Save"
+                    : "Crafting: fill the grid, set the result, Save");
+            return false;
+        }
+
         if(layout.hit(TextureLabLayout.RECIPE_CLEAR, mouseX, mouseY))
         {
-            clear();
-            say("Grid cleared");
+            if(smelting && hasLabSmelting())
+            {
+                deleteSmelting();
+            }
+            else if(smelting)
+            {
+                smeltInput = ItemStack.EMPTY;
+                say("Cleared");
+            }
+            else
+            {
+                clear();
+                say("Grid cleared");
+            }
             return false;
         }
 
         if(layout.hit(TextureLabLayout.RECIPE_SAVE, mouseX, mouseY))
         {
-            save();
+            if(smelting)
+            {
+                saveSmelting();
+            }
+            else
+            {
+                save();
+            }
             return false;
         }
 
@@ -375,7 +518,15 @@ public final class RecipeLab implements LabMode {
     {
         if(key == GLFW_KEY_DELETE || key == GLFW_KEY_BACKSPACE)
         {
-            clear();
+            if(smelting)
+            {
+                smeltInput = ItemStack.EMPTY;
+            }
+            else
+            {
+                clear();
+            }
+
             say("Grid cleared");
             return true;
         }
@@ -425,7 +576,11 @@ public final class RecipeLab implements LabMode {
         {
             for(int column = 0; column < RecipeBook.MAX_SIZE; column++)
             {
-                lab.sunken(layout, screenHeight, TextureLabLayout.recipeCell(column, row));
+                // Při tavení je vidět jen prostřední políčko - surovina.
+                if(!smelting || row * RecipeBook.MAX_SIZE + column == SMELT_CELL)
+                {
+                    lab.sunken(layout, screenHeight, TextureLabLayout.recipeCell(column, row));
+                }
             }
         }
 
@@ -455,6 +610,7 @@ public final class RecipeLab implements LabMode {
         lab.button(layout, screenHeight, TextureLabLayout.RECIPE_SAVE, mouseX, mouseY);
         lab.button(layout, screenHeight, TextureLabLayout.RECIPE_CLEAR, mouseX, mouseY);
         lab.button(layout, screenHeight, TextureLabLayout.RECIPE_CLOSE, mouseX, mouseY);
+        lab.button(layout, screenHeight, TextureLabLayout.RECIPE_KIND, mouseX, mouseY);
         lab.button(layout, screenHeight, TextureLabLayout.RECIPE_LESS, mouseX, mouseY);
         lab.button(layout, screenHeight, TextureLabLayout.RECIPE_MORE, mouseX, mouseY);
 
@@ -482,7 +638,9 @@ public final class RecipeLab implements LabMode {
         {
             for(int column = 0; column < RecipeBook.MAX_SIZE; column++)
             {
-                ItemStack stack = grid.get(row * RecipeBook.MAX_SIZE + column);
+                int index = row * RecipeBook.MAX_SIZE + column;
+                ItemStack stack = !smelting ? grid.get(index)
+                        : index == SMELT_CELL ? smeltInput : ItemStack.EMPTY;
 
                 if(!stack.isEmpty())
                 {
@@ -520,21 +678,32 @@ public final class RecipeLab implements LabMode {
         int scale = layout.scale();
         text.begin(screenWidth, screenHeight, scale);
 
-        String file = SafeFiles.shown(RecipeBook.FILE);
+        String file = SafeFiles.shown(smelting ? SmeltBook.FILE : RecipeBook.FILE);
         lab.label(layout, 8, TextureLabLayout.TITLE_Y,
-                "Lab   recipes: " + file + "   saved: " + RecipeBook.active().size()
+                (smelting ? "Lab   smelting: " : "Lab   recipes: ") + file + "   saved: "
+                        + (smelting ? SmeltBook.active().size() : RecipeBook.active().size())
                         + (unsaved() ? "   (unsaved)" : ""));
 
         lab.centered(layout, TextureLabLayout.RECIPE_SAVE, "Save recipe");
-        lab.centered(layout, TextureLabLayout.RECIPE_CLEAR, "Clear grid");
+        lab.centered(layout, TextureLabLayout.RECIPE_CLEAR,
+                smelting ? (hasLabSmelting() ? "Delete recipe" : "Clear") : "Clear grid");
         lab.centered(layout, TextureLabLayout.RECIPE_CLOSE, "Close  (Esc)");
+        lab.centered(layout, TextureLabLayout.RECIPE_KIND, smelting ? "Mode: Smelting" : "Mode: Crafting");
 
         lab.centered(layout, TextureLabLayout.RECIPE_LESS, "-");
         lab.centered(layout, TextureLabLayout.RECIPE_MORE, "+");
         lab.centered(layout, TextureLabLayout.RECIPE_COUNT, "x" + resultCount);
 
         lab.label(layout, TextureLabLayout.RECIPE_GRID.x(),
-                TextureLabLayout.RECIPE_GRID.y() - 12, "Recipe (same grid as a crafting table)");
+                TextureLabLayout.RECIPE_GRID.y() - 12, smelting
+                        ? "Smelting (one item in the middle)" : "Recipe (same grid as a crafting table)");
+
+        if(smelting)
+        {
+            drawSmeltingInfo(layout);
+            text.end();
+            return;
+        }
 
         lab.label(layout, 8, TextureLabLayout.PICKER_LABEL_Y,
                 "Blocks & items: " + available.size() + " (LMB picks, wheel scrolls)"
@@ -558,6 +727,25 @@ public final class RecipeLab implements LabMode {
         text.end();
     }
 
+    /** Texty režimu Smelting: co surovina dnes dává a jestli jde uložit. */
+    private void drawSmeltingInfo(TextureLabLayout layout)
+    {
+        lab.label(layout, 8, TextureLabLayout.PICKER_LABEL_Y,
+                "Blocks & items: " + available.size() + " (LMB picks, wheel scrolls)"
+                        + "   holding: " + Items.name(picked));
+
+        Smelting.Recipe existing = smeltInput.isEmpty() ? null : Smelting.of(smeltInput.id());
+        String info = existing == null
+                ? "Nothing smelts from this yet"
+                : "Smelts to " + Items.name(existing.result()) + " x" + existing.count()
+                + (Smelting.builtInHas(existing.input()) ? " (built-in)" : " (lab)");
+        lab.label(layout, 8, TextureLabLayout.RECIPE_INFO_Y, info);
+
+        String problem = smeltProblem();
+        lab.label(layout, 8, TextureLabLayout.RECIPE_LIST_Y, problem == null
+                ? "Ready: smelts to " + Items.name(result) + " x" + resultCount : problem);
+    }
+
     /** Nápověda dole podle toho, na čem je myš. */
     @Override
     public String help(TextureLabLayout layout, double mouseX, double mouseY)
@@ -579,10 +767,17 @@ public final class RecipeLab implements LabMode {
 
         if(layout.hit(TextureLabLayout.RECIPE_SAVE, mouseX, mouseY))
         {
-            return "Writes " + SafeFiles.shown(RecipeBook.FILE)
+            return "Writes " + SafeFiles.shown(smelting ? SmeltBook.FILE : RecipeBook.FILE)
                     + " and the recipe works right away, no restart";
         }
 
-        return "Build a recipe: pick a block or item, fill the grid, set the result, Save";
+        if(layout.hit(TextureLabLayout.RECIPE_KIND, mouseX, mouseY))
+        {
+            return "Switch between crafting table recipes and furnace (smelting) recipes";
+        }
+
+        return smelting
+                ? "Smelting: pick a block or item, click the grid, set the result, Save"
+                : "Build a recipe: pick a block or item, fill the grid, set the result, Save";
     }
 }

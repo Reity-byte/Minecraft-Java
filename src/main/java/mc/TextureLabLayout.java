@@ -166,6 +166,8 @@ public final class TextureLabLayout {
     public static final Rect RECIPE_SAVE = new Rect(284, 20, 156, 18);
     public static final Rect RECIPE_CLEAR = new Rect(284, 42, 156, 18);
     public static final Rect RECIPE_CLOSE = new Rect(284, 64, 156, 18);
+    /** Přepínač Crafting / Smelting. */
+    public static final Rect RECIPE_KIND = new Rect(284, 86, 156, 18);
 
     /** Kde se vypisuje, co je v souboru a jestli recept platí. */
     public static final int RECIPE_INFO_Y = 92;

@@ -18,6 +18,7 @@ public class FurnaceTest {
         smelting();
         storage();
         screen();
+        lab();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -218,6 +219,36 @@ public class FurnaceTest {
         out[1] = H - (ContainerScreen.panelBottom(H, scale) + (ContainerScreen.PANEL_HEIGHT - 28 - 18 + 9) * scale);
         craft.click(out[0], out[1], W, H, true, inv2);
         check("crafting vystup dal spotrebuje suroviny", craft.held().id() == World.PLANKS && grid.get(0).isEmpty(), craft.held() + "");
+    }
+
+    /** Recipe Lab v rezimu Smelting - logika bez GL a bez zapisu na disk. */
+    static void lab() {
+        SmeltBook.activate(SmeltBook.empty());
+        RecipeLab lab = new RecipeLab(null, null, null);
+        lab.onEnter();
+        lab.setSmelting(true);
+
+        check("bez suroviny: co chybi", lab.smeltDraft() == null && lab.smeltProblem() != null && !lab.unsaved(), "");
+
+        lab.setSmeltInput(World.SAND);
+        Smelting.Recipe draft = lab.smeltDraft();
+        check("pisek -> vysledek z labu (kamen x1) jde ulozit",
+                draft != null && draft.input() == World.SAND && draft.result() == World.STONE && draft.count() == 1
+                        && lab.smeltProblem() == null && lab.unsaved(), "" + lab.smeltProblem());
+
+        lab.setSmeltInput(World.IRON_ORE);
+        check("zeleznou rudu taví vestaveny recept - lab ji odmitne",
+                lab.smeltProblem() != null && lab.smeltProblem().contains("built-in"), "" + lab.smeltProblem());
+
+        SmeltBook.activate(SmeltBook.empty().with(new Smelting.Recipe(World.SAND, World.STONE, 1)));
+        lab.setSmeltInput(World.SAND);
+        check("ulozeny recept: nic neulozeneho, uz ulozeno",
+                !lab.unsaved() && lab.smeltProblem() != null && lab.smeltProblem().contains("already"), "");
+
+        lab.setSmelting(false);
+        check("crafting rezim ma svou mrizku - taveni ji nezmenilo", lab.grid().get(RecipeLab.SMELT_CELL).isEmpty()
+                && lab.draft() == null, "");
+        SmeltBook.activate(SmeltBook.empty());
     }
 
     static void blocks() {

@@ -932,6 +932,9 @@ public class Main {
 
         RecipeBook.activate(RecipeBook.load(RecipeBook.FILE));
 
+        // Tavení z labu (textures/smelting.json) - taky po předmětech.
+        SmeltBook.activate(SmeltBook.load(SmeltBook.FILE));
+
         // Klávesy z labu (keybinds.json). Nezávislé na všem ostatním -
         // chybějící soubor znamená přesně ty klávesy, které měl Main
         // dřív natvrdo.
