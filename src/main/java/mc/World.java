@@ -81,7 +81,72 @@ public class World {
      * to nepoznají, mají default větev. Ptá se na to creative přehled
      * (CreativeInventory), aby v něm nebyly prázdné položky.
      */
-    public static final byte LAST_BUILT_IN = JUNGLE_LEAVES;
+    /**
+     * Pec. ČTYŘI id, protože svět nese jen bajt na buňku a pec má čelo
+     * (dvířka) na jedné straně: id říká, kam čelo míří. Navenek je to jeden
+     * blok - v inventáři, v creative, v receptech i po vytěžení je to vždycky
+     * FURNACE (čelo na +Z, tedy na jih). Ostatní tři jsou jen "natočení"
+     * a vznikají výhradně položením (orientPlaced).
+     */
+    public static final byte FURNACE       = 21;   // čelo na +Z (jih)
+    public static final byte FURNACE_WEST  = 22;   // čelo na -X
+    public static final byte FURNACE_NORTH = 23;   // čelo na -Z
+    public static final byte FURNACE_EAST  = 24;   // čelo na +X
+
+    public static final byte LAST_BUILT_IN = FURNACE_EAST;
+
+    /** Je to pec (v kterémkoli natočení)? */
+    public static boolean isFurnace(byte blockId)
+    {
+        return blockId >= FURNACE && blockId <= FURNACE_EAST;
+    }
+
+    /**
+     * Je id jen natočená varianta jiného bloku? Takové id se nenabízí
+     * v creative ani v receptech a z vytěžení padá kanonický blok.
+     */
+    public static boolean isVariant(byte blockId)
+    {
+        return blockId > FURNACE && blockId <= FURNACE_EAST;
+    }
+
+    /** Kanonický blok pro variantu (pec v jakémkoli natočení -> FURNACE). */
+    public static byte canonical(byte blockId)
+    {
+        return isFurnace(blockId) ? FURNACE : blockId;
+    }
+
+    /** Stěna, na které má pec čelo (BlockAtlas.FACE_*). */
+    public static int furnaceFront(byte furnace)
+    {
+        return switch(furnace)
+        {
+            case FURNACE_WEST  -> BlockAtlas.FACE_WEST;
+            case FURNACE_NORTH -> BlockAtlas.FACE_NORTH;
+            case FURNACE_EAST  -> BlockAtlas.FACE_EAST;
+            default            -> BlockAtlas.FACE_SOUTH;
+        };
+    }
+
+    /**
+     * Co se opravdu položí, když hráč pokládá blok a dívá se směrem look.
+     * Pec se natočí čelem K HRÁČI (proti pohledu, po převažující vodorovné
+     * ose) - jako v Minecraftu. Ostatní bloky beze změny.
+     */
+    public static byte orientPlaced(byte blockId, float lookX, float lookZ)
+    {
+        if(blockId != FURNACE)
+        {
+            return blockId;
+        }
+
+        if(Math.abs(lookX) > Math.abs(lookZ))
+        {
+            return lookX > 0 ? FURNACE_WEST : FURNACE_EAST;
+        }
+
+        return lookZ > 0 ? FURNACE_NORTH : FURNACE;
+    }
 
     /** Výška světa v blocích. 128 = 8 sekcí po 16. */
     public static final int WORLD_HEIGHT = 128;
@@ -852,6 +917,8 @@ public class World {
             case STONE, STONE_BRICKS -> 1.8f;
             case COAL_ORE -> 2.5f;
             case IRON_ORE -> 3.0f;
+            // Pec je z kamene, ale tvrdší - jako v Minecraftu (3,5 s rukou).
+            case FURNACE, FURNACE_WEST, FURNACE_NORTH, FURNACE_EAST -> 3.5f;
             default -> 0.5f;
         };
     }

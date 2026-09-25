@@ -37,13 +37,16 @@ public final class ItemRegistry {
     // --- vestavěné předměty ---
     public static final int STICK = Items.FIRST_ITEM;
     public static final int COAL = Items.FIRST_ITEM + 1;
+    /** Z pece: železná ruda -> železný ingot. */
+    public static final int IRON_INGOT = Items.FIRST_ITEM + 2;
 
     /** Poslední id vestavěného předmětu. Nový vestavěný předmět ho posune. */
-    public static final int LAST_BUILT_IN = COAL;
+    public static final int LAST_BUILT_IN = IRON_INGOT;
 
     /** Dlaždice vestavěných předmětů v atlasu předmětů. */
     public static final int TILE_STICK = 0;
     public static final int TILE_COAL = 1;
+    public static final int TILE_IRON_INGOT = 2;
 
     /** Kolik dlaždic atlasu předmětů mají vestavěné předměty (rezerva pro další). */
     public static final int BUILT_IN_TILES = 8;
@@ -51,6 +54,7 @@ public final class ItemRegistry {
     private static final ItemDef[] BUILT_IN = {
             ItemDef.plain(STICK, "Stick", TILE_STICK),
             ItemDef.plain(COAL, "Coal", TILE_COAL),
+            ItemDef.plain(IRON_INGOT, "Iron ingot", TILE_IRON_INGOT),
     };
 
     /** Předměty z labu: FIRST_ID až Items.LAST_ID. */

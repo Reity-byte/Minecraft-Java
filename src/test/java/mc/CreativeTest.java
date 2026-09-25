@@ -410,9 +410,9 @@ public class CreativeTest {
 
         // Ocekavany seznam se pocita NEZAVISLE, z rozsahu id, ne z te same metody.
         List<Byte> expected = new ArrayList<>();
-        for (byte id = 1; id <= World.LAST_BUILT_IN; id++) expected.add(id);
+        for (byte id = 1; id <= World.LAST_BUILT_IN; id++) if (!World.isVariant(id)) expected.add(id);
 
-        check("bez blocks.json je v prehledu presne id 1 az LAST_BUILT_IN",
+        check("bez blocks.json je v prehledu presne id 1 az LAST_BUILT_IN (bez natocenych variant)",
                 builtIn.equals(expected), builtIn.size() + " polozek");
         check("vzduch v prehledu neni (je to prazdna bunka, ne blok)",
                 !builtIn.contains(World.AIR) && !CreativeInventory.isPlaceable(World.AIR), "");

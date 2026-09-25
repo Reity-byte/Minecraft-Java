@@ -42,7 +42,8 @@ public final class CreativeInventory {
      */
     public static boolean isPlaceable(byte block)
     {
-        return block > World.AIR && block <= World.LAST_BUILT_IN;
+        // Natočená pec je jen varianta - v přehledu je jednou, jako FURNACE.
+        return block > World.AIR && block <= World.LAST_BUILT_IN && !World.isVariant(block);
     }
 
     /**

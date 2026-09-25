@@ -786,8 +786,12 @@ public class Main {
 
                 // Předmět (klacek, nástroj) se nepokládá - isBlock(), ne
                 // !isEmpty(): block() by u něj dal vzduch a "položil" ho.
+                // Pec se natočí čelem k hráči (World.orientPlaced); ostatní beze změny.
+                float[] look = camera.getLookDirection();
+                byte placed = World.orientPlaced(selected.block(), look[0], look[2]);
+
                 if (selected.isBlock() && !player.intersectsBlock(px, py, pz)
-                        && world.placeBlock(px, py, pz, selected.block())) {
+                        && world.placeBlock(px, py, pz, placed)) {
                     // V creative se z hotbaru neubírá - hráč má čehokoliv
                     // v ruce nekonečno. Rozhoduje o tom mód, ne tenhle kód.
                     mode.afterPlace(inventory, selectedSlot);

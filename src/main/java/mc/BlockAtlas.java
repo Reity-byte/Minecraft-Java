@@ -30,6 +30,16 @@ public final class BlockAtlas {
     public static final int FACE_BOTTOM = 1;
     public static final int FACE_SIDE   = 2;
 
+    /**
+     * Boky podle směru. Rozlišují je jen bloky s čelem (pec); všem ostatním
+     * je každý z nich prostě FACE_SIDE. Mesher, ikona i položka si je berou
+     * zvlášť, takže čelo pece je jen na jedné stěně.
+     */
+    public static final int FACE_EAST  = 3;   // +X
+    public static final int FACE_WEST  = 4;   // -X
+    public static final int FACE_SOUTH = 5;   // +Z
+    public static final int FACE_NORTH = 6;   // -Z
+
     // Indexy dlaždic v atlasu. Přidat blok = nová dlaždice tady,
     // její vykreslení v Textures.blockAtlasPixels() a case v tile().
     // ⚠️ Nové vestavěné dlaždice přidávat ODSPODU (27, 28, ...): texture lab
@@ -72,7 +82,10 @@ public final class BlockAtlas {
     public static final int TILE_SPRUCE_LEAVES    = 33;
     public static final int TILE_JUNGLE_LEAVES    = 34;
 
-    public static final int TILE_COUNT = TILE_JUNGLE_LEAVES + 1;
+    public static final int TILE_FURNACE_FRONT = 35;
+    public static final int TILE_FURNACE_SIDE  = 36;
+    public static final int TILE_FURNACE_TOP   = 37;
+    public static final int TILE_COUNT = TILE_FURNACE_TOP + 1;
 
     /**
      * Půl texelu dovnitř dlaždice.
@@ -97,6 +110,21 @@ public final class BlockAtlas {
      */
     public static int tile(byte blockId, int face)
     {
+        if(World.isFurnace(blockId))
+        {
+            return switch(face)
+            {
+                case FACE_TOP, FACE_BOTTOM -> TILE_FURNACE_TOP;
+                default -> face == World.furnaceFront(blockId) ? TILE_FURNACE_FRONT : TILE_FURNACE_SIDE;
+            };
+        }
+
+        // Směrový bok je pro všechny ostatní bloky obyčejný bok.
+        if(face >= FACE_EAST)
+        {
+            face = FACE_SIDE;
+        }
+
         if(blockId >= BlockRegistry.FIRST_ID)
         {
             BlockDef custom = BlockRegistry.lookup(blockId);

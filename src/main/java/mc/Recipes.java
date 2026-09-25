@@ -69,6 +69,14 @@ public final class Recipes {
                 World.STONE_BRICKS, World.STONE_BRICKS, World.STONE_BRICKS
         }, World.CRAFTING_TABLE, 2));
 
+        // Pec: osm kamenů do kruhu, prostředek prázdný - jako v Minecraftu
+        // (tam z dlažebních kostek, ty tu nejsou). Jen na crafting table.
+        SHAPED.add(new Recipe(3, 3, new int[]{
+                World.STONE, World.STONE, World.STONE,
+                World.STONE, World.AIR,   World.STONE,
+                World.STONE, World.STONE, World.STONE
+        }, World.FURNACE, 1));
+
         // Klacek: dvě prkna nad sebou = čtyři klacky, jako v Minecraftu.
         // Vejde se do malé mřížky - klacky jsou potřeba hned od začátku.
         SHAPED.add(new Recipe(1, 2, new int[]{

@@ -522,7 +522,8 @@ public class ItemTest {
         int stick = ids.indexOf(ItemRegistry.STICK);
         check("creative: predmety az za bloky, vestavene pred labem",
                 stick > 0 && ids.get(stick - 1) < Items.FIRST_ITEM
-                        && ids.indexOf(ItemRegistry.COAL) == stick + 1 && ids.indexOf(ItemRegistry.FIRST_ID) == stick + 2,
+                        && ids.indexOf(ItemRegistry.COAL) == stick + 1
+                        && ids.indexOf(ItemRegistry.FIRST_ID) == stick + ItemRegistry.builtIn().size(),
                 ids.toString());
         check("stare volani bez predmetu da jen bloky",
                 CreativeInventory.container(BlockRegistry.empty()).size() == CreativeInventory.blocks(BlockRegistry.empty()).size(), "");

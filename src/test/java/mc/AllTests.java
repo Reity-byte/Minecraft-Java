@@ -189,6 +189,10 @@ public class AllTests {
         ItemTest.main(args);
         failures += ItemTest.failures;
 
+        System.out.println(NEWLINE + "========== FurnaceTest ==========");
+        FurnaceTest.main(args);
+        failures += FurnaceTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

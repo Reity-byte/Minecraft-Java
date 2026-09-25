@@ -276,9 +276,14 @@ public final class AtlasEditor extends PixelEditor {
                 continue;
             }
 
+            // Boky po jednom podle směru - čelo pece je jen na jednom.
             int faces = (BlockAtlas.tile(block, BlockAtlas.FACE_TOP) == tile ? 1 : 0)
-                    + (BlockAtlas.tile(block, BlockAtlas.FACE_BOTTOM) == tile ? 1 : 0)
-                    + (BlockAtlas.tile(block, BlockAtlas.FACE_SIDE) == tile ? 4 : 0);
+                    + (BlockAtlas.tile(block, BlockAtlas.FACE_BOTTOM) == tile ? 1 : 0);
+
+            for(int face = BlockAtlas.FACE_EAST; face <= BlockAtlas.FACE_NORTH; face++)
+            {
+                faces += BlockAtlas.tile(block, face) == tile ? 1 : 0;
+            }
 
             if(faces > 0)
             {

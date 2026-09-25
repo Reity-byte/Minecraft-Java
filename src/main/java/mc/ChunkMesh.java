@@ -216,7 +216,11 @@ public class ChunkMesh {
 
         int top = BlockAtlas.tile(id, BlockAtlas.FACE_TOP);
         int bottom = BlockAtlas.tile(id, BlockAtlas.FACE_BOTTOM);
-        int side = BlockAtlas.tile(id, BlockAtlas.FACE_SIDE);
+        // Boky zvlášť podle směru - pec má čelo jen na jednom z nich.
+        int east = BlockAtlas.tile(id, BlockAtlas.FACE_EAST);
+        int west = BlockAtlas.tile(id, BlockAtlas.FACE_WEST);
+        int south = BlockAtlas.tile(id, BlockAtlas.FACE_SOUTH);
+        int north = BlockAtlas.tile(id, BlockAtlas.FACE_NORTH);
 
         if(box.maxY() < 1f || visible(up))
         {
@@ -237,28 +241,28 @@ public class ChunkMesh {
             faceLight(world, wx, wy, wz, box.maxX() >= 1f, 1, 0, 0, SHADE_SIDE_X,
                     0, -1, 0,  0, 0, -1);
             addQuad(x1, y0, z0,  x1, y1, z0,  x1, y1, z1,  x1, y0, z1,
-                    side, UV_A, box.minZ(), box.maxZ(), box.minY(), box.maxY());
+                    east, UV_A, box.minZ(), box.maxZ(), box.minY(), box.maxY());
         }
         if(box.minX() > 0f || visible(left))
         {
             faceLight(world, wx, wy, wz, box.minX() <= 0f, -1, 0, 0, SHADE_SIDE_X,
                     0, -1, 0,  0, 0, -1);
             addQuad(x0, y0, z0,  x0, y0, z1,  x0, y1, z1,  x0, y1, z0,
-                    side, UV_B, box.minZ(), box.maxZ(), box.minY(), box.maxY());
+                    west, UV_B, box.minZ(), box.maxZ(), box.minY(), box.maxY());
         }
         if(box.maxZ() < 1f || visible(front))
         {
             faceLight(world, wx, wy, wz, box.maxZ() >= 1f, 0, 0, 1, SHADE_SIDE_Z,
                     -1, 0, 0,  0, -1, 0);
             addQuad(x0, y0, z1,  x1, y0, z1,  x1, y1, z1,  x0, y1, z1,
-                    side, UV_B, box.minX(), box.maxX(), box.minY(), box.maxY());
+                    south, UV_B, box.minX(), box.maxX(), box.minY(), box.maxY());
         }
         if(box.minZ() > 0f || visible(back))
         {
             faceLight(world, wx, wy, wz, box.minZ() <= 0f, 0, 0, -1, SHADE_SIDE_Z,
                     -1, 0, 0,  0, -1, 0);
             addQuad(x0, y0, z0,  x0, y1, z0,  x1, y1, z0,  x1, y0, z0,
-                    side, UV_A, box.minX(), box.maxX(), box.minY(), box.maxY());
+                    north, UV_A, box.minX(), box.maxX(), box.minY(), box.maxY());
         }
     }
 

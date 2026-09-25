@@ -251,7 +251,9 @@ final class BlockDraft {
 
             if(isBuiltin(block))
             {
-                for(int face : FACES)
+                // VŠECHNY stěny, i směrové - čelo pece je jen na jedné z nich
+                // a přes vršek/bok/spodek by ho lab dal novému bloku.
+                for(int face = BlockAtlas.FACE_TOP; face <= BlockAtlas.FACE_NORTH; face++)
                 {
                     used[BlockAtlas.tile(block, face)] = true;
                 }

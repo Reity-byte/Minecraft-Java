@@ -128,7 +128,8 @@ public enum Sound {
                 case World.GRASS, World.DIRT, World.SAND, World.SNOW -> EARTH;
                 case World.PLANKS, World.LOG, World.BIRCH_LOG, World.SPRUCE_LOG,
                      World.FENCE, World.CRAFTING_TABLE, World.TORCH -> WOOD;
-                case World.STONE, World.STONE_BRICKS, World.COAL_ORE, World.IRON_ORE -> STONE;
+                case World.STONE, World.STONE_BRICKS, World.COAL_ORE, World.IRON_ORE,
+                     World.FURNACE, World.FURNACE_WEST, World.FURNACE_NORTH, World.FURNACE_EAST -> STONE;
                 // Stejně jako tvrdost: neznámý blok se chová jako hlína.
                 default -> EARTH;
             };

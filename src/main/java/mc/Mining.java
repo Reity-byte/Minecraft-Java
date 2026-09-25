@@ -217,7 +217,8 @@ public class Mining {
      */
     public static int dropOf(byte mined)
     {
-        return mined == World.COAL_ORE ? ItemRegistry.COAL : mined;
+        // Natočená pec padá jako pec (jeden předmět ve všech natočeních).
+        return mined == World.COAL_ORE ? ItemRegistry.COAL : World.canonical(mined);
     }
 
     /**

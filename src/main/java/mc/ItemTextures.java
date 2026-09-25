@@ -88,6 +88,7 @@ public final class ItemTextures {
         int[] pixels = new int[SIZE * SIZE];
         fillTile(pixels, ItemRegistry.TILE_STICK, ItemTextures::stick);
         fillTile(pixels, ItemRegistry.TILE_COAL, ItemTextures::coal);
+        fillTile(pixels, ItemRegistry.TILE_IRON_INGOT, ItemTextures::ingot);
         return pixels;
     }
 
@@ -185,6 +186,28 @@ public final class ItemTextures {
             return 0xFF4A4A52;                   // odlesk
         }
         return tone == 1 ? 0xFF262628 : 0xFF1C1C1E;
+    }
+
+    /**
+     * Železný ingot: šikmá cihlička (lichoběžník) se světlou horní plochou,
+     * tmavším bokem a obrysem - jako ingot v Minecraftu.
+     */
+    private static int ingot(int x, int y)
+    {
+        // Horní plocha y 7..9, bok y 4..6; zkosení o jeden pixel na řádek.
+        if(y >= 7 && y <= 9 && x >= 3 + (9 - y) && x <= 12 - (y - 7))
+        {
+            return (x + y) % 5 == 0 ? 0xFFF4F4F4 : 0xFFD8D8D8;
+        }
+        if(y >= 4 && y <= 6 && x >= 2 && x <= 13)
+        {
+            return y == 4 ? 0xFF5E5E5E : 0xFF9A9A9A;
+        }
+        if(y == 10 && x >= 5 && x <= 10)
+        {
+            return 0xFF5E5E5E;
+        }
+        return CLEAR;
     }
 
     private static int hash(int x, int y)

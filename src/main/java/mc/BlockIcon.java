@@ -265,7 +265,10 @@ public class BlockIcon {
         float alpha = World.isTranslucent(block) ? 1f : 0f;
 
         int top = BlockAtlas.tile(block, BlockAtlas.FACE_TOP);
-        int side = BlockAtlas.tile(block, BlockAtlas.FACE_SIDE);
+        // Levá stěna ikony je +Z (jih), pravá +X (východ) - pec (FURNACE) tak
+        // ukáže čelo vlevo, jako v Minecraftu.
+        int south = BlockAtlas.tile(block, BlockAtlas.FACE_SOUTH);
+        int east = BlockAtlas.tile(block, BlockAtlas.FACE_EAST);
         int at = offset;
 
         for(BlockModels.BlockBox box : BlockModels.of(block))
@@ -278,14 +281,14 @@ public class BlockIcon {
                     box.maxX(), box.maxY(), box.minZ(),  box.maxX(), box.minZ());
 
             // Levá stěna (+Z): u podle x, v podle y.
-            at = face(out, at, iso, side, SHADE_LEFT, alpha,
+            at = face(out, at, iso, south, SHADE_LEFT, alpha,
                     box.maxX(), box.maxY(), box.maxZ(),  box.maxX(), box.maxY(),
                     box.minX(), box.maxY(), box.maxZ(),  box.minX(), box.maxY(),
                     box.minX(), box.minY(), box.maxZ(),  box.minX(), box.minY(),
                     box.maxX(), box.minY(), box.maxZ(),  box.maxX(), box.minY());
 
             // Pravá stěna (+X): u podle z, v podle y.
-            at = face(out, at, iso, side, SHADE_RIGHT, alpha,
+            at = face(out, at, iso, east, SHADE_RIGHT, alpha,
                     box.maxX(), box.maxY(), box.maxZ(),  box.maxZ(), box.maxY(),
                     box.maxX(), box.minY(), box.maxZ(),  box.maxZ(), box.minY(),
                     box.maxX(), box.minY(), box.minZ(),  box.minZ(), box.minY(),

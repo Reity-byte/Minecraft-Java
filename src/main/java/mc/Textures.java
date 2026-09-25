@@ -340,6 +340,9 @@ public final class Textures {
             case BlockAtlas.TILE_TABLE_TOP  -> tableTop(x, y);
             case BlockAtlas.TILE_COAL_ORE   -> ore(x, y, COAL_TONES, 17);
             case BlockAtlas.TILE_IRON_ORE   -> ore(x, y, IRON_TONES, 91);
+            case BlockAtlas.TILE_FURNACE_SIDE  -> furnaceSide(x, y);
+            case BlockAtlas.TILE_FURNACE_TOP   -> furnaceTop(x, y);
+            case BlockAtlas.TILE_FURNACE_FRONT -> furnaceFront(x, y);
             default -> tile >= BlockAtlas.TILE_CRACK_FIRST
                     && tile < BlockAtlas.TILE_CRACK_FIRST + BlockAtlas.CRACK_STAGES
                     ? crack(x, y, tile - BlockAtlas.TILE_CRACK_FIRST)
@@ -427,6 +430,44 @@ public final class Textures {
 
         // Zrno se táhne vodorovně: podél x se tón mění pomalu, podél y rychle.
         return PLANK_TONES[hash(x >> 1, y) & 3];
+    }
+
+    /** Bok pece: kámen s tmavším rámem po obvodu - vypadá jako tesaný blok. */
+    private static int furnaceSide(int x, int y)
+    {
+        if(x == 0 || y == 0 || x == BlockAtlas.TILE_PIXELS - 1 || y == BlockAtlas.TILE_PIXELS - 1)
+        {
+            return STONE_TONES[3];
+        }
+
+        return STONE_TONES[hash(x + 31, y) & 2];
+    }
+
+    /** Vršek pece: hladší kámen s rámem a spárou uprostřed. */
+    private static int furnaceTop(int x, int y)
+    {
+        if(x == 0 || y == 0 || x == BlockAtlas.TILE_PIXELS - 1 || y == BlockAtlas.TILE_PIXELS - 1 || y == 8)
+        {
+            return STONE_TONES[3];
+        }
+
+        return STONE_TONES[(hash(x, y + 57) & 1)];
+    }
+
+    /**
+     * Čelo pece: bok s tmavým otvorem dole (y 2 až 7) a dvěma příčkami
+     * roštu - na první pohled je poznat, kterou stranou pec kouká.
+     */
+    private static int furnaceFront(int x, int y)
+    {
+        if(x >= 3 && x <= 12 && y >= 2 && y <= 7)
+        {
+            boolean frame = x == 3 || x == 12 || y == 7;
+            boolean grate = y == 4 && x > 3 && x < 12;
+            return frame || grate ? BRICK_SEAM : 0xFF141414;
+        }
+
+        return furnaceSide(x, y);
     }
 
     /** Zdivo: řádky po čtyřech pixelech, svislé spáry ob řádek posunuté. */

@@ -3037,6 +3037,7 @@ public class TextureLab {
             case World.JUNGLE_LEAVES -> "Jungle leaves";
             case World.TORCH -> "Torch";
             case World.FENCE -> "Fence";
+            case World.FURNACE, World.FURNACE_WEST, World.FURNACE_NORTH, World.FURNACE_EAST -> "Furnace";
             default -> "Block " + block;
         };
     }
