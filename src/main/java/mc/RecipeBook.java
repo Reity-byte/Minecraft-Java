@@ -214,9 +214,13 @@ public final class RecipeBook {
             return "unknown result " + recipe.result();
         }
 
-        if(recipe.resultCount() < 1 || recipe.resultCount() > ItemStack.MAX_COUNT)
+        // Výsledek se bere jako JEDNA hromádka - víc, než se jí vejde do slotu
+        // (nástroj: 1), by na kurzoru vytvořilo hromádku přes limit.
+        int limit = Items.maxStack(recipe.result());
+
+        if(recipe.resultCount() < 1 || recipe.resultCount() > limit)
         {
-            return "result count must be 1 to " + ItemStack.MAX_COUNT;
+            return "result count must be 1 to " + limit;
         }
 
         return null;

@@ -27,6 +27,7 @@ public class ItemTest {
             model();
             rendering();
             draft();
+            gameplay();
         } finally {
             ItemRegistry.activate(ItemRegistry.empty());
             RecipeBook.activate(RecipeBook.empty());
@@ -372,6 +373,70 @@ public class ItemTest {
         pixels[AtlasEditor.pixelIndex(ItemRegistry.BUILT_IN_TILES + 1, 3, 3)] = 0xFF123456;
         check("dlazdice predmetu i namalovana se preskoci, kdyz je prazdna jinde",
                 ItemDraft.freeTile(used, pixels, -1) == ItemRegistry.BUILT_IN_TILES + 2, "" + ItemDraft.freeTile(used, pixels, -1));
+    }
+
+    /** Snimku kopani (1/60 s) do rozbiti bloku, s danou veci v ruce. */
+    static int framesToBreak(World w, int x, int y, int z, int heldId) {
+        Mining m = new Mining();
+        Raycaster.RaycastHit hit = new Raycaster.RaycastHit(x, y, z, 0, 1, 0);
+        for (int f = 1; f < 5000; f++) {
+            if (m.update(w, 1f / 60f, true, hit, GameMode.SURVIVAL, heldId)) return f;
+        }
+        return -1;
+    }
+
+    static void gameplay() {
+        ItemRegistry r = ItemRegistry.empty();
+        ItemDef pick = r.define("Pick", 20).withStack(1).withTool(ItemDef.Tool.PICKAXE, 4f);
+        r = r.with(pick);
+        ItemDef axe = r.define("Axe", 21).withStack(1).withTool(ItemDef.Tool.AXE, 2f);
+        r = r.with(axe);
+        ItemRegistry.activate(r);
+
+        check("krumpac na kamen 4x, na hlinu jako ruka",
+                Items.miningSpeed(pick.id(), World.STONE) == 4f && Items.miningSpeed(pick.id(), World.DIRT) == 1f
+                        && Items.miningSpeed(pick.id(), World.IRON_ORE) == 4f, "");
+        check("sekera na drevo, klacek ani blok v ruce nic",
+                Items.miningSpeed(axe.id(), World.LOG) == 2f && Items.miningSpeed(ItemRegistry.STICK, World.STONE) == 1f
+                        && Items.miningSpeed(World.STONE, World.STONE) == 1f, "");
+
+        World w = CreativeTest.arena(100);
+        w.placeBlock(8, 101, 8, World.STONE);
+        int hand = framesToBreak(w, 8, 101, 8, World.AIR);
+        int withPick = framesToBreak(w, 8, 101, 8, pick.id());
+        int withStick = framesToBreak(w, 8, 101, 8, ItemRegistry.STICK);
+        check("kamen krumpacem 4x rychleji nez rukou", Math.abs(hand - 4 * withPick) <= 4 && withStick == hand,
+                hand + " / " + withPick + " / " + withStick);
+
+        check("uhelna ruda da uhli, ostatni bloky samy sebe",
+                Mining.dropOf(World.COAL_ORE) == ItemRegistry.COAL && Mining.dropOf(World.IRON_ORE) == World.IRON_ORE
+                        && Mining.dropOf(World.STONE) == World.STONE, "");
+
+        w.placeBlock(9, 101, 8, World.COAL_ORE);
+        Mining m = new Mining();
+        Raycaster.RaycastHit oreHit = new Raycaster.RaycastHit(9, 101, 8, 0, 1, 0);
+        while (!m.update(w, 1f / 60f, true, oreHit, GameMode.SURVIVAL, pick.id())) { /* kope se */ }
+        DroppedItems drops = new DroppedItems();
+        m.harvest(w, new Inventory(), drops, SoundSink.SILENT);
+        check("vytezena uhelna ruda lezi na zemi jako uhli",
+                drops.size() == 1 && drops.items().get(0).stack().id() == ItemRegistry.COAL, "" + drops.size());
+        w.shutdown();
+        CreativeTest.opened.remove(w);
+
+        // Nastroj se nestackuje.
+        ItemStack one = ItemStack.of(pick.id(), 1);
+        check("nastroj: slot unese jeden kus", one.maxCount() == 1 && one.space() == 0
+                && ItemStack.of(ItemRegistry.STICK, 1).maxCount() == 64 && ItemStack.of(World.STONE, 1).maxCount() == 64, "");
+        Container c = new Container(4);
+        ItemStack rest = c.add(ItemStack.of(pick.id(), 3));
+        check("tri krumpace do tri slotu", rest.isEmpty() && c.get(0).count() == 1 && c.get(1).count() == 1
+                && c.get(2).count() == 1, c.get(0) + " " + c.get(1));
+        check("misto pro krumpace = volne sloty", c.room(one) == 1, "" + c.room(one));
+        check("recept nesmi dat dva nastroje naraz",
+                RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE}, pick.id(), 2)) != null
+                        && RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE}, pick.id(), 1)) == null, "");
+
+        ItemRegistry.activate(ItemRegistry.empty());
     }
 
     static void creativeAndPlacing() {

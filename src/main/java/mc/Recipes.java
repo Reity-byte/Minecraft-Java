@@ -69,10 +69,24 @@ public final class Recipes {
                 World.STONE_BRICKS, World.STONE_BRICKS, World.STONE_BRICKS
         }, World.CRAFTING_TABLE, 2));
 
-        // Plot: tři prkna v řadě. Je to druhý recept, který se do malé mřížky
-        // NEVEJDE - potřebuje tři sloupce, tedy crafting table.
-        SHAPED.add(new Recipe(3, 1, new int[]{
-                World.PLANKS, World.PLANKS, World.PLANKS
+        // Klacek: dvě prkna nad sebou = čtyři klacky, jako v Minecraftu.
+        // Vejde se do malé mřížky - klacky jsou potřeba hned od začátku.
+        SHAPED.add(new Recipe(1, 2, new int[]{
+                World.PLANKS,
+                World.PLANKS
+        }, ItemRegistry.STICK, 4));
+
+        // Pochodeň: uhlí nad klackem = čtyři pochodně, jako v Minecraftu.
+        SHAPED.add(new Recipe(1, 2, new int[]{
+                ItemRegistry.COAL,
+                ItemRegistry.STICK
+        }, World.TORCH, 4));
+
+        // Plot jako v Minecraftu: prkno, klacek, prkno ve dvou řadách = tři
+        // ploty. Potřebuje tři sloupce, tedy crafting table.
+        SHAPED.add(new Recipe(3, 2, new int[]{
+                World.PLANKS, ItemRegistry.STICK, World.PLANKS,
+                World.PLANKS, ItemRegistry.STICK, World.PLANKS
         }, World.FENCE, 3));
 
         // Kmen na čtyři prkna. Tímhle je crafting kompletní: prkna konečně
@@ -87,11 +101,11 @@ public final class Recipes {
         SHAPELESS.add(new Recipe(0, 0, new int[]{World.BIRCH_LOG}, World.PLANKS, 4));
         SHAPELESS.add(new Recipe(0, 0, new int[]{World.SPRUCE_LOG}, World.PLANKS, 4));
 
-        // Pochodeň: prkno a uhlí. V Minecraftu je to klacek místo prkna -
-        // klacek je ale PŘEDMĚT, ne blok, a předměty zatím neexistují
-        // (ItemStack drží id bloku). Až přibudou, recept se opraví.
-        SHAPELESS.add(new Recipe(0, 0, new int[]{World.PLANKS, World.COAL_ORE},
-                World.TORCH, 4));
+        // Uhelná ruda jako blok (z inventáře před zavedením předmětů, nebo
+        // z creative) se dá rozbít na uhlí - jinak by zůstala k ničemu,
+        // pochodeň se z ní už nedělá. V Minecraftu to nejde, tady je to
+        // přechod pro staré světy.
+        SHAPELESS.add(new Recipe(0, 0, new int[]{World.COAL_ORE}, ItemRegistry.COAL, 1));
 
         // Tráva se dá oloupat na hlínu. Jeden kus kdekoliv v mřížce.
         SHAPELESS.add(new Recipe(0, 0, new int[]{World.GRASS}, World.DIRT, 1));

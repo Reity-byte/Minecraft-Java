@@ -113,7 +113,8 @@ public class Container {
                 continue;
             }
 
-            int moved = Math.min(ItemStack.MAX_COUNT, remaining);
+            // Do prázdného slotu jen tolik, kolik se té věci vejde (nástroj 1).
+            int moved = Math.min(stack.maxCount(), remaining);
             slots[i] = stack.withCount(moved);
             remaining -= moved;
         }
@@ -139,7 +140,7 @@ public class Container {
         {
             if(slot.isEmpty())
             {
-                room += ItemStack.MAX_COUNT;
+                room += stack.maxCount();
             }
             else if(slot.sameItem(stack))
             {

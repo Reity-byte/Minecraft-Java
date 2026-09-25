@@ -69,6 +69,20 @@ public class Mining {
     public boolean update(World world, float dt, boolean held, Raycaster.RaycastHit hit,
                           GameMode mode)
     {
+        return update(world, dt, held, hit, mode, World.AIR);
+    }
+
+    /**
+     * Totéž s věcí v ruce (id z Items). Nástroj na materiál bloku kope
+     * toolSpeed-krát rychleji (Items.miningSpeed); cokoliv jiného jako ruka.
+     *
+     * ⚠️ Rychlost se bere KAŽDÝ FRAME, ne při začátku kopání: přepnutí
+     * slotu uprostřed kopání platí hned, postup se nenuluje - jako
+     * v Minecraftu.
+     */
+    public boolean update(World world, float dt, boolean held, Raycaster.RaycastHit hit,
+                          GameMode mode, int heldId)
+    {
         if(!held)
         {
             cancel();
@@ -131,7 +145,7 @@ public class Mining {
         }
         else
         {
-            progress += dt / hardness;
+            progress += dt * Items.miningSpeed(heldId, block) / hardness;
         }
 
         if(progress < 1f)
@@ -192,8 +206,18 @@ public class Mining {
         // se dostane až sebráním (DroppedItems.update, se zvukem PICKUP).
         // Dřív šel rovnou do inventáře a na zem jen to, co se nevešlo.
         // Inventář se tu proto nepoužívá; parametr zůstává kvůli volajícím.
-        drops.dropFromBlock(x, y, z, ItemStack.of(mined, 1));
+        drops.dropFromBlock(x, y, z, ItemStack.of(dropOf(mined), 1));
         return true;
+    }
+
+    /**
+     * Co z vytěženého bloku vypadne. Skoro vždycky blok sám; uhelná ruda
+     * dá uhlí (předmět), jako v Minecraftu. Železná ruda padá dál jako ruda -
+     * pec, která by z ní udělala železo, zatím není.
+     */
+    public static int dropOf(byte mined)
+    {
+        return mined == World.COAL_ORE ? ItemRegistry.COAL : mined;
     }
 
     /**

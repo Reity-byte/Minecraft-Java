@@ -50,10 +50,19 @@ public record ItemStack(int id, int count) {
         return !isEmpty() && Items.isBlock(id);
     }
 
-    /** Kolik se do téhle hromádky ještě vejde. */
+    /**
+     * Kolik kusů téhle věci se vejde do slotu (Items.maxStack): 64,
+     * u nástroje z labu třeba 1. MAX_COUNT je horní mez pro všechno.
+     */
+    public int maxCount()
+    {
+        return Items.maxStack(id);
+    }
+
+    /** Kolik se do téhle hromádky ještě vejde. Prázdný slot unese MAX_COUNT čehokoliv. */
     public int space()
     {
-        return isEmpty() ? MAX_COUNT : MAX_COUNT - count;
+        return isEmpty() ? MAX_COUNT : maxCount() - count;
     }
 
     /**

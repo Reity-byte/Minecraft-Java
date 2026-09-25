@@ -195,23 +195,45 @@ public class ModelTest {
         fences.shutdown();
 
         // ---------- recepty ----------
-        Container row = new Container(9);
-        for (int i = 0; i < 3; i++) row.set(i, ItemStack.of(World.PLANKS, 1));
-        ItemStack fenceResult = Recipes.match(row, 3, 3);
-        check("tri prkna v rade daji tri ploty",
+        // Plot jako v Minecraftu: prkno, klacek, prkno ve dvou radach.
+        Container fenceGrid = new Container(9);
+        for (int row = 0; row < 2; row++) {
+            fenceGrid.set(row * 3, ItemStack.of(World.PLANKS, 1));
+            fenceGrid.set(row * 3 + 1, ItemStack.of(ItemRegistry.STICK, 1));
+            fenceGrid.set(row * 3 + 2, ItemStack.of(World.PLANKS, 1));
+        }
+        ItemStack fenceResult = Recipes.match(fenceGrid, 3, 3);
+        check("prkna a klacky daji tri ploty",
                 fenceResult.block() == World.FENCE && fenceResult.count() == 3,
                 fenceResult.toString());
 
-        Container small = new Container(4);
-        for (int i = 0; i < 3; i++) small.set(i, ItemStack.of(World.PLANKS, 1));
-        check("do male mrizky se plot nevejde", Recipes.match(small, 2, 2).isEmpty(), "");
+        Container row = new Container(9);
+        for (int i = 0; i < 3; i++) row.set(i, ItemStack.of(World.PLANKS, 1));
+        check("tri prkna v rade uz plot nejsou", Recipes.match(row, 3, 3).isEmpty(), "");
+
+        Container sticks = new Container(4);
+        sticks.set(0, ItemStack.of(World.PLANKS, 1));
+        sticks.set(2, ItemStack.of(World.PLANKS, 1));
+        ItemStack stickResult = Recipes.match(sticks, 2, 2);
+        check("dve prkna pod sebou daji ctyri klacky (i v male mrizce)",
+                stickResult.id() == ItemRegistry.STICK && stickResult.count() == 4, stickResult.toString());
 
         Container torchGrid = new Container(4);
-        torchGrid.set(0, ItemStack.of(World.PLANKS, 1));
-        torchGrid.set(3, ItemStack.of(World.COAL_ORE, 1));
+        torchGrid.set(1, ItemStack.of(ItemRegistry.COAL, 1));
+        torchGrid.set(3, ItemStack.of(ItemRegistry.STICK, 1));
         ItemStack torches = Recipes.match(torchGrid, 2, 2);
-        check("prkno a uhli daji ctyri pochodne",
+        check("uhli nad klackem dava ctyri pochodne",
                 torches.block() == World.TORCH && torches.count() == 4, torches.toString());
+
+        Container flipped = new Container(4);
+        flipped.set(1, ItemStack.of(ItemRegistry.STICK, 1));
+        flipped.set(3, ItemStack.of(ItemRegistry.COAL, 1));
+        check("klacek nad uhlim ne (tvarovany recept)", Recipes.match(flipped, 2, 2).isEmpty(), "");
+
+        Container ore = new Container(4);
+        ore.set(2, ItemStack.of(World.COAL_ORE, 1));
+        ItemStack coal = Recipes.match(ore, 2, 2);
+        check("stara uhelna ruda jde rozbit na uhli", coal.id() == ItemRegistry.COAL && coal.count() == 1, coal.toString());
 
         w.shutdown();
         bare.shutdown();

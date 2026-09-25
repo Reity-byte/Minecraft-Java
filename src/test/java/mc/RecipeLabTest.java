@@ -388,14 +388,15 @@ public class RecipeLabTest {
                 check("bezetvary vestaveny: 1x blok " + one[0] + " pozna",
                         Recipes.builtInHasPattern(new Recipes.Recipe(1, 1, one, World.SNOW, 1)), "");
             }
-            check("bezetvary vestaveny: prkno a uhli vedle sebe pozna",
-                    Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
-                            new int[]{World.PLANKS, World.COAL_ORE}, World.SNOW, 1)), "");
-            check("... i pod sebou a v rohu 3x3 (bezetvary = kdekoliv)",
-                    Recipes.builtInHasPattern(new Recipes.Recipe(3, 3, new int[]{
-                            World.COAL_ORE, 0, 0,
-                            0, 0, 0,
-                            0, 0, World.PLANKS}, World.SNOW, 1)), "");
+            check("bezetvary vestaveny: uhelna ruda na uhli pozna",
+                    Recipes.builtInHasPattern(new Recipes.Recipe(1, 1,
+                            new int[]{World.COAL_ORE}, World.SNOW, 1)), "");
+            check("tvarovany vestaveny: dve prkna pod sebou (klacek) pozna",
+                    Recipes.builtInHasPattern(new Recipes.Recipe(1, 2,
+                            new int[]{World.PLANKS, World.PLANKS}, World.SNOW, 1)), "");
+            check("... ale dve prkna vedle sebe ne (tvarovany = na tvaru zalezi)",
+                    !Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
+                            new int[]{World.PLANKS, World.PLANKS}, World.SNOW, 1)), "");
             check("trava s kamenem uz vestaveny neni",
                     !Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
                             new int[]{World.GRASS, World.STONE}, World.SNOW, 1)), "");

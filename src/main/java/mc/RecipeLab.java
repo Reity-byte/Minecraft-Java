@@ -315,7 +315,7 @@ public final class RecipeLab implements LabMode {
 
         if(layout.hit(TextureLabLayout.RECIPE_MORE, mouseX, mouseY))
         {
-            resultCount = Math.min(ItemStack.MAX_COUNT, resultCount + 1);
+            resultCount = Math.min(Items.maxStack(result), resultCount + 1);
             return false;
         }
 

@@ -77,6 +77,34 @@ public final class Items {
         return isItem(id) ? ItemRegistry.lookup(id) : null;
     }
 
+    /**
+     * Kolik kusů se vejde do jednoho slotu: blok (a neznámé id) 64,
+     * předmět podle ItemDef - nástroj typicky 1.
+     */
+    public static int maxStack(int id)
+    {
+        ItemDef def = item(id);
+        return def != null ? def.maxStack() : ItemStack.MAX_COUNT;
+    }
+
+    /**
+     * Kolikrát rychleji se blok kope s touhle věcí v ruce. Nástroj zrychlí
+     * jen materiál, na který je (krumpáč kámen, sekera dřevo, lopata hlínu
+     * - rozdělení Sound.Material, stejné jako tvrdost a zvuky); cokoliv
+     * jiného kope jako ruka, tedy 1.
+     */
+    public static float miningSpeed(int heldId, byte block)
+    {
+        ItemDef def = item(heldId);
+
+        if(def == null || !def.isTool())
+        {
+            return 1f;
+        }
+
+        return def.tool().material == Sound.Material.of(block) ? def.toolSpeed() : 1f;
+    }
+
     /** Jméno věci pro UI (anglicky - font je jen ASCII). */
     public static String name(int id)
     {

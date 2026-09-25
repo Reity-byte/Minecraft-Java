@@ -1726,7 +1726,8 @@ public class Main {
             swing.trigger();
         }
 
-        if (mining.update(world, dt, miningHeld, hit, mode)) {
+        // Věc v ruce rozhoduje o rychlosti: nástroj na svůj materiál kope rychleji.
+        if (mining.update(world, dt, miningHeld, hit, mode, inventory.hotbar(selectedSlot).id())) {
             // Survival: vytěžený kus vypadne na zem, do inventáře ho dá až sebrání.
             // Creative: blok zmizí a nic po něm nezbude.
             mining.harvest(world, inventory, drops, sound, mode);
