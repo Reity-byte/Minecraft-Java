@@ -47,3 +47,28 @@ options.json
 # Spouštěcí skript má natvrdo cestu ke konkrétní instalaci JDK, takže platí
 # jen na jednom stroji - ze stejného důvodu jako options.json.
 run.bat
+
+# Data, která zapisuje hra a laby, do gitu NEPATŘÍ - repo je kód, výtvory
+# zůstávají na stroji, kde vznikly. Bez nich hra běží sama: procedurální
+# atlas a kůže, vestavěné bloky, recepty, klávesy a čísla generátoru.
+#
+# ⚠️ VŠECHNO NEBO NIC. Dřív byl atlas.png a recipes.json v gitu a blocks.json
+# ne: Create v labu jedním klikem zapsal trackovaný atlas a netrackovaný
+# blocks.json, takže checkout atlasu vrátil bloky bez dlaždic (černé kostky)
+# a recept s blokem z labu se v čistém klonu přeskočil. Klávesy mají stejné
+# zdůvodnění jako options.json (nastavení stroje) a ignorované nebyly.
+keybinds.json
+biome_tuning.json
+textures/atlas.png
+textures/skin.png
+textures/blocks.json
+textures/recipes.json
+textures/import.png
+sounds/
+
+# Zálohy a rozepsané zápisy SafeFiles (.bak, .bak.1 až .bak.9, .tmp) - jinak
+# by se záloha ignorovaného souboru ukázala jako nový soubor a git add -A ji
+# commitnul.
+*.bak
+*.bak.*
+*.tmp

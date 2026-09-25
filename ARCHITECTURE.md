@@ -305,6 +305,14 @@ sám o sebe.
 **UI texty anglicky.** Atlas je ASCII 32–126, česká diakritika by padla na fallback `?`.
 Komentáře v kódu zůstávají česky.
 
+**Data z labů a nastavení do gitu nepatří** (`.gitignore`, sekce „Data, která zapisuje hra
+a laby"). Ignorované jsou `saves/`, `options.json`, `keybinds.json`, `biome_tuning.json`,
+všechno, co lab zapisuje do `textures/` (`atlas.png`, `skin.png`, `blocks.json`,
+`recipes.json`, `import.png`), `sounds/` a zálohy `SafeFiles` (`*.bak`, `*.bak.*`, `*.tmp`).
+Dřív byl `atlas.png` a `recipes.json` v gitu a `blocks.json` ne, takže Create v labu jedním
+klikem zapsal trackovaný atlas a netrackovaný registr a checkout je rozvedl. Repo je kód;
+hra bez těch souborů běží s procedurálním atlasem a vestavěným obsahem.
+
 ### Hranaté UI
 
 **⚠️ UI se navrhuje v GUI pixelech a zvětšuje CELÝM číslem.** `Gui.scale()` vybere 2×/3×/4×
@@ -608,8 +616,8 @@ alfu 0xC0, ne nulu) a buněk bloků z labu se netýká vůbec. Je to zrcadlový 
 k `markMissingTiles()`, která vyplňuje buňky bloků z labu šachovnicí.
 
 **⚠️ Atlas ze souboru i z importu dostane obojí** (`Textures.completeAtlas()`). Dřív soubor
-dostal jen vestavěné dlaždice: `atlas.png` starší než `blocks.json` (atlas je v gitu,
-`blocks.json` ne — stačí `git checkout` nebo přepnutí větve) nechal bloky z labu průhledné,
+dostal jen vestavěné dlaždice: `atlas.png` starší než `blocks.json` (atlas byl v gitu,
+`blocks.json` ne — stačil `git checkout` nebo přepnutí větve) nechal bloky z labu průhledné,
 tedy černé kostky bez hlášky. A import PNG v labu nedoplnil ani vestavěné, takže tentýž
 soubor dopadl jinak při startu a jinak přes Import. Šachovnice jde jen do úplně prázdných
 buněk — namalovanou dlaždici z labu nepřepíše.
