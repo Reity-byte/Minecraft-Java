@@ -28,8 +28,10 @@ public class Player {
 
     private static final float GRAVITY  = 28f;
     /**
-     * v² / 2g = 8.4² / 56 = 1.26 bloku. Schválně o kus přes 1 - hráč musí
-     * vyskočit na jednoblokový schod, ale ne na dvoublokový.
+     * v² / 2g = 8.4² / 56 = 1.26 bloku (spojitě). Pevný krok Eulera dá o kus
+     * víc a podle FPS: změřeno 1,33 při 60 FPS, 1,29 při 144, 1,47 při
+     * ≤ 20 FPS. Schválně o kus přes 1 - hráč musí vyskočit na jednoblokový
+     * schod, ale ne na dvoublokový, a to při každém FPS (PhysicsTest).
      */
     private static final float JUMP_VELOCITY     = 8.4f;
     private static final float TERMINAL_VELOCITY = 50f;

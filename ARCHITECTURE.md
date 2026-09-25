@@ -71,6 +71,8 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `DroppedItemTest` | Předměty na zemi: dopad, stabilní ležení, tunelování, zeď, tření, voda, **vytlačení z položeného bloku**, vyhození z ruky, **zpoždění a dosah sběru**, slévání při sběru, plný a skoro plný inventář, zánik (`LIFETIME`, zahozený sloupec), mesh relativní ke kameře a jeho světlo |
 | `WaterTest` | Zaplavení po hladinu, suché jeskyně, pravidla viditelnosti stěn (ručně spočítané), suchý spawn, plavání |
 | `MainStateTest` | Stav, který nepatří `World`, ale přežije výměnu světa: **reset inventáře, obou crafting mřížek, výsledkového slotu a vybraného slotu**, reset denní doby, meze `DayCycle.setTime` (NaN, nekonečno, mimo rozsah), čas tam a zpět přes `world.dat` a **soubor ze starší verze formátu bez času**, a celá cesta svět A → svět B → načtení A zpátky |
+| `SafeFilesTest` | Bezpečný zápis: **atomicita** (selhaný zápis nechá starý soubor bajt po bajtu, u `world.dat` ověřeno i hardlinkem), zálohy `.bak` až `.bak.9` (stejný obsah se nezálohuje podruhé, **existující záloha se nepřepíše**, plné zálohy = soubor se nepřepíše), `world.dat`, `atlas.png` a `skin.png` přes tentýž vzor, nečitelný soubor do zálohy |
+| `PerfTest` | Výkonové invarianty bez měření času: `LongMap` proti `HashMap` na 200 000 náhodných operacích, **`update()` v klidu a `cellAt` bez alokací** (ThreadMXBean), `ChunkMesh` drží jen přesně velká data a po `upload()` nic, a sken zdrojáků „žádný `glDrawArrays` bez `GlStats.countDraw()`" |
 | `LabModesTest` | Logika módů labu bez GL: **konvence `LabMode.key()`** (zavírá hub, ne mód; Delete v Recipes lab nezavře), čekání na klávesu v Keys (Esc zruší, klávesa labu se přiřadí), kroky čísel v Biomes, **výchozí metody `LabMode`** na nejmenším možném módu, **rozepsaná práce přežije přepnutí módu** a `unsaved()` proti tomu, co platí (i Defaults při vlastních aktivních klávesách), **`LabGuard`** (napoprvé varuje, podruhé pustí, jen tentýž úkon, vypršení) a **vnořené fáze `LabProfiler`** |
 | `RecipeLabTest` | Recepty z labu: kontrola hodnot, **ořez vzoru na nejmenší obdélník**, `recipes.json` tam a zpět (i bajtová stabilita druhého zápisu), poškozený a chybějící soubor, **přeskočení jednoho vadného receptu a záloha `.bak`**, novější `format`, **recept z labu se chová jako vestavěný** (hledá se kdekoliv v mřížce, surovina navíc ho vyřadí, vestavěný má přednost), platnost **hned bez restartu** a logika módu (co se uloží a proč se to někdy odmítne) |
 | `KeybindTest` | Přebindování kláves: **výchozí klávesy = to, co měl `Main` natvrdo** (kontrolované proti GLFW konstantám, ne proti enumu), výchozí nastavení bez kolize, jména kláves tam a zpět včetně neznámého kódu jako `#kód`, **kolize nespustí ANI JEDNU akci** (`actionFor` null, `effectiveKey` NONE, ale `key` zůstává, aby šla opravit), tři akce na jedné klávese = jeden řádek, nepřiřazené akce nejsou kolize, `keybinds.json` tam a zpět (i bajtová stabilita druhého zápisu), sedm druhů poškozeného souboru → výchozí klávesy, jedna vadná položka shodí jen sebe, ruční kolize v souboru, `.bak`, **platnost hned po Save** i po „restartu", a mezistav výměny dvou kláves |
@@ -143,7 +145,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 
 **Render**
 - `WorldRenderer` — shader, cache meshů, fronta přestaveb, obrys bloku
-- `ChunkMesh` — bloky → trojúhelníky → VBO; vertex `pozice(3) + uv(2) + odstín(1)`;
+- `ChunkMesh` — bloky → trojúhelníky → VBO; vertex `pozice(3) + uv(2) + slunce(1) + blokové světlo(1)` (ztmavení stěny je v obou světlech);
   dvě sady stěn (neprůhledné + průhledné) v jednom bufferu za sebou
 - `BlockAtlas` — blok + stěna → dlaždice a její UV; **bez GL**, aby šel mesher testovat
 - `BlockModels` — tvar bloku jako seznam kvádrů; **bez GL**
@@ -275,8 +277,10 @@ protože pořadí `HashMap` je libovolné) a **každý frame se zahodí a nasbí
 samoopravné při pohybu a nemůže v ní viset odkaz na uvolněný sloupec.
 
 **Změny bloků obcházejí rozpočet záměrně.** Rozbití označí max 4 sekce (~1,5 ms) a chce to
-okamžitou odezvu. Face culling kouká jen na 6 stěnových sousedů, ne na diagonály, takže blok
-na rohu sekce dotkne nejvýš 3 sousedních — ne 26.
+okamžitou odezvu. Face culling kouká jen na 6 stěnových sousedů, ale plynulé osvětlení a AO
+čtou i diagonály, takže změna bloku přestaví každou sekci, která protíná jeho okolí 3×3×3 —
+na rohu sekce až 8 (`markDirtyAround`; `MeshTest.dirtyIsComplete()` to porovnává se
+skutečnými meshi).
 
 **Kolize se řeší po jedné ose, vždy celým hitboxem.** Posunout všechny tři naráz a pak testovat
 nejde — nepoznáš, o kterou stěnu se zarazit, a hráč se zasekává v rozích místo klouzání.
@@ -399,8 +403,9 @@ v jednom rozhraní.
 **Ztmavení stěny je samostatný násobič, ne zapečené v barvě.** Dokud byl blok jednobarevný,
 šlo ztmavení předpočítat na CPU a poslat jako barvu vrcholu. S texturou to nejde — barva
 se čte až ve fragment shaderu, takže se musí přenést, čím ji vynásobit. Vertex formát tím
-zůstal **stejně velký**: dřív `pozice(3) + barva(3)`, teď `pozice(3) + uv(2) + odstín(1)`.
-Přechod na textury nestál ani bajt paměti meshů.
+zůstal **stejně velký**: dřív `pozice(3) + barva(3)`, pak `pozice(3) + uv(2) + odstín(1)`.
+Přechod na textury nestál ani bajt paměti meshů. (Se světlem je vrchol dnes o float větší:
+odstín se rozdělil na slunce a blokové světlo, obě už se ztmavením stěny.)
 
 **⚠️ UV dlaždice je zúžené o půl texelu (`BlockAtlas.INSET`).** Bez toho prosakuje sousední
 dlaždice na hranách bloků: UV pravého okraje dlaždice se rovná UV levého okraje té další
@@ -736,8 +741,9 @@ ukládat celé chunky místo rozdílu, což je přesně ten kompromis, kvůli kt
 formát vznikl (64 bajtů na tři změny).
 
 **Chyby ukládání hru nepoloží.** `save()` vrací `false`, `load()` vrací `null` a obojí
-napíše důvod na stderr. Poškozený nebo cizí soubor tedy skončí založením nového světa,
-ne pádem. `SaveTest` na to střílí useknutým i cizím souborem.
+napíše důvod na stderr. Poškozený nebo cizí soubor tedy skončí tím, že se svět nenačte
+(hra ho nehraje a nepřepíše), ne pádem. Soubor z novější verze hry se hlásí jako novější,
+ne jako cizí. `SaveTest` na to střílí useknutým, cizím i novějším souborem.
 
 **Ukládá se při odchodu do menu i při zavření okna.** Zavřít okno uprostřed hry je běžný
 způsob, jak skončit, takže spoléhat jen na tlačítko v pauze by znamenalo tichou ztrátu.
@@ -905,7 +911,7 @@ ponoření, tedy s hlavou nad vodou.
 **Svislá rychlost se ZRYCHLUJE a tlumí, nenastavuje.** Odtud pochází setrvačnost, kterou má
 voda v Minecraftu — po klesání jeden frame drženého skoku pohyb neotočí. Útlum je mocnina
 `pow(drag, dt)`, ne násobek: jinak by voda byla hustší při nízkém FPS. Terminální rychlosti
-z toho vypadnou samy — klesání 1,2 bloku za sekundu proti víc než deseti na suchu,
+z toho vypadnou samy — klesání asi 1,8 bloku za sekundu (změřeno 1,83) proti víc než deseti na suchu,
 vodorovná rychlost 2,15 místo 4,30 b/s.
 
 **Ze dna se dá odrazit i ve vodě.** Skok při `onGround` má přednost před plaváním, jinak
@@ -1473,7 +1479,7 @@ o ~0,1–0,2 s, než naskočí loading screen; samotné generování trvá déle
 otevře tichý: důvod na stderr, `play*()` nic nedělají, ladicí výpis ukáže `sound off`. Stejný
 přístup jako u ukládání světa.
 
-**⚠️ Zvuk kliknutí v menu hraje AŽ PO akci tlačítka.** „Create World" a „Load World" engine
+**⚠️ Zvuk kliknutí v menu hraje AŽ PO akci tlačítka.** „Create" a „Play Selected World" engine
 zavřou a otevřou nový, takže zvuk pouštěný před akcí by se hned uťal. `Hud` nemá nic
 klikacího a sloty inventáře nezní ani v Minecraftu.
 
@@ -2363,9 +2369,13 @@ a jen roste — ne „nejnižší volné". Blok ručně smazaný z `blocks.json`
 dalšímu; v uloženém světě by se jinak jeho kostky tiše proměnily v nový blok.
 
 **⚠️ Nové dlaždice se berou od konce atlasu (63, 62…).** Vestavěné dlaždice přibývají v kódu
-odspodu (dnes končí na 26), takže se obě skupiny potkají až úplně na konci — stejná úvaha
-jako rozdělení id. Volná buňka = žádný vestavěný blok, žádný blok z labu, ne praskliny, ne
-„neznámý blok". Dnes je jich 37; když dojdou, lab napíše „Atlas is full - reuse an existing tile".
+odspodu (dnes končí na 34, `TILE_COUNT` = 35), takže se obě skupiny potkají až úplně na
+konci — stejná úvaha jako rozdělení id. Volná buňka = žádný vestavěný blok, žádný blok z labu,
+ne praskliny, ne „neznámý blok"; přednost má úplně prázdná (namalovanou nepoužívanou buňku
+New tile vezme až nakonec a řekne to). Dnes je jich 29; když dojdou, lab napíše „Atlas is
+full - reuse an existing tile". ⚠️ Biomy rezervu zmenšily o osm: kdo si před nimi založil
+přes 29 dlaždic, sdílí buňky 27–34 se sněhem, břízou, smrkem a pralesním listím
+(`BlockRegistry.load` kontroluje u dlaždic jen rozsah).
 
 **Soubor `textures/blocks.json`** je JSON (UTF-8, odsazení dvě mezery, `\n`, bloky podle id):
 
@@ -2531,7 +2541,7 @@ ladicím přepínačem a s módem nemá nic společného.
 
 **Mimo rozsah (a proč):** přepnutí módu za běhu (chtělo by příkazovou řádku),
 crafting v creative (v Minecraftu je pod vlastní záložkou a v creative není k čemu),
-záložky/vyhledávání v přehledu (78 bloků se vejde do dvou obrazovek rolování) a
+záložky/vyhledávání v přehledu (i plných 84 bloků — 20 vestavěných a 64 z labu — se vejde do pár obrazovek rolování) a
 hlad ani zdraví (ve hře neexistují, zavádět je kvůli módu by bylo naopak). **Známé
 zjednodušení:** v creative světě není survival inventář na E vůbec dostupný, takže
 crafting mřížka 2×2 je jen v survivalu; crafting table pravým tlačítkem funguje v obou
@@ -2564,7 +2574,7 @@ se tlačítko na hraně samo chytalo a pouštělo dokola.
 | Generování sloupce | **0,92 ms** na worker vlákně (0,84 ms před biomy, tedy +8 %); s nasvícením ~3,7 ms |
 | `World.update()` při letu | medián 2,1 ms, p99 **3,3 ms** (synchronně to bylo ~22 ms) |
 | Paměť sekce | 4 KB bloky + 4 KB světlo, oboje líně |
-| Paměť | ~32 KB na sloupec |
+| Paměť | ~32 KB na sloupec (bloky a světlo, líně po sekcích); meshe jen na GPU — CPU kopie se po `upload()` zahodí |
 | Výšky terénu | min 48, max 114, průměr 68 (biomy; před nimi 48–79 / 63) |
 | Výška jednoho sloupečku | 204 ns (7 vzorků šumu), samotné `biomeAt()` 76 ns |
 | Skok výšky na hranici biomu | **3 bloky** — stejně jako uvnitř biomu, průměr 0,33 |
@@ -2572,8 +2582,9 @@ se tlačítko na hraně samo chytalo a pouštělo dokola.
 | Draw cally labu | **8** na frame v módu Blocks/Skin (před dávkováním 422) |
 | Nahrání atlasu při tahu štětcem | 1 KB (dlaždice 16×16) místo 64 KB celého atlasu |
 
-**Frustum culling ani async generace nejsou implementované — po měření vyhodnoceny jako
-předčasné.** Vrátit se k nim, až render distance nebo počet chunků naroste natolik, že se to projeví.
+**Frustum culling není implementovaný — po měření vyhodnocený jako předčasný.** Vrátit se
+k němu, až render distance nebo počet chunků naroste natolik, že se to projeví. (Async
+generování, dřív zmiňované tady taky, je hotové — viz sekce o worker vlákně.)
 
 ---
 
@@ -2614,8 +2625,9 @@ přebindovat v labu (mód Keys, soubor `keybinds.json`). Escape platí vždycky,
 i kdyby byla pauza přebindovaná jinam. Klávesy obrazovek mimo hru (psaní do
 polí, Enter, šipky v seznamu světů) přebindovat nejdou.
 
-Hráč: hitbox 0,6 × 1,8, oči 1,62, chůze 4,3 b/s, gravitace 28 b/s², skok **1,19 bloku**
-(vyskočí na jednoblokový schod, ne na dvoublokový).
+Hráč: hitbox 0,6 × 1,8, oči 1,62, chůze 4,3 b/s, gravitace 28 b/s², skok **asi 1,33 bloku**
+při 60 FPS (teoreticky v²/2g = 1,26; pevný krok Eulera dá 1,29 při 144 FPS až 1,47 při ≤ 20 FPS).
+Při každém FPS vyskočí na jednoblokový schod a ne na dvoublokový — `PhysicsTest` to hlídá při 30–1000 FPS.
 
 ---
 
@@ -2676,8 +2688,9 @@ si vyžádá 17 sloupců za 3,7 s. Přidat další vlákna je triviální (worke
 stav), ale zatím k tomu není důvod. Kdyby se hráč začal pohybovat řádově rychleji než letem,
 projevilo by se to tak, že svět nestíhá dosypávat — ne zádrhelem.
 
-**Perzistence světa — hotovo.** Ukládá se rozdíl proti generátoru do `saves/world.dat`;
-v hlavním menu přibude „Load World", jakmile nějaký uložený svět existuje.
+**Perzistence světa — hotovo.** Ukládá se rozdíl proti generátoru do `world.dat` (původně
+jeden `saves/world.dat` a tlačítko „Load World"; dnes `saves/<složka>/` a Select World,
+viz další bod).
 
 **Víc světů — hotovo.** `saves/<složka>/` s metadaty, náhledem a vlastním seedem, obrazovky
 na výběr i zakládání světa a migrace starého jednoho slotu. Zbývá: přejmenování světa,

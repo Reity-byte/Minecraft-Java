@@ -12,7 +12,7 @@ import java.util.Arrays;
  * tak, jak ho postaví hra. Do souboru jde teprve po Create.
  *
  * ⚠️ NOVÉ DLAŽDICE SE BEROU OD KONCE ATLASU (63, 62, ...). Dlaždice
- * vestavěných bloků přibývají v kódu od začátku (dnes končí na 26), takže
+ * vestavěných bloků přibývají v kódu od začátku (dnes končí na 34), takže
  * se ty dvě skupiny potkají až úplně na konci. Kdyby lab bral první volnou
  * buňku, další dlaždice přidaná do kódu by přistála přesně na té, kterou
  * už používá blok z labu. Stejná úvaha jako rozdělení id v BlockRegistry.
