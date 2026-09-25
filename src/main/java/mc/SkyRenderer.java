@@ -16,7 +16,7 @@ import static org.lwjgl.opengl.GL33.*;
  *
  * Denní doba otáčí celou skořápkou najednou. Otočení se vmíchá do matice
  * na CPU, takže se geometrie hvězd nahraje do VBO JEDNOU a pak už se jen
- * kreslí - jinak by se každý frame přenášelo přes čtyři tisíce vrcholů.
+ * kreslí - jinak by se každý frame přenášelo přes pět tisíc vrcholů (5412).
  * ---------------------------------------------------------------------------
  */
 public class SkyRenderer {

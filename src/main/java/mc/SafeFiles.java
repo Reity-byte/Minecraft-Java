@@ -15,8 +15,7 @@ import java.util.function.Predicate;
  * Bezpečný zápis souborů hry.
  *
  * ---------------------------------------------------------------------------
- * Stejný vzor jako textures/blocks.json (BlockRegistry.save), vytažený na
- * jedno místo pro nové soubory:
+ * Jeden vzor pro všechny soubory hry (výčet dole):
  *
  * ⚠️ ZAPISUJE SE DO DOČASNÉHO SOUBORU A TEN SE PAK PŘEJMENUJE. Pád hry,
  * plný disk nebo výpadek proudu uprostřed zápisu tak nechá starý soubor

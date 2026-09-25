@@ -158,12 +158,6 @@ public final class AtlasEditor extends PixelEditor {
         return regionColors(max);
     }
 
-    /** Pro testy: kopie pixelů dlaždice po řádcích odspodu. */
-    int[] tileSnapshot(int tile)
-    {
-        return copyTile(tile);
-    }
-
     // ------------------------------------------------------------------
     // barvy celého atlasu (globální paleta)
     //

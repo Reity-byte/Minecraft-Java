@@ -10,7 +10,7 @@ package mc;
  * nahrání na grafiku jsou schválně oddělené.
  * ---------------------------------------------------------------------------
  *
- * Atlas je mřížka 4x4 dlaždic po 16x16 pixelech, tedy 64x64. Dlaždice se
+ * Atlas je mřížka 8x8 dlaždic po 16x16 pixelech, tedy 128x128. Dlaždice se
  * číslují po řádcích od nuly; řádek 0 je DOLNÍ, protože OpenGL má počátek
  * textury vlevo dole a generovaná data jsou v tomhle pořadí (viz Texture).
  */
@@ -31,7 +31,7 @@ public final class BlockAtlas {
     public static final int FACE_SIDE   = 2;
 
     // Indexy dlaždic v atlasu. Přidat blok = nová dlaždice tady,
-    // její vykreslení v Textures.blockAtlas() a case v tile().
+    // její vykreslení v Textures.blockAtlasPixels() a case v tile().
     // ⚠️ Nové vestavěné dlaždice přidávat ODSPODU (27, 28, ...): texture lab
     // přiděluje buňky blokům z labu od konce atlasu (63, 62, ...) - viz BlockDraft.
     public static final int TILE_GRASS_TOP  = 0;
@@ -58,7 +58,7 @@ public final class BlockAtlas {
     public static final int TILE_CRACK_FIRST = 17;
     public static final int CRACK_STAGES = 10;
 
-    /** Křiklavá dlaždice pro "zapomněls case" - stejná role jako magenta v colorFor(). */
+    /** Křiklavá dlaždice pro "zapomněls case" a neznámý blok - šachovnice, ať je chyba vidět. */
     public static final int TILE_UNKNOWN    = 15;
 
     // Dlaždice biomů. Leží ZA prasklinami (od 27), protože nové vestavěné

@@ -11,7 +11,7 @@ package mc;
  * VŠECHNY ROZMĚRY JSOU V GUI PIXELECH, ne v pixelech obrazovky. Na obrazovku
  * se násobí měřítkem z Gui.scale(). Rozvržení hotbaru je převzaté
  * z Minecraftu: slot 20x20, mezi sloty dělicí čára, kolem celku 1px rámeček,
- * takže pro 5 slotů vyjde pruh 5*20 + 2 = 102 GUI pixelů široký.
+ * takže pro 9 slotů (HOTBAR_SIZE) vyjde pruh 9*20 + 2 = 182 GUI pixelů široký.
  * ---------------------------------------------------------------------------
  */
 public class Hud {
@@ -55,7 +55,7 @@ public class Hud {
     }
 
     /** Volat až po vykreslení světa a obrysu bloku. */
-    public void draw(int screenWidth, int screenHeight, World world,
+    public void draw(int screenWidth, int screenHeight,
                      Inventory inventory, int selectedSlot, String[] debugLines)
     {
         int scale = Gui.scale(screenWidth, screenHeight);
@@ -63,7 +63,7 @@ public class Hud {
 
         shapes.begin(screenWidth, screenHeight);
 
-        drawHotbar(screenWidth, scale, world, inventory, selectedSlot);
+        drawHotbar(screenWidth, scale, selectedSlot);
         drawCrosshair(screenWidth, screenHeight, scale);
 
         if(hasDebug)
@@ -94,8 +94,7 @@ public class Hud {
     }
 
     /** Řada slotů dole uprostřed; vybraný má světlý rámeček navíc. */
-    private void drawHotbar(int screenWidth, int scale, World world,
-                            Inventory inventory, int selectedSlot)
+    private void drawHotbar(int screenWidth, int scale, int selectedSlot)
     {
         int count = Inventory.HOTBAR_SIZE;
 
@@ -121,11 +120,10 @@ public class Hud {
             {
                 shapes.fillRect(slotX, slotY, scale, slotSize, Palette.SLOT_SEPARATOR);
             }
-
-            // Ikony se kreslí až po tvarech, vlastním průchodem - mají jiný
-            // shader (texturovaný) než Renderer2D.
-
         }
+
+        // Ikony se kreslí až po tvarech, vlastním průchodem - mají jiný
+        // shader (texturovaný) než Renderer2D. Viz drawHotbarIcons().
 
         if(selectedSlot >= 0 && selectedSlot < count)
         {

@@ -34,7 +34,7 @@ public class ChunkMesh {
     private static final int FLOATS_PER_FACE = VERTICES_PER_FACE * FLOATS_PER_VERTEX;
 
     // Fake směrové osvětlení. Jde do vrcholu jako samostatný násobič a fragment
-    // shader jím vynásobí barvu z textury. Stejné hodnoty používá Hud na
+    // shader jím vynásobí barvu z textury. Stejné hodnoty používá BlockIcon na
     // izometrické kostky v hotbaru, aby ikona seděla s tím, jak blok vypadá.
     private static final float SHADE_TOP    = 1.00f;
     private static final float SHADE_SIDE_Z = 0.80f;

@@ -60,7 +60,8 @@ public class LightEngine {
     // souřadnice zabalené do longu
     //
     // x a z se do světa vejdou na 26 bitů se znaménkem (±33 milionů bloků),
-    // y na 8. Fronta je pak pole longů bez jediné alokace na uzel - BFS jich
+    // y na 8. Klíč sekce (sectionKey) má pro souřadnice chunku 28 bitů, tedy
+    // víc, než je potřeba pro týž rozsah. Fronta je pak pole longů bez jediné alokace na uzel - BFS jich
     // po položení pochodně projde tisíce.
     // ------------------------------------------------------------------
 
@@ -88,8 +89,7 @@ public class LightEngine {
      * Svislý průchod: shora dolů je plné sluneční světlo, dokud nenarazí na
      * neprůhledný blok; od něj níž je tma, kterou pak dosvítí prohledávání
      * do šířky - odtud stíny pod převisy a světlo ve vchodech do jeskyní.
-     */
-    /**
+     *
      * ⚠️ Zapisuje se PŘÍMO DO SLOUPCE, ne přes World.setSkyLightAt.
      *
      * Ta cesta totiž u každého zápisu označí okolní sekce jako špinavé, aby
@@ -420,7 +420,8 @@ public class LightEngine {
     {
         long deadline = System.nanoTime() + budgetNanos;
 
-        while(System.nanoTime() < deadline)
+        // Rozdíl, ne srovnání: nanoTime smí přetéct, rozdíl dvou hodnot ne.
+        while(System.nanoTime() - deadline < 0)
         {
             if(!darken[BLOCK].isEmpty())      { stepDarken(BLOCK); }
             else if(!darken[SKY].isEmpty())   { stepDarken(SKY); }
@@ -573,14 +574,23 @@ public class LightEngine {
         }
     }
 
-    private static long sectionKey(int cx, int cy, int cz)
+    /**
+     * Sekce zabalená do longu: cx a cz po 28 bitech se znaménkem, cy 8 bitů.
+     *
+     * ⚠️ Dřív měly cx a cz jen 20 bitů (±8,4 mil. bloků, méně než ±33 mil.,
+     * které unese pack()) a sectionKey(-524288, 0, 0) vyšel přesně
+     * Long.MIN_VALUE = EMPTY v LongSet - taková sekce by se do množiny
+     * "změněné světlo" nikdy nezapsala. S 28 bity by EMPTY dal až chunk
+     * -134 milionů, tedy mimo svět.
+     */
+    static long sectionKey(int cx, int cy, int cz)
     {
-        return ((long) (cx & 0xFFFFF) << 44) | ((long) (cz & 0xFFFFF) << 24) | (cy & 0xFF);
+        return ((long) (cx & 0xFFFFFFF) << 36) | ((long) (cz & 0xFFFFFFF) << 8) | (cy & 0xFF);
     }
 
-    private static int keyX(long k) { return (int) (k >>> 44) << 12 >> 12; }
-    private static int keyZ(long k) { return (int) (k >>> 24) << 12 >> 12; }
-    private static int keyY(long k) { return (int) (k & 0xFF); }
+    static int keyX(long k) { return (int) (k >>> 36) << 4 >> 4; }
+    static int keyZ(long k) { return (int) (k >>> 8) << 4 >> 4; }
+    static int keyY(long k) { return (int) (k & 0xFF); }
 
     /** Nahlásí světu všechny sekce, kterým se změnilo světlo, a zapomene je. */
     private void flushTouched()

@@ -41,8 +41,8 @@ java -jar minecraft-base-1.0.jar                    # Windows, Linux
 java -XstartOnFirstThread -jar minecraft-base-1.0.jar   # ⚠️ macOS, jinak GLFW okno neotevře
 ```
 
-Potřebná Java je **17** (`maven.compiler.source/target`); ověřeno překladem
-s `--release 17`, že v kódu není novější API. Hra si data (`saves/`, `textures/`,
+Potřebná Java je **17** (`maven.compiler.release`). Na rozdíl od dřívějšího `source/target`
+hlídá `release` i API: metoda z novějšího JDK neprojde buildem, místo aby spadla až na JRE 17. Hra si data (`saves/`, `textures/`,
 `options.json`) zakládá v PRACOVNÍM ADRESÁŘI, takže se jar spouští z té složky,
 kde mají data být.
 

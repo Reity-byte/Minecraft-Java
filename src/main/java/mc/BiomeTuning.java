@@ -65,10 +65,11 @@ public final class BiomeTuning {
     public static final int MIN_TRUNK = 1, MAX_TRUNK = 16;
 
     /**
-     * Poloměr koruny. Strop 6 není libovolný: koruna o poloměru r je široká
-     * 2r+1 bloků a razítkuje se ze sousedních sloupců (TREE_REACH), takže
-     * při 7 by přesáhla celou šířku chunku a strom by se musel hledat o dva
-     * sloupce dál. Šest dá korunu 13 bloků širokou, což je pořád obří.
+     * Poloměr koruny. Koruna o poloměru r je široká 2r+1 bloků a razítkuje
+     * se ze sousedních sloupců, takže každý krok poloměru zvětší, kolik
+     * sloupců kolem chunku generátor pro stromy prochází (treeReach). Šest
+     * dá korunu 13 bloků širokou, což je pořád obří; strop je volba, ne mez
+     * šířky chunku (ta by byla až u 7, kde je koruna široká 15 < 16).
      */
     public static final int MIN_CROWN = 0, MAX_CROWN = 6;
 
@@ -336,7 +337,7 @@ public final class BiomeTuning {
         {
             if(biome.treeType() != Biome.TreeType.NONE)
             {
-                max = Math.max(max, tunes[biome.ordinal()].trunkMax() + 2);
+                max = Math.max(max, TreeShape.totalHeight(tunes[biome.ordinal()].trunkMax()));
             }
         }
 

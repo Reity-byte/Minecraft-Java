@@ -387,20 +387,10 @@ public final class TextureLabLayout {
     /** Svislá osa je pro panel i obsah tatáž - oba začínají na `top`. */
     public float panelGuiY(double mouseY) { return guiY(mouseY); }
 
-    public boolean hitPanel(Rect r, double mouseX, double mouseY)
-    {
-        return r.contains(panelGuiX(mouseX), panelGuiY(mouseY));
-    }
-
     /** Levý okraj obdélníku bočního panelu v pixelech obrazovky. */
     public float panelScreenX(Rect r)
     {
         return panelLeft + r.x() * scale;
-    }
-
-    public float panelTextLeft(float guiX)
-    {
-        return panelLeft + guiX * scale;
     }
 
     // ------------------------------------------------------------------
@@ -541,10 +531,9 @@ public final class TextureLabLayout {
     }
 
     // ------------------------------------------------------------------
-    // formulář nového bloku
+    // mód Recipes: mřížka a přehled bloků
     // ------------------------------------------------------------------
 
-    /** Políčko stěny; face je BlockAtlas.FACE_*. */
     /** Buňka mřížky receptu (sloupec, řádek) - řádek 0 je NAHOŘE jako v inventáři. */
     public static Rect recipeCell(int column, int row)
     {
@@ -592,6 +581,7 @@ public final class TextureLabLayout {
         return row * PICKER_COLUMNS + column;
     }
 
+    /** Políčko stěny ve formuláři nového bloku; face je BlockAtlas.FACE_*. */
     public static Rect faceSlot(int face)
     {
         return new Rect(FACE_SLOT_X[face], FACE_SLOT_Y, FACE_SLOT_W, FACE_SLOT_H);

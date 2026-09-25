@@ -113,7 +113,6 @@ public class WorldRenderer {
     // statistiky pro debug titulek
     private int drawnSections = 0;
     private int drawnFaces = 0;
-    private int meshesBuiltThisFrame = 0;
     private int pendingCount = 0;
 
     /** Jas z nastavení (Options.brightness), 0 = beze změny. */
@@ -144,7 +143,6 @@ public class WorldRenderer {
                        boolean underwater, DayCycle day, List<DroppedItem> droppedItems,
                        PlayerModelMesh body)
     {
-        meshesBuiltThisFrame = 0;
         drawnSections = 0;
         drawnFaces = 0;
 
@@ -425,7 +423,6 @@ public class WorldRenderer {
             mesh.upload();
 
             meshes[build.sectionIndex()] = mesh;
-            meshesBuiltThisFrame++;
         }
 
         pending.clear();
@@ -758,7 +755,6 @@ public class WorldRenderer {
 
     public int drawnSections() { return drawnSections; }
     public int drawnFaces()    { return drawnFaces; }
-    public int meshesBuilt()   { return meshesBuiltThisFrame; }
 
     /** Kolik sekcí čekalo tenhle frame na postavení meshe - 0 znamená "dosypáno". */
     public int pendingBuilds() { return pendingCount; }

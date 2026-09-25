@@ -8,9 +8,9 @@ import static org.lwjgl.glfw.GLFW.*;
  * Obrazovka "Create New World": jméno světa a seed.
  *
  * ---------------------------------------------------------------------------
- * Dvě textová pole a dvě tlačítka, jako v Minecraftu. Jméno je to, co uvidíš
+ * Tři textová pole a tlačítka, jako v Minecraftu. Jméno je to, co uvidíš
  * v seznamu; složka na disku z něj vznikne očištěním (WorldSaves.folderFor)
- * a pod obrazovkou je pořád vidět, kam se svět uloží - i s uvozovkou (2),
+ * a pod obrazovkou je pořád vidět, kam se svět uloží - i se závorkou (2),
  * když stejná složka už existuje.
  *
  * Prázdný seed = náhodný svět, cokoliv jiného se použije deterministicky

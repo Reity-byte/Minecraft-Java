@@ -21,7 +21,7 @@ public enum GameState {
     /** Otevřený inventář nebo crafting table. Svět stojí, kurzor je volný. */
     CONTAINER,
 
-    /** Texture lab - úpravy dlaždic atlasu (F6 nebo z hlavního menu). */
+    /** Lab: bloky, kůže, recepty, klávesy a tuning generátoru (F6 nebo z hlavního menu). */
     TEXTURE_LAB,
 
     /** Nastavení - z hlavního menu i z pauzy (pak se za ním kreslí svět). */

@@ -27,15 +27,17 @@ import static org.lwjgl.opengl.GL33.GL_REPEAT;
  * které kreslí svět, a kostka v náhledu (BlockPreview) se změní ve stejném
  * framu - viz AtlasEditor a Texture.update().
  *
- * ⚠️ DVĚ ZÁLOŽKY: BLOCKS A SKIN. Záložka Blocks maluje dlaždice atlasu
- * bloků, záložka Skin kůži postavy (textures/skin.png). Plátno, paleta,
- * kapátko, HSV, hex, undo i import PNG jsou pro obě TYTÉŽ - liší se jen
- * to, do čeho míří: mřížka dlaždic proti rozbalení kvádrů těla (SkinLayout).
- * Společný základ obou editorů je PixelEditor. Přepíná se VIDITELNÝM
- * tlačítkem, ne zkratkou: druhý režim, o kterém se nedá dozvědět jinak než
- * z kódu, je skoro totéž jako žádný.
+ * ⚠️ HUB S BOČNÍM PANELEM A PĚTI MÓDY (LabMode): Blocks, Skin, Recipes,
+ * Keys, Biomes. Tahle třída je hub (panel, stavový řádek, zavírání,
+ * pojistka neuložené práce) a navíc oba pixelové módy: Blocks maluje
+ * dlaždice atlasu bloků, Skin kůži postavy (textures/skin.png). Plátno,
+ * paleta, kapátko, HSV, hex, undo i import PNG jsou pro oba TYTÉŽ - liší
+ * se jen to, do čeho míří: mřížka dlaždic proti rozbalení kvádrů těla
+ * (SkinLayout). Společný základ obou editorů je PixelEditor. Módy se
+ * přepínají VIDITELNÝMI ikonami, ne zkratkou: režim, o kterém se nedá
+ * dozvědět jinak než z kódu, je skoro totéž jako žádný.
  *
- * V záložce Blocks je navíc NOVÝ BLOK: informace o dlaždici nahradí formulář
+ * V módu Blocks je navíc NOVÝ BLOK: informace o dlaždici nahradí formulář
  * (jméno, tvrdost, pevný, neprůhledný, dlaždice stěn) a klik do atlasu
  * přiřadí dlaždici vybrané stěně. Malování, paleta i náhled fungují dál -
  * náhled ukazuje rozepsaný blok, protože lab po každé změně aktivuje dočasný
@@ -743,11 +745,6 @@ public class TextureLab {
         return skinFromFile;
     }
 
-    public Mode mode()
-    {
-        return mode;
-    }
-
     // ------------------------------------------------------------------
     // hub: seznam módů a boční panel
     // ------------------------------------------------------------------
@@ -766,17 +763,6 @@ public class TextureLab {
     private LabMode current()
     {
         return modes.get(currentMode);
-    }
-
-    /** Který mód je aktivní - pro titulek a pro testy. */
-    public String currentModeTitle()
-    {
-        return current().title();
-    }
-
-    public int modeCount()
-    {
-        return modes.size();
     }
 
     /**

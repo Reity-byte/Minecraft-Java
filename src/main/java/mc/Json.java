@@ -10,9 +10,10 @@ import java.util.Map;
  * Minimální JSON: čtení do obyčejných Java objektů a zápis řetězce.
  *
  * ---------------------------------------------------------------------------
- * ⚠️ VLASTNÍ PARSER MÍSTO KNIHOVNY SCHVÁLNĚ. Jediný JSON ve hře je
- * textures/blocks.json s pár desítkami řádků; kvůli němu tahat do pom.xml
- * Jackson nebo Gson (a s nimi reflexi a stovky kilobajtů) nestojí za to.
+ * ⚠️ VLASTNÍ PARSER MÍSTO KNIHOVNY SCHVÁLNĚ. JSON soubory hry (nastavení,
+ * klávesy, tuning, bloky a recepty z labu, metadata světů) mají pár desítek
+ * řádků; kvůli nim tahat do pom.xml Jackson nebo Gson (a s nimi reflexi
+ * a stovky kilobajtů) nestojí za to.
  * Čte se striktní JSON podle RFC 8259, žádná rozšíření (komentáře, čárky
  * za posledním prvkem, řetězce v apostrofech) - soubor, který projde tady,
  * přečte i jakýkoliv jiný nástroj.

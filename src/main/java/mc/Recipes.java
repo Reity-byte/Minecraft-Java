@@ -20,6 +20,12 @@ public final class Recipes {
     /**
      * Tvarovaný recept. pattern se čte po řádcích SHORA DOLŮ, World.AIR
      * znamená "tady musí být prázdno".
+     *
+     * ⚠️ POLE pattern SE NEKOPÍRUJE - ani tady, ani v RecipeBook. Neměnnost
+     * receptů je dohoda: nikdo do vráceného pole nepíše. Kopírovat by se
+     * muselo při každém čtení, a porovnávání vzorů v crafting mřížce čte
+     * pattern() pro každou polohu receptu. `equals` záznamu porovnává pole
+     * podle reference, proto se vzory porovnávají přes Arrays.equals.
      */
     public record Recipe(int width, int height, byte[] pattern, byte result, int resultCount) {}
 

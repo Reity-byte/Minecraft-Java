@@ -555,7 +555,7 @@ public class ContainerScreen {
 
         ItemStack slot = stackAt(hit);
 
-        if(slot.isEmpty() || (slot.block() == held.block() && slot.space() > 0))
+        if(slot.isEmpty() || (slot.sameItem(held) && slot.space() > 0))
         {
             dragSlots.add(hit);
         }
@@ -679,7 +679,7 @@ public class ContainerScreen {
                 container.set(hit.index(), held.withCount(1));
                 held = held.plus(-1);
             }
-            else if(slot.block() == held.block() && slot.space() > 0)
+            else if(slot.sameItem(held) && slot.space() > 0)
             {
                 container.set(hit.index(), slot.plus(1));
                 held = held.plus(-1);
@@ -695,7 +695,7 @@ public class ContainerScreen {
             return;
         }
 
-        if(slot.block() == held.block())
+        if(slot.sameItem(held))
         {
             int moved = Math.min(slot.space(), held.count());
             container.set(hit.index(), slot.plus(moved));
@@ -725,7 +725,7 @@ public class ContainerScreen {
         {
             held = result;
         }
-        else if(held.block() == result.block() && held.space() >= result.count())
+        else if(held.sameItem(result) && held.space() >= result.count())
         {
             held = held.plus(result.count());
         }

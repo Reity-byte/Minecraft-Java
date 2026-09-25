@@ -25,13 +25,17 @@ public final class TerrainGenerator {
 
     // --- parametry generování terénu ---
     private static final double TERRAIN_FREQUENCY = 0.007;
-    private static final int    GROUND_HEIGHT     = 64;
+    private static final int    GROUND_HEIGHT     = World.GROUND_HEIGHT;
 
     /** Kolik oktáv se sečte ve fbm(). Víc = víc detailu, ale i víc volání noise. */
     private static final int TERRAIN_OCTAVES = 4;
 
-    /** Pod touhle výškou je povrch písčitý místo travnatého - dělá to údolím pláže. */
-    private static final int SAND_LEVEL = GROUND_HEIGHT - 8;
+    /**
+     * Pod touhle výškou je povrch písčitý místo travnatého - dělá to údolím pláže.
+     * ⚠️ Odvozené od hladiny, ne samostatné číslo: pás písku o blok nad vodou
+     * je pláž, a dvě nezávislé konstanty by se daly rozejít.
+     */
+    private static final int SAND_LEVEL = World.SEA_LEVEL + 1;
 
     /** Kolik vrstev hlíny je pod trávou, než začne kámen. */
     private static final int SOIL_DEPTH = 4;
@@ -147,7 +151,7 @@ public final class TerrainGenerator {
      * ⚠️ UŽ SE TÍM NEPOČÍTÁ, POČÍTÁ SE TO Z TUNERU. Zůstává tu jako
      * kontrolní číslo: výchozí `ironDensity` hor je 3, takže
      * `BiomeTuning.rarity(IRON_RARITY, 3.0)` musí vyjít přesně na tuhle
-     * dvacítku. CaveTest to porovnává, aby se výchozí tuning nemohl tiše
+     * dvacítku. BiomeTuningTest to porovnává, aby se výchozí tuning nemohl tiše
      * rozejít s tím, co hra dělala před tunerem.
      */
     static final int IRON_RARITY_MOUNTAINS = IRON_RARITY / 3;
@@ -177,9 +181,6 @@ public final class TerrainGenerator {
      * vyrostl". Nový druh stromu s ještě širší korunou tím dosah zvětší sám.
      */
     private final int treeReach;
-
-    /** Generátor výchozího seedu - dokud si hra seed nepamatuje, jede na něm. */
-    static final TerrainGenerator DEFAULT = new TerrainGenerator(World.DEFAULT_SEED);
 
     private final long seed;
     private final SimplexNoise noise;
@@ -212,8 +213,10 @@ public final class TerrainGenerator {
      * Příměs seedu do všech hashů (stromy, rudy).
      *
      * ⚠️ Pro World.DEFAULT_SEED je to NULA, takže se hash chová přesně jako
-     * dřív. Mixer je bijekce s fmix64(0) == 0, takže nulu nedá žádný jiný seed
-     * a dva různé seedy se nepotkají na jednom čísle jen tak.
+     * dřív. fmix64 je bijekce s fmix64(0) == 0, ale výsledek se ořízne na
+     * int, takže nulu (a každé jiné číslo) dá 2^32 různých seedů. Pro hash
+     * stromů a rud to nevadí - jde jen o to, aby různé seedy dávaly různé
+     * světy, ne aby byly všechny navzájem různé.
      */
     private final int seedMix;
 

@@ -7,8 +7,9 @@
     <packaging>jar</packaging>
 
     <properties>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
+        <!-- release, ne source/target: prekladac pak hlida i API Javy 17, takze
+             metoda z novejsiho JDK neprojde buildem a nespadne az na JRE 17. -->
+        <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <lwjgl.version>3.3.3</lwjgl.version>
         <joml.version>1.10.8</joml.version>

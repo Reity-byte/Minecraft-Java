@@ -33,11 +33,6 @@ final class WindowMode {
     private int windowedX = -1, windowedY = -1;
     private int windowedWidth = DEFAULT_WIDTH, windowedHeight = DEFAULT_HEIGHT;
 
-    boolean isFullscreen()
-    {
-        return fullscreen;
-    }
-
     /**
      * Má se opravdu přepínat, nebo už je okno v požadovaném režimu?
      *
@@ -48,7 +43,7 @@ final class WindowMode {
      * na konci init() zavolá apply() podruhé s touž hodnotou.
      *
      * Čistá funkce schválně - jako jediná část rozhodování jde otestovat
-     * bez GLFW (viz WindowModeTest).
+     * bez GLFW (viz OptionsTest).
      */
     static boolean needsSwitch(boolean current, boolean wanted)
     {

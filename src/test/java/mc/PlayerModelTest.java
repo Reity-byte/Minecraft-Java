@@ -201,7 +201,7 @@ public class PlayerModelTest {
     static void geometry() {
         float px = PlayerModelMesh.PX;
 
-        // Yaw 0 = hrac kouka po +X; jeho pravice je pak +Z (viz Camera.rightVector).
+        // Yaw 0 = hrac kouka po +X; jeho pravice je pak +Z (pravice = pohled x svet nahoru).
         PlayerModelMesh m = build(PlayerPose.REST, 0f, World.AIR);
         check("postava je 6 kvadru po 36 vrcholech", m.skinVertexCount() == 6 * 36 && m.itemVertexCount() == 0,
                 m.skinVertexCount() + " + " + m.itemVertexCount());

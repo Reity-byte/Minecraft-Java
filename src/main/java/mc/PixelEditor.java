@@ -289,11 +289,6 @@ public abstract class PixelEditor {
         }
     }
 
-    protected void clearUndo()
-    {
-        undo.clear();
-    }
-
     /** Snímek právě editované oblasti - základ undo. */
     protected Snapshot snapshot()
     {

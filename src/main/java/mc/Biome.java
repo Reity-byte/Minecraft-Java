@@ -158,13 +158,10 @@ public enum Biome {
             return max;
         }
 
-        /**
-         * Kolik bloků nad zemí strom celkem potřebuje: kmen a nad jeho
-         * vrcholem ještě poslední vrstva koruny.
-         */
+        /** Kolik bloků nad zemí strom celkem potřebuje - viz TreeShape.totalHeight(). */
         public int totalHeight()
         {
-            return trunkMax() + 2;
+            return TreeShape.totalHeight(trunkMax());
         }
     }
 

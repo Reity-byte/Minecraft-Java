@@ -246,7 +246,7 @@ public final class RecipeBook {
         return block <= World.LAST_BUILT_IN;
     }
 
-    /** Vyrábí už některý recept (vestavěný i z labu) přesně tenhle vzor? */
+    /** Vyrábí už některý recept Z LABU přesně tenhle vzor? Vestavěné řeší Recipes.builtInHasPattern. */
     public boolean containsPattern(Recipes.Recipe recipe)
     {
         Recipes.Recipe wanted = normalize(recipe);
@@ -544,7 +544,10 @@ public final class RecipeBook {
         return number.intValue();
     }
 
-    /** Prázdný seznam pro testy, které si sestavují recepty samy. */
+    /**
+     * Kniha z daného seznamu - pro testy, které si sestavují recepty samy.
+     * Neměnný je seznam; pole vzorů v receptech se nekopírují (viz Recipe).
+     */
     static RecipeBook of(List<Recipes.Recipe> list)
     {
         return list.isEmpty() ? EMPTY : new RecipeBook(Collections.unmodifiableList(new ArrayList<>(list)));

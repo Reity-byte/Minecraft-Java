@@ -1623,7 +1623,7 @@ public class Main {
 
         drawHeldItem();
 
-        hud.draw(width, height, world, inventory, selectedSlot, showDebug ? debugLines() : null);
+        hud.draw(width, height, inventory, selectedSlot, showDebug ? debugLines() : null);
     }
 
     /**

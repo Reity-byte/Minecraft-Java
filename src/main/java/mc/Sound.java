@@ -82,7 +82,7 @@ public enum Sound {
          * ⚠️ Rozdělení je STEJNÉ jako skupiny ve World.hardness(): co má
          * stejnou tvrdost, zní stejně. Jen rudy mají tvrdost vlastní a zní
          * jako kámen, a pochodeň jako dřevo, z něhož je. SoundTest hlídá,
-         * že se obě tabulky nerozejdou, když přibude nový blok.
+         * že má materiál každý vestavěný blok až po World.LAST_BUILT_IN.
          */
         public static Material of(byte block)
         {
@@ -112,7 +112,7 @@ public enum Sound {
         /**
          * Materiál podle tvrdosti, pro bloky, které nic jiného nemají (bloky
          * z labu). Hranice leží mezi tvrdostmi skupin vestavěných bloků:
-         * listí 0,2 | hlína 0,5 | dřevo 0,8 | kámen 1,8 a víc. SoundTest hlídá,
+         * listí 0,2 | hlína 0,5 | dřevo 0,8 | kámen 1,8 a víc. LabBlockTest hlídá,
          * že vestavěné bloky (kromě pochodně a rud) vyjdou stejně jako v of().
          */
         public static Material byHardness(float hardness)

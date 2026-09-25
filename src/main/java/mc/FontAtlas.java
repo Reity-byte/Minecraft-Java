@@ -20,8 +20,9 @@ import static org.lwjgl.opengl.GL33.*;
  * přibalený .ttf soubor. Rasterizuje se jednou při startu; za běhu už se
  * jen čte z textury.
  *
- * Atlas je jednokanálový (GL_RED) - drží pouze krytí glyfu. Barvu dodává
- * shader uniformem, takže jeden atlas obslouží text libovolné barvy.
+ * Atlas je jednokanálový (GL_RED) - drží pouze krytí glyfu. Barvu nese každý
+ * vrchol (kvůli dávkování, viz TextRenderer), takže jeden atlas obslouží text
+ * libovolné barvy.
  *
  * ---------------------------------------------------------------------------
  * ANTIALIASING JE VYPNUTÝ A FILTROVÁNÍ JE GL_NEAREST. Obojí schválně:
@@ -212,7 +213,6 @@ public class FontAtlas {
 
     public int textureId()  { return textureId; }
     public int lineHeight() { return lineHeight; }
-    public int ascent()     { return ascent; }
 
     /** Posun pera na další znak - šířka glyfu plus rozestup. */
     public int advance(char c)     { return glyphAdvance[indexOf(c)] + LETTER_SPACING; }

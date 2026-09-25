@@ -94,7 +94,7 @@ public class Container {
         {
             ItemStack slot = slots[i];
 
-            if(slot.isEmpty() || slot.block() != stack.block())
+            if(!slot.sameItem(stack))
             {
                 continue;
             }
@@ -182,7 +182,7 @@ public class Container {
         return slot.withCount(taken);
     }
 
-    /** Kolik kusů daného bloku je v kontejneru celkem. Pro testy a ladicí výpis. */
+    /** Kolik kusů daného bloku je v kontejneru celkem. Pro testy. */
     public int countOf(byte block)
     {
         int total = 0;

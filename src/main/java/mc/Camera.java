@@ -3,8 +3,9 @@ package mc;
 import org.joml.Matrix4f;
 
 /**
- * Simple free-fly camera: position + yaw/pitch, no gravity/collision yet.
- * That's your next step once this base feels comfortable.
+ * Kamera: kam se dívá hráč (yaw, pitch) a odkud se kouká (první osoba, nebo
+ * třetí osoba zezadu či zepředu, zkrácená o zeď). Pohyb a kolize patří
+ * `Player`; kamera se jen staví podle něj (`follow()`).
  */
 public class Camera {
 
@@ -34,7 +35,8 @@ public class Camera {
      */
     static final float CAMERA_RADIUS = 0.1f;
 
-    public float x = 8, y = 80, z = 8; // start above the terrain (ground is around y=64)
+    /** Kde je kamera. Každý frame ji přestaví follow() podle očí hráče. */
+    public float x = 8, y = 80, z = 8;
     /** Kam se kamera dívá v novém světě: yaw -90 je směr -Z, pitch 0 vodorovně. */
     public static final float DEFAULT_YAW = -90f;
     public static final float DEFAULT_PITCH = 0f;
@@ -71,29 +73,6 @@ public class Camera {
         this.x = x;
         this.y = y;
         this.z = z;
-    }
-
-    public float[] getForwardMoveTarget(float amount)
-    {
-        float[] f = forwardVector();
-        float newX = x + f[0] * amount;
-        float newZ = z + f[2] * amount;
-        return new float[]{newX, y, newZ};
-    }
-
-    public float[]getRightMoveTarget(float amount)
-    {
-        float[] r = rightVector();
-        float newX = x + r[0] * amount;
-        float newZ = z + r[2] * amount;
-
-        return new float[]{newX, y, newZ};
-    }
-
-    public float[]getUpMoveTarget(float amount)
-    {
-        float newY = y + amount;
-        return new float[]{x, newY, z};
     }
 
     private float[] forwardVector() {
@@ -202,32 +181,6 @@ public class Camera {
         }
 
         return 0f;
-    }
-
-    private float[] rightVector() {
-        float[] f = forwardVector();
-        // right = forward x worldUp
-        float ux = 0, uy = 1, uz = 0;
-        float rx = f[1] * uz - f[2] * uy;
-        float ry = f[2] * ux - f[0] * uz;
-        float rz = f[0] * uy - f[1] * ux;
-        float len = (float) Math.sqrt(rx * rx + ry * ry + rz * rz);
-        return new float[]{rx / len, ry / len, rz / len};
-    }
-
-    public void moveForward(float amount) {
-        float[] f = getForwardMoveTarget(amount);
-        setPosition(f[0], f[1], f[2]);
-    }
-
-    public void moveRight(float amount) {
-        float[] r = getRightMoveTarget(amount);
-        setPosition(r[0], r[1], r[2]);
-    }
-
-    public void moveUp(float amount) {
-        float[] u = getUpMoveTarget(amount);
-        setPosition(u[0], u[1], u[2]);
     }
 
     /**

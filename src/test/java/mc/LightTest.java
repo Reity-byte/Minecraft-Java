@@ -419,6 +419,22 @@ public class LightTest {
         hole.shutdown();
         shaft.shutdown();
 
+        // ---------- klic sekce: cely rozsah sveta, zadna kolize s EMPTY ----------
+        // Driv mely cx a cz jen 20 bitu (+-8,4 mil. bloku) a sectionKey(-524288, 0, 0)
+        // vysel presne Long.MIN_VALUE, tedy "prazdne misto" v LongSet.
+        int limit = 33_000_000 >> 4;   // +-33 mil. bloku, co unese pack()
+        int[][] keys = {{0, 0, 0}, {-1, 7, -1}, {-524288, 0, 0}, {524287, 3, -524288},
+                {limit, 7, -limit}, {-limit, 0, limit}, {12345, 5, -67890}};
+        boolean roundTrip = true, notEmpty = true;
+        for (int[] k : keys) {
+            long key = LightEngine.sectionKey(k[0], k[1], k[2]);
+            roundTrip &= LightEngine.keyX(key) == k[0] && LightEngine.keyY(key) == k[1]
+                    && LightEngine.keyZ(key) == k[2];
+            notEmpty &= key != Long.MIN_VALUE;
+        }
+        check("klic sekce se rozbali zpet na tytez souradnice (i +-33 mil. bloku)", roundTrip, "");
+        check("zadna sekce sveta nema klic EMPTY (Long.MIN_VALUE)", notEmpty, "");
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
 }

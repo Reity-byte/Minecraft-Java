@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  * ---------------------------------------------------------------------------
  * NEUKLÁDÁ SE SVĚT, ALE ROZDÍL PROTI GENERÁTORU.
  *
- * Generátor je čistá funkce souřadnic s pevným seedem, takže se terén dá
+ * Generátor je čistá funkce souřadnic a seedu světa, takže se terén dá
  * kdykoliv dopočítat znovu. Na disk stačí to, co hráč změnil - tedy pár
  * set záznamů místo desítek megabajtů bloků. Načtení je pak "vygeneruj
  * a přepiš změny".

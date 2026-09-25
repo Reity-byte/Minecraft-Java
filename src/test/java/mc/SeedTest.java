@@ -153,7 +153,7 @@ public class SeedTest {
                 spawn[0] + "," + spawn[1]);
 
         // Main hleda spawn na generatoru sveta, ktery zaklada - svet s vychozim
-        // seedem proto musi dat tentyz spawn jako TerrainGenerator.DEFAULT.
+        // seedem proto musi dat tentyz spawn jako new TerrainGenerator(World.DEFAULT_SEED).
         World world = new World();
         int[] worldSpawn = world.generator().findLandSpawn(8, 8, 64);
         check("svet s vychozim seedem najde tentyz spawn",

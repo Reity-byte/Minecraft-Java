@@ -116,8 +116,15 @@ public final class TreeShape {
     }
 
     /**
-     * Kolik bloků nad zemí strom s touhle výškou kmene zabere - kmen a nad
-     * jeho vrcholem ještě poslední vrstva koruny.
+     * Kolik bloků nad zemí strom s touhle výškou kmene nejvýš zabere, s blokem
+     * rezervy. Skutečně nejvyšší blok je poslední vrstva koruny o jedna nad
+     * vrcholem kmene (ground + trunk + 1, viz stamp()); +2 nechává jeden blok
+     * navíc, o který se opírá strop terénu (výchozí 114) - změnit to na +1 by
+     * posunulo strop a s ním výchozí terén.
+     *
+     * ⚠️ JEDINÉ MÍSTO, KDE TO ČÍSLO JE. Biome.TreeType.totalHeight()
+     * a BiomeTuning.maxTreeHeight() ho berou odsud; dřív měly každý svou
+     * kopii "+ 2" a mohly se rozejít.
      */
     public static int totalHeight(int trunk)
     {

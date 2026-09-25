@@ -22,7 +22,6 @@ public final class TextField {
 
     public String text()        { return text.toString(); }
     public boolean isFocused()  { return focused; }
-    public int maxLength()      { return maxLength; }
 
     public void setFocused(boolean on)
     {

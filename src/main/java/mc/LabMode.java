@@ -136,7 +136,14 @@ public interface LabMode {
                   double mouseX, double mouseY);
 
     /**
-     * Zmáčknutí tlačítka myši. Vrací true, když se má lab zavřít.
+     * Zmáčknutí tlačítka myši. Vrací true, když se má lab zavřít (tlačítko
+     * Close módu); hub to pak ještě prožene pojistkou neuložené práce.
+     *
+     * ⚠️ POZOR NA OPAČNOU KONVENCI NEŽ key(). Tady true = "zavři", u key()
+     * true = "klávesu jsem si vzal". Myš zavírá jen tlačítko Close, které
+     * zná jen mód; klávesu zavírá hub (Esc, klávesa labu), když si ji mód
+     * nevzal. Záměna těch dvou už jednou způsobila, že Delete v Recipes
+     * zavřel lab - LabModesTest to od té doby hlídá.
      *
      * Tlačítko na bočním panelu se sem nedostane - to si vezme panel dřív.
      */

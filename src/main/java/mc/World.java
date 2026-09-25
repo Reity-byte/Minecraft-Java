@@ -94,7 +94,11 @@ public class World {
      */
     public static final long DEFAULT_SEED = 12345L;
 
-    /** Výchozí výška terénu; kolem ní se houpe šum. Ladí ji TerrainGenerator. */
+    /**
+     * Výchozí výška terénu. Z ní se odvozuje hladina (SEA_LEVEL) a pás písku
+     * (TerrainGenerator.SAND_LEVEL = SEA_LEVEL + 1). Výšky biomů má dnes
+     * každý biom vlastní (Biome, BiomeTuning), tohle je jen společná kotva.
+     */
     static final int GROUND_HEIGHT = 64;
 
     /**
@@ -443,17 +447,18 @@ public class World {
 
         while((blocking || adopted < MAX_ADOPTED_PER_FRAME) && (column = finished.poll()) != null)
         {
-            adopted++;
-
             long k = key(column.cx, column.cz);
             inFlight.remove(k);
 
             // Hráč se mezitím mohl rozejít jinam - pak je sloupec k ničemu
             // a zahodí se. Ukládat ho a hned mazat by jen nafouklo mapu.
+            // Strop počítá jen PŘEVZATÉ sloupce: zahození nic nestojí, a dřív
+            // se po teleportu kvůli zahozeným zdržovalo převzetí těch nových.
             if(withinRadius(column.cx, column.cz, centerCx, centerCz, loadRadius)
                     && !columns.containsKey(k))
             {
                 insert(k, column);
+                adopted++;
             }
         }
     }

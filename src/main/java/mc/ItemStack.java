@@ -33,10 +33,16 @@ public record ItemStack(byte block, int count) {
         return isEmpty() ? MAX_COUNT : MAX_COUNT - count;
     }
 
-    /** Jde tahle hromádka slít s tou druhou? Prázdná se slije s čímkoliv. */
-    public boolean stacksWith(ItemStack other)
+    /**
+     * Je to týž druh věci, takže jde hromádky slít? Prázdná není nic.
+     *
+     * ⚠️ JEDINÉ MÍSTO, KDE TO PRAVIDLO JE. Dřív bylo `a.block() == b.block()`
+     * rozepsané na pěti místech v inventáři a kontejneru. Až přibudou
+     * předměty (porovnání podle druhu, ne podle id bloku), mění se jen tohle.
+     */
+    public boolean sameItem(ItemStack other)
     {
-        return isEmpty() || other.isEmpty() || block == other.block;
+        return !isEmpty() && !other.isEmpty() && block == other.block;
     }
 
     public ItemStack withCount(int newCount)

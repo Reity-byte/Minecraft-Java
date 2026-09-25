@@ -15,12 +15,10 @@ import static org.lwjgl.opengl.GL33.*;
  * vyjde jako rozmazaná skvrna. NEAREST bere nejbližší texel, takže jeden
  * texel = ostrý čtvereček. Přesně tohle dělá Minecraft blockově vypadající.
  *
- * Opakování je GL_REPEAT, aby šla jedna dlaždice vyskládat přes celou plochu
- * pouhým protažením UV za hranici 0-1.
+ * Opakování (wrap) volí volající: GL_REPEAT pro dlaždicované pozadí a šachovnici
+ * labu, CLAMP_TO_EDGE pro atlas bloků a kůži, aby se sousední dlaždice
+ * v atlasu nepřetahovaly.
  * ---------------------------------------------------------------------------
- *
- * Až přijde na řadu blokový texture atlas, použije se tahle třída znovu -
- * jen s wrapem CLAMP_TO_EDGE, aby se sousední dlaždice v atlasu nepřetahovaly.
  */
 public class Texture {
 

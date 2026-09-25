@@ -14,7 +14,7 @@ import static org.lwjgl.opengl.GL33.*;
  * stejně jako v shaderu.
  *
  * ---------------------------------------------------------------------------
- * TŘI ROZHODNUTÍ, KTERÁ SE TÁHNOU CELOU TŘÍDOU:
+ * ROZHODNUTÍ, KTERÁ SE TÁHNOU CELOU TŘÍDOU:
  *
  * 1) Barva je v každém vrcholu (pozice 2 + RGBA 4 floaty), ne v uniformu.
  *    Kvůli ztmavení pozadí, které je jediný přechod, co v UI zůstal.

@@ -107,21 +107,6 @@ public class Shaders {
             """;
 
     /**
-     * Obrys vybraného bloku má vlastní program, i když sdílí matice se světem.
-     *
-     * Dřív jezdil na světovém shaderu a černou barvu si nesl ve vrcholech.
-     * Jenže vertex formát světa je teď uv + odstín, takže by obrys musel mít
-     * UV mířící na nějaký černý pixel v atlasu - tedy záviset na tom, co je
-     * v textuře nakreslené. Vlastní shader s barvou v uniformu je čistší
-     * a jeho VBO je navíc poloviční, protože nese jen pozice.
-     */
-    /**
-     * Praskliny na rozbíjeném bloku: textura z atlasu, ale bez světla a mlhy.
-     *
-     * Světlo by nedávalo smysl - praskliny nejsou povrch, jsou to čáry přes něj;
-     * a mlha už je započítaná v bloku pod nimi, takže by se přidala dvakrát.
-     */
-    /**
      * Blok v ruce. Vlastní matice, protože ruka není objekt ve světě - je to
      * geometrie kousek před kamerou s vlastní perspektivou.
      *
@@ -169,6 +154,12 @@ public class Shaders {
             }
             """;
 
+    /**
+     * Praskliny na rozbíjeném bloku: textura z atlasu, ale bez světla a mlhy.
+     *
+     * Světlo by nedávalo smysl - praskliny nejsou povrch, jsou to čáry přes něj;
+     * a mlha už je započítaná v bloku pod nimi, takže by se přidala dvakrát.
+     */
     public static final String CRACK_VERTEX = """
             #version 330 core
 
@@ -202,6 +193,15 @@ public class Shaders {
             }
             """;
 
+    /**
+     * Obrys vybraného bloku má vlastní program, i když sdílí matice se světem.
+     *
+     * Dřív jezdil na světovém shaderu a černou barvu si nesl ve vrcholech.
+     * Jenže vertex formát světa je teď uv + odstín, takže by obrys musel mít
+     * UV mířící na nějaký černý pixel v atlasu - tedy záviset na tom, co je
+     * v textuře nakreslené. Vlastní shader s barvou v uniformu je čistší
+     * a jeho VBO je navíc poloviční, protože nese jen pozice.
+     */
     public static final String OUTLINE_VERTEX = """
             #version 330 core
 
@@ -272,7 +272,7 @@ public class Shaders {
             """;
 
     /**
-     * Texturovaný 2D quad - zatím jen dlaždicované pozadí hlavního menu.
+     * Texturovaný 2D quad - dlaždicované pozadí menu a obrázky v labu (ImageRenderer).
      *
      * UV se schválně nechává přetéct za 1.0: textura má GL_REPEAT, takže
      * u = šířka obrazovky / velikost dlaždice vyskládá dlaždice přes celou

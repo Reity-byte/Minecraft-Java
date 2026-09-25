@@ -65,10 +65,4 @@ public final class SkinEditor extends PixelEditor {
     {
         return SkinLayout.name(face);
     }
-
-    /** Nejčastější barvy vybrané stěny - druhý řádek palety. */
-    public int[] faceColors(int max)
-    {
-        return regionColors(max);
-    }
 }
