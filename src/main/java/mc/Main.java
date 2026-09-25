@@ -161,6 +161,9 @@ public class Main {
      */
     private AtlasEditor atlasEditor;
 
+    /** Pece ve světě a co v nich je - patří světu, ukládají se s ním. */
+    private final Furnaces furnaces = new Furnaces();
+
     /** Registr bloků při otevření labu - po zavření se pozná, jestli se bloky změnily. */
     private BlockRegistry blocksBeforeLab;
 
@@ -796,6 +799,10 @@ public class Main {
                     // v ruce nekonečno. Rozhoduje o tom mód, ne tenhle kód.
                     mode.afterPlace(inventory, selectedSlot);
                     swing.trigger();
+
+                    if (World.isFurnace(placed)) {
+                        furnaces.create(px, py, pz);
+                    }
                     // V prostoru, ze středu položeného bloku.
                     sound.playAt(Sound.placeOf(selected.block()), px + 0.5f, py + 0.5f, pz + 0.5f);
                 }
@@ -1163,6 +1170,8 @@ public class Main {
             // otevřenou truhlou. Pauza, nastavení, lab a menu ho ztlumí.
             if (state == GameState.CONTAINER) {
                 ambience.update(world, camera.x, camera.y, camera.z, dt, sound);
+                // Svět běží i nad otevřenou obrazovkou - pec (i ta otevřená) taví dál.
+                furnaces.update(dt);
             } else if (state != GameState.PLAYING) {
                 ambience.silence(dt, sound);
             }
@@ -1259,6 +1268,10 @@ public class Main {
         // takže se otevře dopoledne - přesně to, co dělal dosud.
         day.setTime(save.dayTime());
 
+        // Pece (MCW6). Starší soubor žádné nemá - pec postavená ve starém
+        // světě by stav neměla, ale v něm žádná být nemohla.
+        furnaces.restore(save.furnaces());
+
         loadingTitle = "Loading world";
         worldCenterX = player.x;
         worldCenterZ = player.z;
@@ -1310,6 +1323,7 @@ public class Main {
         world.lightBudget = World.LIGHT_BUDGET_LOADING;
 
         drops.clear();
+        furnaces.clear();
 
         loadingFrames = 0;
         columnsTotal = 0;
@@ -1514,7 +1528,7 @@ public class Main {
                 player.x, player.y, player.z,
                 camera.yaw, camera.pitch,
                 player.flying, selectedSlot,
-                world.changes(), inventorySnapshot(), day.time()));
+                world.changes(), inventorySnapshot(), day.time(), furnaces.snapshot()));
 
         // ⚠️ Poslední hraní se posune JEN po úspěšném uložení - seznam světů
         // se podle něj řadí a nový čas by tvrdil, že se svět uložil.
@@ -1546,6 +1560,7 @@ public class Main {
         world = new World();
         worldRenderer.reset();
         drops.clear();
+        furnaces.clear();
         hit = null;
 
         // V menu se na mód nikdo neptá, ale ať tam po creative světě nezůstane
@@ -1732,6 +1747,9 @@ public class Main {
         // Prostředí podle toho, kde jsou uši - tedy kamera, jako posluchač.
         ambience.update(world, camera.x, camera.y, camera.z, dt, sound);
 
+        // Pece taví, dokud se hraje - všechny, i daleko (viz Furnaces).
+        furnaces.update(dt);
+
         // ⚠️ Míří se z OČÍ, ne z kamery. Ve třetí osobě by paprsek z kamery
         // za zády trefil blok mezi kamerou a hráčem a zepředu by mířil úplně
         // jinam, než kam hráč kouká. Minecraft to dělá stejně.
@@ -1751,8 +1769,17 @@ public class Main {
 
             // Survival: vytěžený kus vypadne na zem, do inventáře ho dá až sebrání.
             // Creative: blok zmizí a nic po něm nezbude.
-            if (mining.harvest(world, inventory, drops, sound, mode) && mode.wearsTools()) {
+            boolean harvested = mining.harvest(world, inventory, drops, sound, mode);
+
+            if (harvested && mode.wearsTools()) {
                 wearHeldTool(broken);
+            }
+
+            // Rozbitá pec vysype, co v ní bylo (i v creative - jako Minecraft).
+            if (harvested && World.isFurnace(broken)) {
+                for (ItemStack stack : furnaces.remove(mining.x(), mining.y(), mining.z())) {
+                    drops.dropFromBlock(mining.x(), mining.y(), mining.z(), stack);
+                }
             }
 
             // Zaměření znovu: rozbitý blok už tam není. Jinak by se obrys

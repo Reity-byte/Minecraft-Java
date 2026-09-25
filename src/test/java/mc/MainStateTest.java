@@ -497,7 +497,7 @@ public class MainStateTest {
         // Patri svetu: resetPlayerState() ho vrati, nebo ho nastavi freshWorld()/restore().
         java.util.Set<String> mainWorld = java.util.Set.of(
                 "world", "selectedSlot", "inventory", "craftingSmall", "craftingLarge", "craftingResult",
-                "day", "flyTap", "mining", "miningHeld", "hit", "drops", "currentWorld", "mode",
+                "day", "flyTap", "mining", "miningHeld", "hit", "drops", "furnaces", "currentWorld", "mode",
                 "screen", "spawnDone", "loadingFrames", "loadingTitle", "worldCenterX", "worldCenterZ",
                 "columnsTotal", "meshesTotal");
 

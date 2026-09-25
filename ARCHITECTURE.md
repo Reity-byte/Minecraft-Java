@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2557 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2579 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -83,7 +83,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
 | `AmbienceTest` | Cíle hlasitosti: venku fouká a ve výšce víc, v budově ne, pod stromem o dost míň; jeskyně jen ve tmě **a** pod mořem (dům ani roklina nehučí); voda slábne se vzdáleností, pod vodou naplno a ostatní ztichnou. Nejbližší voda ve skutečném světě (5 bloků), **hlasitost se dotahuje, neskočí**, po 10 s sedí s cílem, v pauze dozní; v jeskyni za minutu 4–15 kapek, poziční a kolem hlavy. V `SoundTest` navíc **smyčky beze švu** (skok konec → začátek ne větší než uvnitř) |
 | `ItemTest` | Předměty: klacek a uhlí existují i bez `items.json`, jména, hromádka předmětu není blok, slévání a dělení po 64, **recept s předmětem projde validací, neznámý předmět ne**; registr (volná dlaždice za vestavěnými, `nextId` jen roste i po smazání, vestavěné smazat nejde, jméno proti vestavěným), `items.json` tam a zpět, ručně psaný soubor s výchozími hodnotami a přeskočenými záznamy; atlas (klacek je obrys na průhledném pozadí, doplnění prázdného souboru); ikona předmětu = jeden čtverec ze zdroje 1 s alfou, neznámý = šachovnice, blok přes `int` id kreslí tytéž vrcholy; creative má předměty za bloky; **vzduch se položit nedá**. 3D model: prázdná dlaždice nic, pixel = 6 stěn **otočených ven**, řádek = jeden čtyřúhelník vpředu a vzadu, poloprůsvitný pixel je průhledný, šachovnice se vejde do `MAX_FLOATS`, UV jen z vlastní dlaždice; klacek v ruce vpravo dole, na zemi se bloky a předměty staví každý ve své instanci a předmět je větší než kostka, postava drží klacek z atlasu předmětů (bez pixelů nic). `ItemDraft`: krokování hromádky, nástroj nastaví hromádku 1 a zpátky 64, rychlost jen s nástrojem, jméno předmětu i bloku a dlaždice vestavěných se odmítnou, volná dlaždice (prázdná za vestavěnými, ne ta kopírovaná, ne použitá). Hratelnost: krumpáč 4× na kámen a rudy, na hlínu 1×, sekera na dřevo, klacek ani blok v ruce nic; **kámen krumpáčem opravdu 4× méně framů**; uhelná ruda vypadne jako uhlí; nástroj: slot unese 1, tři krumpáče do tří slotů, `room` = volné sloty, recept se dvěma nástroji neprojde. Trvanlivost: bod za použití, **na posledním bodě EMPTY**, předmět bez výdrže i blok beze změny, různě opotřebené se neslévají, validace (výdrž jen s hromádkou 1, meze), `items.json` tam a zpět, pruh jen u opotřebeného (zbývající 2/3, zelená/červená), jen v survivalu, `ItemDraft` (nástroj 131, krokování nástroje výdrž nemění, hromádka zůstává 1, zpět bez výdrže); úprava: návrh z předmětu s přichycením ke stupňům, výdrž srovná hromádku na 1, vlastní jméno smí, cizí ne, `toDef` s původním id. V `SaveTest` opotřebení přežije MCW5 a MCW4 se načte s nulovým |
-| `FurnaceTest` | Čtyři natočení: pevné, neprůsvitné, 3,5 s, kanonicky `FURNACE`; **čelo právě na jedné straně**, vršek a bok vlastní dlaždice; jméno a zvuk; v creative jen `FURNACE`; ostatní bloky směrové boky nerozlišují; položení čelem k hráči ve všech čtyřech směrech; z natočené pece padá pec; recept z osmi kamenů (s kamenem uprostřed ne); dlaždice namalované; železný ingot |
+| `FurnaceTest` | Čtyři natočení: pevné, neprůsvitné, 3,5 s, kanonicky `FURNACE`; **čelo právě na jedné straně**, vršek a bok vlastní dlaždice; jméno a zvuk; v creative jen `FURNACE`; ostatní bloky směrové boky nerozlišují; položení čelem k hráči ve všech čtyřech směrech; z natočené pece padá pec; recept z osmi kamenů (s kamenem uprostřed ne); dlaždice namalované; železný ingot. Tavení: recepty a paliva, **první ingot přesně po 10 s**, uhlí vydrží na tři kusy a dohoří, bez suroviny i s netavitelnou se palivo nezapálí, tři klacky = ingot a půl, bez ohně postup klesá, plný nebo cizí výstup pec nezapálí, **dlouhý dt netaví na dluh**. Ukládání pecí (záporné i vzdálené souřadnice), rozbitá pec vrátí obsah, nesmysly ze souboru srovnané, `SmeltBook` (vestavěnou surovinu odmítne, pec ho použije, JSON tam a zpět) |
 | `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto. FOV efekt: sprint/let/obojí, **sprint do zdi nic**, plynulý náběh stejný při 30 i 60 FPS, vypnutí vrací na 1, reset nového světa |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
 | `LabBlockTest` (úprava) | `BlockDraft` z bloku, vlastní jméno smí a cizí ne, `toDef` s původním id, uložená úprava nahradí blok bez posunu `nextId`, tvrdost z ručního souboru přichycená, smazání nechá id vyřazené (i po zápisu a načtení), vestavěný blok smazat nejde |
@@ -2907,7 +2907,7 @@ Model se staví **každý frame znovu** z pixelů sdílených s Main (256 pixel�
 - **Ve třetí osobě** `PlayerModelMesh` postaví model podél paže, špičkou dopředu, a řekne
   (`heldIsItem`), jaký atlas `WorldRenderer` naváže; atlas bloků se pak vrátí pro vodu.
 
-**Pec — rozpracováno (krok 1 ze 4: bloky).** Plán: (1) bloky a předměty, (2) stav pece
+**Pec — rozpracováno (kroky 1 a 2 ze 4).** Plán: (1) bloky a předměty, (2) stav pece
 (vstup, palivo, výstup, tavení) ukládaný se světem, (3) obrazovka pece, (4) recepty tavení
 v Recipe Labu. Rozhodnutí uživatele (2026-09-25): čelo k hráči při položení, pece taví pořád,
 když se hraje (i daleko od hráče), recepty tavení rovnou i v labu.
@@ -2923,6 +2923,20 @@ u nich nic nemění. Směrové boky berou mesher a ikona (ikona ukazuje +Z vlevo
 Dlaždice 35–37 (čelo s otvorem a roštem, bok s rámem, vršek se spárou) procedurálně. Tvrdost
 3,5 s, zní jako kámen. Recept: osm kamenů do kruhu (Minecraft z dlažebních kostek). Přibyl
 vestavěný předmět **železný ingot** (258, dlaždice 2), zatím bez zdroje — bude z pece.
+
+**Stav pece je vedle světa (`Furnaces`), ne v něm** — svět nese bajt na buňku, takže co v peci
+leží, drží mapa podle polohy (Minecraftí „block entity"). Vzniká položením pece, mizí rozbitím
+(obsah vypadne na zem, i v creative). **Taví se všechny pece, dokud se hraje** — i daleko od
+hráče a nad otevřenou obrazovkou; v pauze a v menu stojí. `FurnaceState` má tři sloty jako
+`Container` (surovina, palivo, výsledek) a pravidla Minecraftu: kus se taví 10 s, palivo se
+zapálí jen když je co tavit (pec nepálí naprázdno), hořící palivo dohoří, bez ohně postup
+klesá dvakrát rychleji, než rostl, výsledek jen do prázdného nebo stejného výstupu, když se
+vejde. Dlouhý `dt` se zpracuje po krocích 0,5 s, ať zaseknutý frame netaví „na dluh".
+`Smelting`: železná ruda → ingot, kmeny → uhlí (Minecraft má dřevěné uhlí, hoří stejně), stará
+uhelná ruda → uhlí; recepty z labu (`SmeltBook`, `textures/smelting.json`) až za vestavěnými
+a jen pro suroviny, které vestavěné netaví. `Fuel`: uhlí 80 s, dřevo 15 s, klacek 5 s. Ukládá se
+s `world.dat` jako **MCW6** (za denní dobou seznam pecí: poloha, tři hromádky, oheň, tavení);
+nesmysly ze souboru se srovnají.
 
 **Osvětlení a cyklus dne a noci — hotovo.** Sluneční i blokové světlo, pochodně, desetiminutový
 den, obloha měnící barvu. Klávesa **T** posune čas o desetinu cyklu (na noc se jinak čeká minuty).

@@ -56,6 +56,8 @@ public final class WorldStorage {
     private static final int MAGIC_V4 = 0x4D435734;
     /** V5: hromádka navíc nese opotřebení (short) - nástroje s výdrží. */
     private static final int MAGIC_V5 = 0x4D435735;
+    /** V6: za denní dobou stav pecí (Furnaces) - poloha, tři sloty, oheň a tavení. */
+    private static final int MAGIC_V6 = 0x4D435736;
 
     /**
      * Zvýšit při každé změně generátoru, která posune terén.
@@ -89,7 +91,16 @@ public final class WorldStorage {
                        int selectedSlot,
                        Map<Long, Map<Integer, Byte>> changes,
                        ItemStack[] inventory,
-                       float dayTime) {}
+                       float dayTime,
+                       java.util.List<Furnaces.Saved> furnaces) {
+
+        /** Bez pecí - svět, kde žádná není (a testy, které je nezajímají). */
+        public Save(float x, float y, float z, float yaw, float pitch, boolean flying, int selectedSlot,
+                    Map<Long, Map<Integer, Byte>> changes, ItemStack[] inventory, float dayTime)
+        {
+            this(x, y, z, yaw, pitch, flying, selectedSlot, changes, inventory, dayTime, java.util.List.of());
+        }
+    }
 
     /** Kam se hráč postaví, když uložená poloha nedává smysl (NaN, nekonečno, mimo svět). */
     static final float FALLBACK_XZ = 8.5f;
@@ -124,7 +135,7 @@ public final class WorldStorage {
         {
             try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(bytes)))
             {
-                out.writeInt(MAGIC_V5);
+                out.writeInt(MAGIC_V6);
                 out.writeInt(GENERATOR_VERSION);
 
                 out.writeFloat(save.x());
@@ -155,13 +166,31 @@ public final class WorldStorage {
                 {
                     // null je platny "prazdny slot" - volajici nemusi pole predvyplnovat.
                     ItemStack safe = stack == null ? ItemStack.EMPTY : stack;
-                    out.writeShort(safe.id());
-                    out.writeInt(safe.count());
-                    out.writeShort(safe.damage());
+                    writeStack(out, safe);
                 }
 
                 // Denní doba, až úplně na konci - viz poznámka u MAGIC.
                 out.writeFloat(save.dayTime());
+
+                // Pece (MCW6) ještě za ní - starší soubor tu končí.
+                out.writeInt(save.furnaces().size());
+
+                for(Furnaces.Saved f : save.furnaces())
+                {
+                    out.writeInt(f.x());
+                    out.writeInt(f.y());
+                    out.writeInt(f.z());
+
+                    for(int i = 0; i < 3; i++)
+                    {
+                        ItemStack stack = i < f.slots().length && f.slots()[i] != null ? f.slots()[i] : ItemStack.EMPTY;
+                        writeStack(out, stack);
+                    }
+
+                    out.writeFloat(f.burnLeft());
+                    out.writeFloat(f.burnTotal());
+                    out.writeFloat(f.cook());
+                }
             }
         }
         catch(IOException e)
@@ -172,6 +201,22 @@ public final class WorldStorage {
         }
 
         return SafeFiles.writeAtomically(path, bytes.toByteArray(), WorldStorage::readsCompletely, "Svet");
+    }
+
+    /** Hromádka v souboru (od MCW5): id short, počet int, opotřebení short. */
+    private static void writeStack(DataOutputStream out, ItemStack stack) throws IOException
+    {
+        out.writeShort(stack.id());
+        out.writeInt(stack.count());
+        out.writeShort(stack.damage());
+    }
+
+    private static ItemStack readStack(DataInputStream in) throws IOException
+    {
+        int id = in.readShort();
+        int count = Math.min(in.readInt(), ItemStack.MAX_COUNT);
+        int damage = in.readShort();
+        return ItemStack.of(id, count, damage);
     }
 
     /** Jde dosavadní soubor načíst? Tiše - na stderr píše jen skutečné načítání. */
@@ -198,13 +243,13 @@ public final class WorldStorage {
             int magic = in.readInt();
 
             if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3 && magic != MAGIC_V4
-                    && magic != MAGIC_V5)
+                    && magic != MAGIC_V5 && magic != MAGIC_V6)
             {
                 // "MCW" + jiná číslice je NAŠE značka, jen z novější verze hry -
                 // říct to, ať si hráč nemyslí, že je soubor poškozený.
                 report.accept((magic & 0xFFFFFF00) == (MAGIC_V1 & 0xFFFFFF00)
                         ? "Ulozeny svet je z novejsi verze hry (format " + (char) (magic & 0xFF)
-                                + "), tahle umi jen do 5: " + path
+                                + "), tahle umi jen do 6: " + path
                         : "Ulozeny svet ma cizi format: " + path);
                 return null;
             }
@@ -282,7 +327,7 @@ public final class WorldStorage {
             ItemStack[] inventory = new ItemStack[0];
 
             // Starší soubor inventář nemá - načte se prázdný a hráč začne s ničím.
-            if(magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5)
+            if(magic >= MAGIC_V2)
             {
                 int slots = in.readInt();
 
@@ -330,8 +375,29 @@ public final class WorldStorage {
                 dayTime = in.readFloat();
             }
 
+            java.util.List<Furnaces.Saved> furnaces = new java.util.ArrayList<>();
+
+            if(magic >= MAGIC_V6)
+            {
+                int count = in.readInt();
+
+                if(count < 0 || count > 1_000_000)
+                {
+                    report.accept("Ulozeny svet je poskozeny: divny pocet peci");
+                    return null;
+                }
+
+                for(int i = 0; i < count; i++)
+                {
+                    int fx = in.readInt(), fy = in.readInt(), fz = in.readInt();
+                    ItemStack[] slots = {readStack(in), readStack(in), readStack(in)};
+                    furnaces.add(new Furnaces.Saved(fx, fy, fz, slots,
+                            in.readFloat(), in.readFloat(), in.readFloat()));
+                }
+            }
+
             Save save = new Save(x, y, z, yaw, pitch, flying, selectedSlot,
-                    changes, inventory, dayTime);
+                    changes, inventory, dayTime, furnaces);
 
             // Stejná opatrnost jako u GENERATOR_VERSION: varovat, nepadat.
             // Svět s bloky z labu, které blocks.json nezná (soubor zmizel nebo

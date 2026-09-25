@@ -37,10 +37,10 @@ public class SaveTest {
         Files.write(junk, new byte[]{1, 2, 3, 4, 5, 6, 7, 8});
         check("cizi soubor se odmitne misto padu", WorldStorage.load(junk) == null, "");
 
-        // PER-11: nasi znacku z novejsi verze hry (MCW6) hlasit jako novejsi,
+        // PER-11: nasi znacku z novejsi verze hry (MCW7) hlasit jako novejsi,
         // ne jako "cizi format" - to by hrac bral jako poskozeny soubor.
         Path newer = dir.resolve("newer.dat");
-        Files.write(newer, new byte[]{'M', 'C', 'W', '6', 0, 0, 0, 0});
+        Files.write(newer, new byte[]{'M', 'C', 'W', '7', 0, 0, 0, 0});
         java.util.List<String> said = new java.util.ArrayList<>();
         check("novejsi format se odmitne", WorldStorage.read(newer, said::add) == null, "");
         check("a hlaska rekne, ze je z novejsi verze", !said.isEmpty() && said.get(0).contains("novejsi"),
@@ -375,7 +375,7 @@ public class SaveTest {
                 new java.util.HashMap<>(), inventory, 100f));
 
         byte[] head = Files.readAllBytes(file);
-        check("uklada se jako MCW5", head[0] == 'M' && head[1] == 'C' && head[2] == 'W' && head[3] == '5',
+        check("uklada se jako MCW6", head[0] == 'M' && head[1] == 'C' && head[2] == 'W' && head[3] == '6',
                 "" + (char) head[3]);
 
         WorldStorage.Save loaded = WorldStorage.load(file);
