@@ -178,7 +178,9 @@ public class AsyncTest {
 
         // ---------- 6) shutdown zastavi vlakno ----------
         World stopped = new World();
-        check("worker bezi", stopped.isWorkerAlive(), "");
+        check("svet, ktery nic nechce, vlakno nespusti (MAIN-14)", !stopped.isWorkerAlive(), "");
+        stopped.update(8f, 8f);
+        check("prvni pozadavek worker spusti", stopped.isWorkerAlive(), "");
         stopped.shutdown();
 
         boolean died = false;

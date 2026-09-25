@@ -185,7 +185,7 @@ public final class WorldStorage {
     }
 
     /** Vlastní čtení; zprávy jdou do report (stderr, nebo nikam u tiché kontroly). */
-    private static Save read(Path path, Consumer<String> report)
+    static Save read(Path path, Consumer<String> report)
     {
         try(DataInputStream in = new DataInputStream(
                 new BufferedInputStream(Files.newInputStream(path))))
@@ -194,7 +194,12 @@ public final class WorldStorage {
 
             if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3)
             {
-                report.accept("Ulozeny svet ma cizi format: " + path);
+                // "MCW" + jiná číslice je NAŠE značka, jen z novější verze hry -
+                // říct to, ať si hráč nemyslí, že je soubor poškozený.
+                report.accept((magic & 0xFFFFFF00) == (MAGIC_V1 & 0xFFFFFF00)
+                        ? "Ulozeny svet je z novejsi verze hry (format " + (char) (magic & 0xFF)
+                                + "), tahle umi jen do 3: " + path
+                        : "Ulozeny svet ma cizi format: " + path);
                 return null;
             }
 

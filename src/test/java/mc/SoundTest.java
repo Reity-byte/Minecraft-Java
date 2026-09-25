@@ -322,12 +322,35 @@ public class SoundTest {
         // ---------- co neumi ----------
         check("24 bitu se odmitne", Wav.decode(wavFile(1, 1, 8000, 24, new byte[6], false)) == null, "");
         check("komprese (ne PCM) se odmitne", Wav.decode(wavFile(2, 1, 8000, 16, new byte[4], false)) == null, "");
+
+        // SND-4: WAVE_FORMAT_EXTENSIBLE rozhoduje podle subformatu.
+        Wav.Pcm extPcm = Wav.decode(extensible(1, new byte[]{0x10, 0x00, (byte) 0xF0, (byte) 0xFF}));
+        check("EXTENSIBLE se subformatem PCM se prehraje",
+                extPcm != null && extPcm.samples().length == 2 && extPcm.samples()[0] == 0x10,
+                extPcm == null ? "null" : "" + extPcm.samples().length);
+        check("EXTENSIBLE s A-law (6) se odmitne, misto sumu hraje placeholder",
+                Wav.decode(extensible(6, new byte[4])) == null, "");
+        check("EXTENSIBLE bez subformatu (kratky fmt) se odmitne",
+                Wav.decode(wavFile(0xFFFE, 1, 8000, 16, new byte[4], false)) == null, "");
         check("nesmysl se odmitne", Wav.decode("tohle neni wav".getBytes()) == null && Wav.decode(null) == null, "");
 
         byte[] cut = Arrays.copyOf(file, 44 + 100);
         Wav.Pcm partial = Wav.decode(cut);
         check("useknuty soubor vrati, co v nem je",
                 partial != null && partial.samples().length == 50, partial == null ? "null" : "" + partial.samples().length);
+    }
+
+    /** WAV v obalce WAVE_FORMAT_EXTENSIBLE (fmt o 40 bajtech), mono 16 bitu, dany subformat. */
+    static byte[] extensible(int subFormat, byte[] data) {
+        ByteBuffer b = ByteBuffer.allocate(12 + 8 + 40 + 8 + data.length).order(ByteOrder.LITTLE_ENDIAN);
+        b.put("RIFF".getBytes()).putInt(4 + 8 + 40 + 8 + data.length).put("WAVE".getBytes());
+        b.put("fmt ".getBytes()).putInt(40).putShort((short) 0xFFFE).putShort((short) 1)
+                .putInt(8000).putInt(16000).putShort((short) 2).putShort((short) 16)
+                .putShort((short) 22).putShort((short) 16).putInt(4)          // cbSize, validBits, maska kanalu
+                .putShort((short) subFormat)                                    // GUID: prvni 2 bajty = kod
+                .put(new byte[]{0, 0, 0, 0, 0x10, 0, (byte) 0x80, 0, 0, (byte) 0xAA, 0, 0x38, (byte) 0x9B, 0x71});
+        b.put("data".getBytes()).putInt(data.length).put(data);
+        return b.array();
     }
 
     /** Rucne slozeny WAV: format, kanaly, frekvence, bity, data, volitelne blok LIST navic. */

@@ -103,8 +103,10 @@ public class MenuTest {
 
         // Souradnice z puvodniho okna uz na jinem rozmeru platit nemusi, ale
         // stred zustava stredem - to je jedina invarianta, na kterou se spolehame.
-        check("stred sedi i na uzkem okne",
-                menu.buttonAt(400 / 2.0, 600 / 2.0, 400, 600) >= -1, "");
+        // Driv ">= -1", coz plati vzdycky (-1 = nic) - uzke okno se netestovalo.
+        int narrow = menu.buttonAt(400 / 2.0, 600 / 2.0, 400, 600);
+        check("stred sedi i na uzkem okne", narrow >= 0 && narrow < menu.buttonCount(),
+                String.valueOf(narrow));
 
         // ---------- menu s jedinym tlacitkem ----------
         Menu single = new Menu("One", "Only");

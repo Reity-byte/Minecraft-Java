@@ -240,7 +240,22 @@ public class World {
         worker = new Thread(this::generateLoop, "world-gen");
         // Daemon, aby nedržel JVM naživu, kdyby se zapomnělo na shutdown().
         worker.setDaemon(true);
-        worker.start();
+    }
+
+    /**
+     * Spustí worker, až když je poprvé co generovat.
+     *
+     * ⚠️ LÍNĚ, NE V KONSTRUKTORU. Úvodní zástupný svět v Main a malé světy
+     * náhledů v labu (BlockPreview, TreePreview) nikdy nic nepožádají, a jejich
+     * vlákno se přesto celou dobu desetkrát za sekundu probouzelo. Po
+     * shutdown() se už nespustí.
+     */
+    private void ensureWorker()
+    {
+        if(running && worker.getState() == Thread.State.NEW)
+        {
+            worker.start();
+        }
     }
 
     /** Seed, ze kterého se počítá terén. Ukládá ho WorldSaves do world.json. */
@@ -575,6 +590,7 @@ public class World {
 
             if(inFlight.add(k))
             {
+                ensureWorker();
                 requests.add(k);
             }
         }

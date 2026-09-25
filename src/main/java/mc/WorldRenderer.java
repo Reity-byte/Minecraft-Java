@@ -739,16 +739,15 @@ public class WorldRenderer {
                 (float) (y - (double) camera.y),
                 (float) (z - (double) camera.z));
 
-        // V core profilu není šířka čáry > 1 zaručená; většina desktopových
-        // ovladačů ji ale respektuje. Když bude obrys tenký, je to tohle.
-        glLineWidth(3f);
-
+        // ⚠️ ŽÁDNÉ glLineWidth(3). Kontext je forward-compatible (Main), a tam
+        // je podle specifikace GL 3.3 (příloha E.2.1) šířka nad 1 CHYBA
+        // (GL_INVALID_VALUE), ne jen "nezaručená podpora" - obrys byl stejně
+        // vždycky 1 px a každý frame se zaměřeným blokem nastavil chybu GL.
+        // Silnější obrys by musel být z trojúhelníků.
         glBindVertexArray(outlineVao);
         glDrawArrays(GL_LINES, 0, 24);
         GlStats.countDraw();
         glBindVertexArray(0);
-
-        glLineWidth(1f);
     }
 
     // ------------------------------------------------------------------

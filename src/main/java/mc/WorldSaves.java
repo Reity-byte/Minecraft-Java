@@ -2,6 +2,7 @@ package mc;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -202,8 +203,11 @@ public final class WorldSaves {
                 }
             }
         }
-        catch(IOException e)
+        catch(IOException | DirectoryIteratorException e)
         {
+            // DirectoryIteratorException: chyba I/O až BĚHEM procházení (vadné
+            // médium, síťový disk) přijde jako RuntimeException, ne IOException,
+            // a vyletěla by přes callback GLFW.
             System.err.println("Svety v " + root + " nejdou vypsat: " + e);
         }
 
@@ -487,7 +491,7 @@ public final class WorldSaves {
                     }
                 }
             }
-            catch(IOException e)
+            catch(IOException | DirectoryIteratorException e)
             {
                 // Radši přidat číslo zbytečně než přepsat cizí svět.
                 System.err.println("Slozky v " + root + " nejdou vypsat: " + e);

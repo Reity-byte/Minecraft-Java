@@ -347,8 +347,16 @@ public class CaveTest {
         // ktere by v pouzitem miste byly tak jako tak, se biomem neposunou -
         // na hranici hor jen nektere dalsi pribudou. Kdyby se delitelnost
         // porusila, zily by na hranici biomu skakaly.
+        //
+        // Driv to byl test "60 % 20 == 0" nad literaly - na kodu nezavisel.
+        // Ted se bere skutecna vzacnost z generatoru a vychoziho tuningu. Tuner
+        // umi delitelnost porusit (treba 30 a 20); pak se zila na hranici biomu
+        // usekne - jen vizualne, a vedome to tak zustava.
+        int mountainIronRarity = BiomeTuning.rarity(TerrainGenerator.IRON_RARITY,
+                BiomeTuning.defaults().tune(Biome.MOUNTAINS).ironDensity());
         check("horska zila je nadmnozina bezne (zily se na hranici neposouvaji)",
-                60 % 20 == 0, "");
+                mountainIronRarity > 0 && TerrainGenerator.IRON_RARITY % mountainIronRarity == 0,
+                TerrainGenerator.IRON_RARITY + " / " + mountainIronRarity);
 
         // ---------- zaporne souradnice ----------
         // Zilne bunky se pocitaji posunem >>, ne delenim. S delenim by bunka
@@ -387,6 +395,12 @@ public class CaveTest {
         check("isCave je deterministicka", stable, "");
 
         steepTuning();
+
+        // Zastavit workery - jinak by kazdy svet (~17 MB) zil v jedne JVM az do konce AllTests (WLD-13).
+        w.shutdown();
+        warm.shutdown();
+        warm2.shutdown();
+        w2.shutdown();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }

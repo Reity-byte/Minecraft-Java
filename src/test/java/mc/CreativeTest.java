@@ -47,6 +47,9 @@ public class CreativeTest {
             metadata();
         } finally {
             BlockRegistry.activate(BlockRegistry.empty());
+            // Zastavit workery svetu z arena()/platform() (WLD-13).
+            for (World w : opened) w.shutdown();
+            opened.clear();
         }
 
         System.out.println(failures == 0 ? "\nCreativeTest: OK" : "\nCreativeTest: " + failures + " FAIL");
@@ -158,8 +161,12 @@ public class CreativeTest {
     // ==================================================================
 
     /** Arena s podlahou z ruznych bloku nad sebou v jedne rade. */
+    /** Svety z arena() a platform() - main je na konci zastavi (WLD-13). */
+    static final java.util.List<World> opened = new java.util.ArrayList<>();
+
     static World arena(int floor) {
         World w = new World();
+        opened.add(w);
         w.loadRadius = 1;
         w.unloadRadius = 3;
         w.updateBlocking(8f, 8f);
@@ -217,6 +224,7 @@ public class CreativeTest {
 
         // Voda neni zamerovatelna - creative na tom nic nemeni.
         World water = new World();
+        opened.add(water);
         water.loadRadius = 1;
         water.unloadRadius = 3;
         water.updateBlocking(8f, 8f);
@@ -642,6 +650,7 @@ public class CreativeTest {
     /** Hrac stojici na kamenne plosine ve vysce FLOOR. */
     static World platform(int floor) {
         World w = new World();
+        opened.add(w);
         w.loadRadius = 1;
         w.unloadRadius = 3;
         w.updateBlocking(8f, 8f);

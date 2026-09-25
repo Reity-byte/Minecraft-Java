@@ -236,6 +236,10 @@ public class ChunkTest {
                     !w2.isSolid(hit.placeX(), hit.placeY(), hit.placeZ()), "");
         }
 
+        // Zastavit workery - jinak by kazdy svet (~17 MB) zil v jedne JVM az do konce AllTests (WLD-13).
+        w.shutdown();
+        w2.shutdown();
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
 }

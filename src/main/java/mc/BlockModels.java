@@ -56,6 +56,12 @@ public final class BlockModels {
             BlockBox.px(6, 0, 6, 10, 16, 10)
     };
 
+    /**
+     * Nejvíc kvádrů, které má kterýkoli model. Podle toho má pevné buffery
+     * HeldItemRenderer - model s víc kvádry by jinak tiše přišel o ty navíc.
+     */
+    static final int MAX_BOXES = Math.max(CUBE.length, Math.max(TORCH.length, FENCE.length));
+
     private BlockModels() {}
 
     public static BlockBox[] of(byte blockId)

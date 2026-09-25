@@ -37,6 +37,19 @@ public class SaveTest {
         Files.write(junk, new byte[]{1, 2, 3, 4, 5, 6, 7, 8});
         check("cizi soubor se odmitne misto padu", WorldStorage.load(junk) == null, "");
 
+        // PER-11: nasi znacku z novejsi verze hry (MCW4) hlasit jako novejsi,
+        // ne jako "cizi format" - to by hrac bral jako poskozeny soubor.
+        Path newer = dir.resolve("newer.dat");
+        Files.write(newer, new byte[]{'M', 'C', 'W', '4', 0, 0, 0, 0});
+        java.util.List<String> said = new java.util.ArrayList<>();
+        check("novejsi format se odmitne", WorldStorage.read(newer, said::add) == null, "");
+        check("a hlaska rekne, ze je z novejsi verze", !said.isEmpty() && said.get(0).contains("novejsi"),
+                said.toString());
+        said.clear();
+        WorldStorage.read(junk, said::add);
+        check("opravdu cizi soubor zustava 'cizi format'", !said.isEmpty() && said.get(0).contains("cizi"),
+                said.toString());
+
         Path truncated = dir.resolve("truncated.dat");
         Files.write(truncated, new byte[]{0x4D, 0x43, 0x57, 0x31, 0, 0, 0, 2, 0, 0});
         check("useknuty soubor se odmitne misto padu", WorldStorage.load(truncated) == null, "");

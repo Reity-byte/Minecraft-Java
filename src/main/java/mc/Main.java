@@ -7,6 +7,7 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL33.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,7 +43,10 @@ public class Main {
     // Package-private kvůli MainStateTest (reset stavu mezi světy).
     final Camera camera = new Camera();
     final Player player = new Player();
-    World world = new World(); // nahrazuje se při vytvoření nového světa
+    // Zástupný svět do prvního Play/Create a v menu po Save and Quit. Nic
+    // negeneruje (worker se spouští až na první požadavek, viz World), takže
+    // nevadí, že vzniká dřív, než init() načte biome_tuning.json.
+    World world = new World();
 
     /**
      * Zvuk. Žije stejně jako svět: při založení nebo načtení světa se zavře
@@ -106,6 +110,9 @@ public class Main {
     private boolean glReady = false;
 
     private Raycaster.RaycastHit hit;
+
+    /** Zbytek posunu kolečka pod celý slot - viz scroll callback (trackpad). */
+    private double scrollRemainder = 0;
 
     /** Kopání: drží se tlačítko a jak daleko je rozbíjení. */
     private final Mining mining = new Mining();
@@ -788,8 +795,15 @@ public class Main {
             }
             // Kolečko nahoru = doleva po hotbaru, jako v Minecraftu.
             // floorMod, aby se to na krajích správně přetočilo dokola.
-            selectedSlot = Math.floorMod(
-                    selectedSlot - (int) Math.signum(yoffset), Inventory.HOTBAR_SIZE);
+            //
+            // ⚠️ Posuny se SČÍTAJÍ a slot se mění po celých jednotkách.
+            // Klasické kolečko posílá ±1 na zoubek, takže se nic nemění;
+            // trackpad (hlavně macOS) ale posílá desítky malých posunů za
+            // gesto a signum z každého protočilo hotbar o celý slot za událost.
+            scrollRemainder += yoffset;
+            int steps = (int) scrollRemainder;   // směrem k nule
+            scrollRemainder -= steps;
+            selectedSlot = Math.floorMod(selectedSlot - steps, Inventory.HOTBAR_SIZE);
         });
 
         glfwMakeContextCurrent(window);
@@ -815,7 +829,9 @@ public class Main {
 
         // Celá obrazovka až po vytvoření okna: přepíná se tentýž window
         // a tentýž GL kontext, takže se nic nemusí nahrávat znovu.
-        windowMode.apply(window, options.fullscreen(), options.vsync());
+        if (!windowMode.apply(window, options.fullscreen(), options.vsync())) {
+            options.setFullscreen(false);
+        }
         glfwShowWindow(window);
 
         // Framebuffer nemusí mít stejnou velikost jako okno (DPI škálování).
@@ -957,7 +973,11 @@ public class Main {
         }
 
         glfwSwapInterval(options.vsync() ? 1 : 0);
-        windowMode.apply(window, options.fullscreen(), options.vsync());
+
+        if (!windowMode.apply(window, options.fullscreen(), options.vsync())) {
+            // Celá obrazovka nejde - nastavení musí říkat pravdu (okno).
+            options.setFullscreen(false);
+        }
     }
 
     /** Uloží nastavení na disk. Chyba se jen ohlásí - hra kvůli ní nepadá. */
@@ -983,6 +1003,12 @@ public class Main {
     }
 
     private void setState(GameState next) {
+        // Náhledy světů jsou textury - při odchodu ze seznamu se uvolní.
+        // Zpátky se jde jen přes openSelectWorld(), a ten je nahraje znovu.
+        if (state == GameState.SELECT_WORLD && next != GameState.SELECT_WORLD) {
+            selectScreen.delete();
+        }
+
         state = next;
 
         // Kurzor je chycený jen při hraní; v menu musí být vidět a volný.
@@ -1158,7 +1184,7 @@ public class Main {
         player.flying = save.flying();
         player.onGround = false;
 
-        camera.yaw = save.yaw();
+        camera.yaw = Camera.wrapYaw(save.yaw());
         camera.pitch = save.pitch();
         camera.setPosition(player.x, player.eyeY(), player.z);
 
@@ -1433,6 +1459,15 @@ public class Main {
 
         currentWorld = null;
 
+        // ⚠️ Starý svět se zastaví a uvolní HNED, ne až s dalším světem: jinak
+        // v menu dál žilo jeho worker vlákno, načtené sloupce, VBO meshů
+        // (desítky MB) i položky na zemi. Náhrada je zástupný svět bez vlákna.
+        world.shutdown();
+        world = new World();
+        worldRenderer.reset();
+        drops.clear();
+        hit = null;
+
         // V menu se na mód nikdo neptá, ale ať tam po creative světě nezůstane
         // viset - příští svět si ho stejně nastaví sám z metadat.
         mode = GameMode.SURVIVAL;
@@ -1585,7 +1620,12 @@ public class Main {
 
         // Animace se řídí SKUTEČNÝM posunem, ne vstupem - chůze do zdi
         // nohama nemáchá, i když se drží W.
-        animation.update(dt, (float) Math.hypot(player.x - beforeX, player.z - beforeZ));
+        //
+        // ⚠️ S TÝMŽ ořezaným dt jako fyzika: po zaseknutí (F11, GC, tah oknem)
+        // by posun z ořezané fyziky dělený neořezaným časem vyšel jako skoro
+        // stání a nohy by na frame cukly do klidu.
+        animation.update(Math.min(dt, Player.MAX_TIME_STEP),
+                (float) Math.hypot(player.x - beforeX, player.z - beforeZ));
 
         // V první osobě kamera v očích, ve třetí za hráčem nebo před ním.
         camera.follow(world, player.x, player.eyeY(), player.z);
@@ -1614,6 +1654,11 @@ public class Main {
             // Survival: vytěžený kus jde do inventáře, co se nevejde na zem.
             // Creative: blok zmizí a nic po něm nezbude.
             mining.harvest(world, inventory, drops, sound, mode);
+
+            // Zaměření znovu: rozbitý blok už tam není. Jinak by se obrys
+            // nakreslil na vzduch a PMB v nejbližších událostech položil blok
+            // na místo bez opory (hit.place* rozbitého bloku).
+            hit = Raycaster.cast(world, player.x, player.eyeY(), player.z, dir[0], dir[1], dir[2], 8f);
         }
 
         // Až po pohybu hráče, ať se sbírá podle toho, kde hráč stojí teď.
@@ -1895,40 +1940,40 @@ public class Main {
     /** Ladicí výpis vlevo nahoře - nahradil dřívější zprávy v titulku okna. */
     private String[] debugLines() {
         return new String[]{
-                String.format("%d FPS   vsync %s   max %s   render %d   sim %d",
+                String.format(Locale.ROOT, "%d FPS   vsync %s   max %s   render %d   sim %d",
                         currentFps, options.vsync() ? "on" : "off", options.fpsLabel(),
                         options.renderDistance(), options.simulationDistance()),
-                String.format("XYZ  %.2f  %.2f  %.2f", player.x, player.y, player.z),
-                String.format("chunk  %d %d   columns %d   edits %d",
+                String.format(Locale.ROOT, "XYZ  %.2f  %.2f  %.2f", player.x, player.y, player.z),
+                String.format(Locale.ROOT, "chunk  %d %d   columns %d   edits %d",
                         (int) Math.floor(player.x) >> Chunk.BITS,
                         (int) Math.floor(player.z) >> Chunk.BITS,
                         world.loadedColumnCount(),
                         world.changedBlockCount()),
-                String.format("sections %d   faces %d   queue %d",
+                String.format(Locale.ROOT, "sections %d   faces %d   queue %d",
                         worldRenderer.drawnSections(),
                         worldRenderer.drawnFaces(),
                         worldRenderer.pendingBuilds()),
-                String.format("%s inventory   held %d/%d slots   on ground %d",
+                String.format(Locale.ROOT, "%s inventory   held %d/%d slots   on ground %d",
                         key(Keybinds.Action.INVENTORY), usedSlots(), Inventory.SIZE, drops.size()),
-                String.format("sound %s   atlas %s   skin %s   lab blocks %d",
-                        sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off",
+                String.format(Locale.ROOT, "sound %s   atlas %s   skin %s   lab blocks %d",
+                        sound.isOpen() ? String.format(Locale.ROOT, "on (%.0f ms)", sound.openMillis()) : "off",
                         atlasFromFile ? SafeFiles.shown(Textures.ATLAS_FILE) : "procedural",
                         skinFromFile ? SafeFiles.shown(Textures.SKIN_FILE) : "built-in",
                         BlockRegistry.active().size()),
                 mining.isActive()
-                        ? String.format("mining %.0f%%   stage %d",
+                        ? String.format(Locale.ROOT, "mining %.0f%%   stage %d",
                                 mining.progress() * 100, mining.stage())
                         : "not mining",
-                String.format("time %04.1f   sun %.2f   light sky %d block %d",
+                String.format(Locale.ROOT, "time %04.1f   sun %.2f   light sky %d block %d",
                         day.hours(), day.daylight(),
                         world.skyLightAt((int) Math.floor(camera.x),
                                 (int) Math.floor(camera.y), (int) Math.floor(camera.z)),
                         world.blockLightAt((int) Math.floor(camera.x),
                                 (int) Math.floor(camera.y), (int) Math.floor(camera.z))),
-                String.format("%s   vy %.2f   mode %s",
+                String.format(Locale.ROOT, "%s   vy %.2f   mode %s",
                         player.noclip ? "NOCLIP" : player.flying ? "FLYING"
                                 : player.inWater
-                                    ? String.format("swimming %.0f%%", player.submerged * 100)
+                                    ? String.format(Locale.ROOT, "swimming %.0f%%", player.submerged * 100)
                                 : player.onGround ? "on ground" : "in air",
                         player.vy, mode.label()),
                 // Klávesy z Keybinds, ne natvrdo - po přebindování by nápověda lhala.

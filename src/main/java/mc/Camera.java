@@ -61,11 +61,21 @@ public class Camera {
     public static final float MAX_PITCH = 89f;
 
     public void processMouse(double dx, double dy) {
-        yaw += (float) (dx * mouseSensitivity);
+        // Yaw se balí do 0-360: ukládá se do world.dat a napříč sezeními by
+        // jinak rostl a ztrácel přesnost (PLR-4). Nic nevyhlazuje přes švy,
+        // takže skok 359 -> 0 je jen jiný zápis téhož směru.
+        yaw = wrapYaw(yaw + (float) (dx * mouseSensitivity));
         pitch += (float) ((invertMouseY ? -dy : dy) * mouseSensitivity);
 
         if (pitch > MAX_PITCH) pitch = MAX_PITCH;
         if (pitch < -MAX_PITCH) pitch = -MAX_PITCH;
+    }
+
+    /** Úhel do intervalu 0 (včetně) až 360 (bez). */
+    public static float wrapYaw(float degrees)
+    {
+        float wrapped = degrees % 360f;
+        return wrapped < 0f ? wrapped + 360f : wrapped;
     }
 
     public void setPosition(float x, float y, float z)

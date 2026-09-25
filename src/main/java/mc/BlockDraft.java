@@ -148,6 +148,56 @@ final class BlockDraft {
      */
     static int freeTile(BlockRegistry registry, int... reserved)
     {
+        boolean[] used = usedTiles(registry, reserved);
+
+        for(int tile = used.length - 1; tile >= 0; tile--)
+        {
+            if(!used[tile])
+            {
+                return tile;
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * Totéž, ale s ohledem na to, co v atlasu je: přednost má buňka, ve které
+     * není ani jeden pixel. Až když žádná taková není, vrátí volnou buňku
+     * s něčím namalovaným (volající to pak řekne - jde to vrátit Ctrl+Z).
+     *
+     * ⚠️ Dřív New tile tiše přepsal, co si uživatel namaloval do buňky, kterou
+     * zatím žádný blok nepoužívá - třeba rozdělanou dlaždici na příští blok.
+     */
+    static int freeTileFor(BlockRegistry registry, int[] atlasPixels, int... reserved)
+    {
+        boolean[] used = usedTiles(registry, reserved);
+        int painted = -1;
+
+        for(int tile = used.length - 1; tile >= 0; tile--)
+        {
+            if(used[tile])
+            {
+                continue;
+            }
+
+            if(Textures.tileEmpty(atlasPixels, tile))
+            {
+                return tile;
+            }
+
+            if(painted < 0)
+            {
+                painted = tile;
+            }
+        }
+
+        return painted;
+    }
+
+    /** Buňky, které nová dlaždice vzít nesmí - viz freeTile(). */
+    private static boolean[] usedTiles(BlockRegistry registry, int... reserved)
+    {
         boolean[] used = registry.usedTiles();
 
         for(int id = 1; id < BlockRegistry.FIRST_ID; id++)
@@ -178,14 +228,6 @@ final class BlockDraft {
             }
         }
 
-        for(int tile = used.length - 1; tile >= 0; tile--)
-        {
-            if(!used[tile])
-            {
-                return tile;
-            }
-        }
-
-        return -1;
+        return used;
     }
 }

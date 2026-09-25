@@ -64,6 +64,16 @@ public final class TreeShape {
         for(int layer = 0; layer < layers; layer++)
         {
             int y = top - (layers - 2) + layer;
+
+            // ⚠️ Kmen kratší než počet vrstev (tuner povoluje kmen od 1) by
+            // spodní vrstvy koruny zapustil POD úroveň terénu: ve světě se
+            // zapsaly do vzduchu pod patou stromu na svahu, v náhledu visely
+            // pod plošinkou - a náhled se od světa lišil. Pod patu kmene se
+            // proto koruna nerazítkuje vůbec.
+            if(y < ground)
+            {
+                continue;
+            }
             int base = type.layerRadius[layer];
             int radius = base == 0 ? 0 : Math.max(0, base + crownDelta);
             boolean trimCorners = type.layerTrim[layer];

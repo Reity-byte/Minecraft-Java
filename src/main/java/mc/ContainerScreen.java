@@ -788,13 +788,15 @@ public class ContainerScreen {
         shapes.end();
 
         // Ikony mají vlastní texturovaný shader, takže jdou samostatným
-        // průchodem. Kurzor se kreslí uvnitř něj NAPOSLED, aby byl nad vším.
-        drawIcons(icons, mouseX, mouseY, screenWidth, screenHeight, scale);
-
-        drawCounts(text, screenWidth, screenHeight, scale);
-        drawHeldCount(text, mouseX, mouseY, screenWidth, screenHeight, scale);
+        // průchodem. Pak JEDEN textový průchod pro počty ve slotech i titulky.
+        //
+        // ⚠️ HROMÁDKA NA KURZORU AŽ ÚPLNĚ NAKONEC, i se svým počtem. Dřív se
+        // kurzor kreslil v průchodu ikon a počty slotů až po něm, takže číslice
+        // slotu pod myší ležela přes drženou kostku.
+        drawSlotIcons(icons, screenWidth, screenHeight, scale);
 
         text.begin(screenWidth, screenHeight, scale);
+        drawCounts(text, screenWidth, screenHeight, scale);
 
         float panelTop = screenHeight - (bottom + panelHeight * scale);
         text.drawShadowed(title, left + 8 * scale, panelTop + 6 * scale,
@@ -807,6 +809,8 @@ public class ContainerScreen {
         }
 
         text.end();
+
+        drawCursor(icons, text, mouseX, mouseY, screenWidth, screenHeight, scale);
     }
 
     /**
@@ -865,9 +869,8 @@ public class ContainerScreen {
         }
     }
 
-    /** Všechny kostky v jednom průchodu, kurzor naposled. */
-    private void drawIcons(BlockIcon icons, double mouseX, double mouseY,
-                           int screenWidth, int screenHeight, int scale)
+    /** Kostky ve slotech v jednom průchodu (kurzor zvlášť, viz drawCursor). */
+    private void drawSlotIcons(BlockIcon icons, int screenWidth, int screenHeight, int scale)
     {
         icons.begin(screenWidth, screenHeight);
 
@@ -892,15 +895,33 @@ public class ContainerScreen {
             }
         }
 
+        icons.end();
+    }
+
+    /** Hromádka na kurzoru i s počtem - nad vším ostatním. */
+    private void drawCursor(BlockIcon icons, TextRenderer text, double mouseX, double mouseY,
+                            int screenWidth, int screenHeight, int scale)
+    {
         ItemStack cursor = shownHeld();
 
-        if(!cursor.isEmpty())
+        if(cursor.isEmpty())
         {
-            icons.draw(heldX(mouseX, scale), heldY(mouseY, screenHeight, scale),
-                    SLOT_INNER * scale, cursor.block());
+            return;
         }
 
+        icons.begin(screenWidth, screenHeight);
+        icons.draw(heldX(mouseX, scale), heldY(mouseY, screenHeight, scale),
+                SLOT_INNER * scale, cursor.block());
         icons.end();
+
+        if(cursor.count() > 1)
+        {
+            text.begin(screenWidth, screenHeight, scale);
+            drawCount(text, cursor.count(),
+                    heldX(mouseX, scale) - scale, heldY(mouseY, screenHeight, scale) - scale,
+                    screenWidth, screenHeight, scale);
+            text.end();
+        }
     }
 
     private static float heldX(double mouseX, int scale)
@@ -913,11 +934,9 @@ public class ContainerScreen {
         return (float) (screenHeight - mouseY) - SLOT_INNER * scale / 2f;
     }
 
-    /** Počty se kreslí v jednom textovém průchodu, ať se shader nepřepíná po slotech. */
+    /** Počty ve slotech - uvnitř společného textového průchodu (begin/end volá render). */
     private void drawCounts(TextRenderer text, int screenWidth, int screenHeight, int scale)
     {
-        text.begin(screenWidth, screenHeight, scale);
-
         for(SlotGrid grid : grids)
         {
             for(int row = 0; row < grid.rows(); row++)
@@ -939,8 +958,6 @@ public class ContainerScreen {
                 }
             }
         }
-
-        text.end();
     }
 
     /** Počet se sází vpravo dole ve slotu, jako v Minecraftu. */
@@ -954,23 +971,6 @@ public class ContainerScreen {
 
         text.drawShadowed(label, right - text.widthOf(label), topFromScreen,
                 Palette.TEXT, Palette.TEXT_SHADOW);
-    }
-
-    private void drawHeldCount(TextRenderer text, double mouseX, double mouseY,
-                               int screenWidth, int screenHeight, int scale)
-    {
-        ItemStack cursor = shownHeld();
-
-        if(cursor.isEmpty() || cursor.count() <= 1)
-        {
-            return;
-        }
-
-        text.begin(screenWidth, screenHeight, scale);
-        drawCount(text, cursor.count(),
-                heldX(mouseX, scale) - scale, heldY(mouseY, screenHeight, scale) - scale,
-                screenWidth, screenHeight, scale);
-        text.end();
     }
 
     // ------------------------------------------------------------------

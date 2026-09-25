@@ -218,12 +218,15 @@ public final class CreateWorldScreen {
         widgets.text.begin(screenWidth, screenHeight, l.scale());
 
         widgets.label(l, NAME_LABEL.x(), NAME_LABEL.y(), "World Name");
-        widgets.label(l, NAME.x() + 4, NAME.y() + 4, caret(name));
+        // ⚠️ fitEnd: 32 znaků "W" je 256 GUI px a pole má pro text 192 -
+        // dlouhé jméno nebo seed vyjížděly z pole i z panelu. Vidět je konec,
+        // tedy to, co se právě píše.
+        widgets.label(l, NAME.x() + 4, NAME.y() + 4, widgets.text.fitEnd(caret(name), NAME.w() - 8));
         widgets.muted(l, FOLDER.x(), FOLDER.y(),
                 widgets.fit("Will be saved in: saves/" + folder(), FOLDER.w(), l.scale()));
 
         widgets.label(l, SEED_LABEL.x(), SEED_LABEL.y(), "Seed for the World Generator");
-        widgets.label(l, SEED.x() + 4, SEED.y() + 4, caret(seed));
+        widgets.label(l, SEED.x() + 4, SEED.y() + 4, widgets.text.fitEnd(caret(seed), SEED.w() - 8));
         widgets.muted(l, SEED_HINT.x(), SEED_HINT.y(), seed.text().isBlank()
                 ? "Leave blank for a random seed"
                 : widgets.fit("Same seed = same world", SEED_HINT.w(), l.scale()));

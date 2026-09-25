@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2296 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2322 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -313,6 +313,20 @@ Dřív byl `atlas.png` a `recipes.json` v gitu a `blocks.json` ne, takže Create
 klikem zapsal trackovaný atlas a netrackovaný registr a checkout je rozvedl. Repo je kód;
 hra bez těch souborů běží s procedurálním atlasem a vestavěným obsahem.
 
+**Drobnosti z úklidu auditu (bod 12b), které mění chování:**
+- Generující vlákno `World` se spouští až s prvním požadavkem na sloupec. Úvodní zástupný
+  svět v `Main` a malé světy náhledů v labu tak vlákno nemají vůbec; po „Save and Quit“ se
+  starý svět hned zastaví a jeho meshe i položky na zemi se uvolní.
+- Zaměření se po rozbití bloku počítá znovu, takže PMB ve stejném framu nepoloží blok bez opory.
+- Posuny kolečka se sčítají (trackpad už neprotočí hotbar o slot za každou malou událost).
+- Časovače položek na zemi (zpoždění sběru, zánik) běží skutečným časem i pod 20 FPS.
+- `PlayerAnimation` balí fázi a čas, `Camera.yaw` se balí do 0–360 (float neztrácí přesnost).
+- Selže-li celá obrazovka, `Options` se vrátí na okno místo „Fullscreen: ON“ bez účinku.
+- Posuvník v Options hlásí změnu jen při přeskoku na jiný krok.
+- Tah štětcem bez změny nepřidává krok undo; „New tile“ bere nejdřív úplně prázdnou buňku.
+- Náhled stromu stojí na y = 65 (plošinka 64 = první blok sekce 4), takže se nemešuje terén.
+- Koruna se nerazítkuje pod patu kmene (kmen kratší než počet vrstev z tuneru).
+
 ### Hranaté UI
 
 **⚠️ UI se navrhuje v GUI pixelech a zvětšuje CELÝM číslem.** `Gui.scale()` vybere 2×/3×/4×
@@ -339,10 +353,10 @@ ale okno i framebuffer jsou ve stejných pixelech, takže by přepočet podle n�
 rozbil to, co funguje. ⚠️ Rozhlížení kamerou zůstává na NEPŘEPOČÍTANÝCH bodech
 okna — citlivost myši je v nich a jinak by se na Retině zdvojnásobila.
 
-**⚠️ Rámečky nejsou obrysy.** `glLineWidth > 1` není v core profilu zaručeně podporovaný
-a ovladače se v tom liší, takže tloušťka by byla loterie. Rámeček je proto čtveřice plných
-pruhů. Jediný zbývající `glLineWidth` je obrys bloku ve `WorldRenderer` — tam je degradace
-na 1 pixel jen kosmetická.
+**⚠️ Rámečky nejsou obrysy.** Kontext je forward-compatible a tam je podle specifikace GL 3.3
+(příloha E.2.1) `glLineWidth > 1` CHYBA (`GL_INVALID_VALUE`), ne jen nezaručená podpora.
+Rámeček je proto čtveřice plných pruhů. Obrys bloku ve `WorldRenderer` kreslí čáry s výchozí
+šířkou 1 px; dřív tam bylo `glLineWidth(3)`, které nic neudělalo a každý frame nastavilo chybu GL.
 
 **Barva v 2D vrstvě je atribut vrcholu, ne uniform.** `Renderer2D` má vertex formát
 `pozice(2) + RGBA(4)`. Zbylo to kvůli ztmavení pozadí, což je jediný přechod v UI.
@@ -2744,4 +2758,4 @@ vrstva, UV vždycky 0–1, prosakování nemůže nastat a mipmapy fungují per-
 jeden float na vrchol navíc (index vrstvy).
 
 **Známé zjednodušení:** není step-up assist (přes 0,6bloku vysoký schod tě to nevytáhne
-automaticky, musíš skočit), není fall damage, `glLineWidth > 1` není v core profilu garantovaný.
+automaticky, musíš skočit), není fall damage, obrys bloku je 1 px (silnější by musel být z trojúhelníků).

@@ -603,11 +603,11 @@ public final class TerrainGenerator {
         {
             for(int tz = baseZ - treeReach; tz < baseZ + Chunk.SIZE + treeReach; tz++)
             {
-                Biome.TreeType type = treeTypeAt(tx, tz);
+                TreeSpot spot = treeAt(tx, tz);
 
-                if(type != null)
+                if(spot != null)
                 {
-                    placeTree(column, baseX, baseZ, tx, tz, type);
+                    placeTree(column, baseX, baseZ, tx, tz, spot);
                 }
             }
         }
@@ -639,6 +639,21 @@ public final class TerrainGenerator {
      * místo pětkrát.
      */
     Biome.TreeType treeTypeAt(int worldX, int worldZ)
+    {
+        TreeSpot spot = treeAt(worldX, worldZ);
+        return spot == null ? null : spot.type();
+    }
+
+    /**
+     * Strom na pozici i s tím, co se o něm už zjistilo: biom a výška terénu.
+     *
+     * ⚠️ Existuje, aby placeTree() nepočítal biom a výšku podruhé. Dřív je
+     * treeTypeAt() spočítal a zahodil a placeTree() je počítal znovu - deset
+     * vzorků šumu navíc na každý strom a sloupec (v pralese asi 75 z ~1800).
+     */
+    record TreeSpot(Biome.TreeType type, Biome biome, int height) {}
+
+    TreeSpot treeAt(int worldX, int worldZ)
     {
         int cellX = worldX >> TREE_CELL_BITS;
         int cellZ = worldZ >> TREE_CELL_BITS;
@@ -686,9 +701,15 @@ public final class TerrainGenerator {
 
         // A nad korunou musí zbýt místo ve světě. Nejvyšší možný kmen
         // tohohle biomu, ne druhu - rozsah je tunable.
+        //
+        // ⚠️ Dnes je to jen pojistka: strop terénu (maxTerrainHeight) se
+        // počítá z nejvyššího stromu VŠECH biomů, takže tahle podmínka platí
+        // vždycky. Ten společný strop zbytečně snižuje hory, když má jiný
+        // biom vysoký kmen (GEN-7) - rozdělit ho po biomech by ale posunulo
+        // výchozí terén (i uložené světy), proto zůstává, jak je.
         int tallest = TreeShape.totalHeight(tuning.tune(biome).trunkMax());
 
-        return height + tallest < World.WORLD_HEIGHT ? type : null;
+        return height + tallest < World.WORLD_HEIGHT ? new TreeSpot(type, biome, height) : null;
     }
 
     /**
@@ -752,16 +773,15 @@ public final class TerrainGenerator {
      * ve světě nevyroste - stejné pravidlo jako u náhledu bloku (staví ho
      * `ChunkMesh.build()`) a u náhledu receptu (počítá ho `Recipes.match()`).
      *
-     * Biom se tu zjišťuje znovu (tři vzorky šumu), protože rozsah velikosti
-     * je jeho. Stojí to jen u skutečných stromů, tedy jednotky případů na
-     * sloupec - `treeTypeAt()` zamítne 63 pozic ze 64 dřív, než se sem dojde.
+     * Biom a výšku terénu nese TreeSpot z treeAt() - nepočítají se znovu.
      */
     private void placeTree(ChunkColumn column, int baseX, int baseZ,
-                           int treeX, int treeZ, Biome.TreeType type)
+                           int treeX, int treeZ, TreeSpot spot)
     {
-        BiomeTuning.Tune tune = tuning.tune(biomeAt(treeX, treeZ));
+        Biome.TreeType type = spot.type();
+        BiomeTuning.Tune tune = tuning.tune(spot.biome());
 
-        int ground = terrainHeight(treeX, treeZ);
+        int ground = spot.height();
         int trunk = trunkHeight(treeX, treeZ, tune);
         int delta = crownDelta(treeX, treeZ, type, tune);
 

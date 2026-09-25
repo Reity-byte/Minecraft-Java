@@ -54,12 +54,16 @@ final class WindowMode {
      * Přepne okno do požadovaného režimu (když už v něm je, nic nedělá).
      * Po přepnutí se znovu nastaví vsync - některé ovladače ho při změně
      * režimu zapomenou.
+     *
+     * Vrací false, když se celá obrazovka zapnout nepovedla (žádný monitor
+     * ani video mód) - volající pak vrátí nastavení na okno, jinak by Options
+     * ukazovaly "Fullscreen: ON" a každé applyOptions() by pokus opakovalo.
      */
-    void apply(long window, boolean wantFullscreen, boolean vsync)
+    boolean apply(long window, boolean wantFullscreen, boolean vsync)
     {
         if(!needsSwitch(fullscreen, wantFullscreen))
         {
-            return;
+            return true;
         }
 
         if(wantFullscreen)
@@ -72,7 +76,7 @@ final class WindowMode {
             if(mode == null)
             {
                 System.err.println("Fullscreen: zadny monitor - zustava okno");
-                return;
+                return false;
             }
 
             glfwSetWindowMonitor(window, monitor, 0, 0, mode.width(), mode.height(), mode.refreshRate());
@@ -94,6 +98,7 @@ final class WindowMode {
 
         fullscreen = wantFullscreen;
         glfwSwapInterval(vsync ? 1 : 0);
+        return true;
     }
 
     private void rememberWindow(long window)

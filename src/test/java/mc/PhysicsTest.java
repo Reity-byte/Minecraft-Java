@@ -187,6 +187,12 @@ public class PhysicsTest {
         // ---------- 14) totez pri ruznem FPS ----------
         for (int fps : new int[]{30, 60, 144, 240, 1000}) framerate(GROUND, fps);
 
+        // Zastavit workery - jinak by kazdy svet (~17 MB) zil v jedne JVM az do konce AllTests (WLD-13).
+        w.shutdown();
+        w2.shutdown();
+        w3.shutdown();
+        w4.shutdown();
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
 
@@ -251,5 +257,8 @@ public class PhysicsTest {
         }
         check("vyleze na schod o 1 blok" + at, climbed, "x=" + q.x + " y=" + q.y);
         check("dvoublokovou zed neprekona" + at, q.x < 16f, "x=" + q.x);
+
+        w.shutdown();
+        steps.shutdown();
     }
 }

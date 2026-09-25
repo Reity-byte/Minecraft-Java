@@ -100,10 +100,13 @@ public class DroppedItem {
 
     public void update(World world, float dt)
     {
-        dt = Math.min(dt, MAX_TIME_STEP);
-
+        // ⚠️ Časovače běží SKUTEČNÝM časem, strop dt patří jen fyzice níž.
+        // Dřív se ořezané dt počítalo i do stáří a zpoždění sběru, takže pod
+        // 20 FPS se "2 s" a "pět minut" natahovaly (při 10 FPS na dvojnásobek).
         age += dt;
         pickupDelay = Math.max(0f, pickupDelay - dt);
+
+        dt = Math.min(dt, MAX_TIME_STEP);
 
         // Hráč může položit blok přímo na ležící položku. Dopad by ji vracel
         // na horní hranu buňky POD blokem, takže by v něm zůstala uvězněná -

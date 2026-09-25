@@ -270,6 +270,10 @@ public class OptionsTest {
         check("tazeni render distance na konec (i pres okraj) = 16 a potahne simulation",
                 o.renderDistance() == 16 && o.simulationDistance() == 16 && screen.takeChanged(),
                 o.renderDistance() + "/" + o.simulationDistance());
+        // UI-6: dalsi pohyb mysi na tentyz krok zmenu nehlasi (driv kazda
+        // udalost kurzoru spustila applyOptions()).
+        screen.drag(far[0] + 310, far[1] + 200, w, h);
+        check("tazeni na tentyz krok zmenu nehlasi", !screen.takeChanged(), "");
         screen.release();
         screen.drag(start[0], start[1], w, h);
         check("po pusteni tazeni nic nemeni", o.renderDistance() == 16, "");
@@ -339,6 +343,14 @@ public class OptionsTest {
         field.insert("seed" + (char) 10 + (char) 9 + "text s diakritikou: zlutoucky");
         check("vlozeni ze schranky: konce radku na mezeru, orez na delku, jen ASCII",
                 field.text().equals("seed  te"), field.text());
+
+        // Driv test vkladal jen ASCII a usekl se driv, nez by k diakritice dosel,
+        // takze filtr v insert() nic nehlidalo. Znaky se pisou jako (char) cisla,
+        // at je soubor cisty ASCII.
+        field.setText("");
+        field.insert("a" + (char) 0x10D + "b" + (char) 0x159 + (char) 0x1F600 + "c");
+        check("vlozeni s diakritikou: ne-ASCII znaky se zahodi, zbytek zustane",
+                field.text().equals("abc"), field.text());
         field.clear();
         field.setFocused(false);
         field.backspace();

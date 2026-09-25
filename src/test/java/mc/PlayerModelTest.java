@@ -64,21 +64,33 @@ public class PlayerModelTest {
 
         float maxLeg = 0f;
         boolean opposite = true, armAgainstLeg = true;
-        float phaseBefore = a.phase();
+        // Faze se bali modulo 2 pi (PLR-4), takze se scitaji prirustky pres svy.
+        float phasePerSecond = 0f;
+        float previous = a.phase();
         for (int i = 0; i < 60; i++) {
             a.update(DT, WALK * DT);
+            float step = a.phase() - previous;
+            phasePerSecond += step < 0 ? step + (float) (2 * Math.PI) : step;
+            previous = a.phase();
             PlayerPose p = a.pose(0f, 0f, 0f, false);
             maxLeg = Math.max(maxLeg, Math.abs(p.rightLegX()));
             opposite &= p.rightLegX() == -p.leftLegX();
             if (Math.abs(p.rightLegX()) > 0.3f) armAgainstLeg &= p.rightArmX() * p.rightLegX() < 0;
         }
-        float phasePerSecond = a.phase() - phaseBefore;
 
         check("nohy se rozmachnou o LEG_SWING * rozmach",
                 near(maxLeg, PlayerAnimation.LEG_SWING * expected, 0.03f),
                 String.format("%.3f rad", maxLeg));
         check("nohy jdou vzdy v opacne fazi", opposite, "");
         check("ruka jde proti noze na stejne strane", armAgainstLeg, "");
+
+        // PLR-4: faze i cas zustavaji v mezich i po hodinach chuze.
+        PlayerAnimation longWalk = new PlayerAnimation();
+        for (int i = 0; i < 60 * 60 * 30; i++) longWalk.update(DT, WALK * DT);   // 30 min pri 60 FPS
+        check("po pul hodine je faze v 0 az 2 pi a cas pod TIME_WRAP",
+                longWalk.phase() >= 0f && longWalk.phase() < 2 * Math.PI + 1e-4
+                        && longWalk.time() >= 0f && longWalk.time() < PlayerAnimation.TIME_WRAP,
+                longWalk.phase() + " / " + longWalk.time());
 
         float period = (float) (2 * Math.PI / phasePerSecond);
         System.out.printf("%nKrok pri chuzi: %.2f rad/s, cely cyklus %.2f s%n", phasePerSecond, period);

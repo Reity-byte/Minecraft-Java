@@ -451,7 +451,7 @@ public final class SelectWorldScreen {
         widgets.centered(l, CONFIRM_CANCEL, "Cancel");
     }
 
-    /** Uvolní náhledové textury - volat při zavření obrazovky. */
+    /** Uvolní náhledové textury. Main to dělá při každém odchodu ze seznamu (setState). */
     public void delete()
     {
         for(Texture texture : icons.values())

@@ -296,6 +296,10 @@ public class TextureLab {
             // Sem se ale dojde až po potvrzení - viz leaveWarning().
             cancelBlock();
             release();
+
+            // Rozepsaný hex se zahodí: po návratu by si pole dál bralo klávesy
+            // a F6 by lab nezavřel, aniž by bylo vidět proč.
+            hexInput = null;
         }
 
         /**
@@ -1053,7 +1057,7 @@ public class TextureLab {
     /** Stěně dá čerstvou buňku atlasu s kopií její dosavadní dlaždice. */
     private void newTile()
     {
-        int free = BlockDraft.freeTile(baseRegistry, draft.tiles);
+        int free = BlockDraft.freeTileFor(baseRegistry, editor.pixels(), draft.tiles);
 
         if(free < 0)
         {
@@ -1061,11 +1065,17 @@ public class TextureLab {
             return;
         }
 
+        // Prázdná buňka má přednost; když žádná není, přepíše se volná buňka
+        // s něčím namalovaným - a řekne se to, jde to vrátit.
+        boolean overwrites = !Textures.tileEmpty(editor.pixels(), free);
+
         editor.copyTile(draft.tiles[draft.activeFace], free);
         draft.tiles[draft.activeFace] = free;
         selectTile(free);
         showDraft();
-        say("Tile " + free + " is new - paint it on the canvas");
+        say(overwrites
+                ? "Tile " + free + " had unused paint - replaced (Ctrl+Z brings it back)"
+                : "Tile " + free + " is new - paint it on the canvas");
     }
 
     /**
@@ -2182,22 +2192,10 @@ public class TextureLab {
         return number + " s";
     }
 
-    /** Zkrátí text tak, aby se vešel do šířky v GUI pixelech (se třemi tečkami). */
+    /** Zkrátí text tak, aby se vešel do šířky v GUI pixelech (viz TextRenderer.fit). */
     String fit(String line, int guiWidth, int scale)
     {
-        float limit = guiWidth * scale;
-
-        if(text.widthOf(line) <= limit)
-        {
-            return line;
-        }
-
-        String cut = line;
-        while(cut.length() > 1 && text.widthOf(cut + "...") > limit)
-        {
-            cut = cut.substring(0, cut.length() - 1);
-        }
-        return cut + "...";
+        return text.fit(line, guiWidth);
     }
 
     // ------------------------------------------------------------------

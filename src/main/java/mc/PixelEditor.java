@@ -71,6 +71,14 @@ public abstract class PixelEditor {
     private boolean stroking = false;
     private int lastX, lastY;
 
+    /**
+     * Snímek před tahem, který ještě nešel do undo - pošle se tam až s první
+     * SKUTEČNOU změnou pixelu. Dřív šel do undo při každém stisku, takže klik
+     * barvou, kterou pixel už měl, přidal krok, po kterém Ctrl+Z hlásil
+     * "Undo" a nic se nestalo.
+     */
+    private Snapshot pendingUndo = null;
+
     protected PixelEditor(int[] imagePixels, int size)
     {
         if(imagePixels.length != size * size)
@@ -190,7 +198,7 @@ public abstract class PixelEditor {
     public void beginStroke(int x, int y)
     {
         endStroke();
-        pushUndo(snapshot());
+        pendingUndo = snapshot();
 
         stroking = true;
         lastX = x;
@@ -222,6 +230,7 @@ public abstract class PixelEditor {
     public void endStroke()
     {
         stroking = false;
+        pendingUndo = null;
     }
 
     public boolean isStroking()
@@ -317,6 +326,12 @@ public abstract class PixelEditor {
 
         if(pixels[i] != color)
         {
+            if(pendingUndo != null)
+            {
+                pushUndo(pendingUndo);
+                pendingUndo = null;
+            }
+
             pixels[i] = color;
             dirty.add(i % size, i / size);
             touched();

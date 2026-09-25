@@ -53,6 +53,7 @@ public class BiomeTuningTest {
             treeDeterminism();
             terrainUnchanged();
             tunedTerrain();
+            limits();
             previewIsReal();
             smallCrowns();
             oreNumbers();
@@ -479,9 +480,16 @@ public class BiomeTuningTest {
     static void terrainUnchanged() {
         System.out.println("\n-- vychozi tuning = dnesni teren --");
 
-        // Explicitne vychozi tuning proti tomu, co si generator vezme sam.
+        // Vychozi tuning proti tuningu, ktery prosel souborem (toJson -> fromJson).
+        // Driv se porovnaval DEFAULTS sam se sebou (aktivni tuning v testu je
+        // vychozi), coz nic nehlidalo; skutecnou shodu s terenem pred tunerem
+        // drzi kontrolni soucty v SeedTest. Tohle hlida, ze ulozeni a nacteni
+        // vychozich cisel terén nezmeni ani o blok.
+        BiomeTuning roundTrip = BiomeTuning.fromJson(BiomeTuning.defaults().toJson());
+        check("vychozi tuning prezije soubor beze zmeny", roundTrip.sameNumbers(BiomeTuning.defaults())
+                && roundTrip != BiomeTuning.defaults(), "");
         TerrainGenerator explicit = new TerrainGenerator(World.DEFAULT_SEED, BiomeTuning.defaults());
-        TerrainGenerator implicit = new TerrainGenerator(World.DEFAULT_SEED);
+        TerrainGenerator implicit = new TerrainGenerator(World.DEFAULT_SEED, roundTrip);
 
         boolean sameHeights = true;
         for (int x = -400; x < 400; x += 3) {
@@ -520,6 +528,56 @@ public class BiomeTuningTest {
     // ==================================================================
     // 9) natuneny teren se opravdu zmeni
     // ==================================================================
+
+    /**
+     * GEN-14: generovani na mezich tuningu nespadne a spawn bez souse se vrati
+     * na puvodni bod. Bezpecnost proti IndexOutOfBounds na worker vlakne dnes
+     * stoji jen na orezu vysek - tohle ho drzi.
+     */
+    static void limits() {
+        System.out.println("\n-- generovani na mezich tuningu --");
+
+        int[][] extremes = {
+                {BiomeTuning.MIN_BASE, BiomeTuning.MIN_AMPLITUDE}, {BiomeTuning.MIN_BASE, BiomeTuning.MAX_AMPLITUDE},
+                {BiomeTuning.MAX_BASE, BiomeTuning.MIN_AMPLITUDE}, {BiomeTuning.MAX_BASE, BiomeTuning.MAX_AMPLITUDE}};
+        boolean ok = true;
+        String detail = "";
+        for (int[] e : extremes) {
+            BiomeTuning t = BiomeTuning.defaults();
+            for (Biome b : Biome.values()) {
+                BiomeTuning.Tune d = t.tune(b);
+                t = t.with(b, new BiomeTuning.Tune(e[0], e[1], d.treeDensity(), BiomeTuning.MAX_TRUNK,
+                        BiomeTuning.MAX_TRUNK, BiomeTuning.MAX_CROWN, BiomeTuning.MAX_CROWN,
+                        BiomeTuning.MAX_ORE, BiomeTuning.MAX_ORE));
+            }
+            TerrainGenerator gen = new TerrainGenerator(World.DEFAULT_SEED, t);
+            try {
+                for (int cx = -1; cx <= 1; cx++)
+                    for (int cz = -1; cz <= 1; cz++) gen.generateColumn(cx * 37, cz * 53);
+                for (int x = -200; x < 200; x += 13) {
+                    int h = gen.terrainHeight(x, x * 3);
+                    if (h < 1 || h >= World.WORLD_HEIGHT) { ok = false; detail = "vyska " + h; }
+                }
+            } catch (RuntimeException ex) {
+                ok = false;
+                detail = "base " + e[0] + ", amp " + e[1] + ": " + ex;
+            }
+        }
+        check("vsechny ctyri kombinace mezi (i max kmen, koruna a ruda) vygeneruji bez vyjimky",
+                ok, detail);
+
+        // Vsechno na base 8 = pod hladinou, zadna sous: spawn se po prohledani
+        // vrati na puvodni bod (lepsi voda nez zadny svet).
+        BiomeTuning sunk = BiomeTuning.defaults();
+        for (Biome b : Biome.values()) {
+            BiomeTuning.Tune d = sunk.tune(b);
+            sunk = sunk.with(b, new BiomeTuning.Tune(BiomeTuning.MIN_BASE, 0, d.treeDensity(),
+                    d.trunkMin(), d.trunkMax(), d.crownMin(), d.crownMax(), d.ironDensity(), d.coalDensity()));
+        }
+        int[] spawn = new TerrainGenerator(World.DEFAULT_SEED, sunk).findLandSpawn(8, 8, 32);
+        check("bez souse se spawn vrati na puvodni bod", spawn[0] == 8 && spawn[1] == 8,
+                spawn[0] + "," + spawn[1]);
+    }
 
     static void tunedTerrain() {
         System.out.println("\n-- natuneny teren --");
@@ -655,6 +713,18 @@ public class BiomeTuningTest {
             check("a pod nim je povrch biomu, ne vzduch",
                     world.getBlock(TreePreview.X, TreePreview.GROUND - 1, TreePreview.Z)
                             == Biome.TAIGA.surface(), "");
+
+            // LAB-17: mesuje se od sekce plosinky nahoru. Terenu v ni nesmi
+            // byt nic - jinak by se mesoval a prestavoval pri kazdem kliknuti.
+            int firstMeshed = ((TreePreview.GROUND - 1) >> 4) << 4;
+            int terrainInSection = 0;
+            for (int x = 0; x < 16; x++)
+                for (int z = 0; z < 16; z++)
+                    for (int y = firstMeshed; y < TreePreview.GROUND - 1; y++)
+                        if (world.getBlock(x, y, z) != World.AIR) terrainInSection++;
+            check("plosinka je prvni blok mesovane sekce (pod ni nic)",
+                    TreePreview.GROUND - 1 == firstMeshed && terrainInSection == 0,
+                    "sekce od " + firstMeshed + ", bloku terenu " + terrainInSection);
 
             check("nad kmenem uz kmen neni",
                     world.getBlock(TreePreview.X, TreePreview.GROUND + trunk, TreePreview.Z)

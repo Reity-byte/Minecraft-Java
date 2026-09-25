@@ -315,6 +315,25 @@ public class TreeTest {
         w.shutdown();
         w2.shutdown();
 
+        // ---------- GEN-8: kratky kmen nezapusti korunu pod zem ----------
+        // Tuner povoluje kmen od 1; spodni vrstvy koruny pak vychazely pod patu
+        // stromu (ve svete do vzduchu pod svahem, v nahledu pod plosinkou).
+        boolean aboveGround = true;
+        String worst = "";
+        for (Biome.TreeType type : Biome.TreeType.values()) {
+            if (type == Biome.TreeType.NONE) continue;
+            for (int trunk = 1; trunk <= 3; trunk++) {
+                final int ground = 70;
+                final int[] lowest = {Integer.MAX_VALUE};
+                TreeShape.stamp(type, trunk, 0, 0, ground, 0, new TreeShape.Sink() {
+                    public void leaves(int x, int y, int z, byte block) { lowest[0] = Math.min(lowest[0], y); }
+                    public void log(int x, int y, int z, byte block) { }
+                });
+                if (lowest[0] < ground) { aboveGround = false; worst = type + " kmen " + trunk + ": list na " + lowest[0]; }
+            }
+        }
+        check("koruna nikdy pod patou kmene (kmen 1-3, vsechny druhy)", aboveGround, worst);
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
 }

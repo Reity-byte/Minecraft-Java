@@ -78,13 +78,25 @@ public class PlayerAnimation {
             return;
         }
 
-        time += dt;
+        // ⚠️ OBĚ ČÍSLA SE BALÍ, nerostou donekonečna. Float ztrácí přesnost:
+        // od time = 16384 (asi 4,5 h v jednom běhu) při 1000 FPS šlo
+        // pohupování 1,95x rychleji a od 65 536 stálo úplně, protože dt pod
+        // rozlišením se k času přestalo přičítat. Fáze nohou jde jen do cos(),
+        // takže modulo 2 pí je beze švu. Čas pohánějí dvě nesoudělné
+        // frekvence; balí se po celém počtu period pohupování, takže šev je
+        // jen v nepatrném posunu driftu jednou za ~17 minut.
+        time = (time + dt) % TIME_WRAP;
 
         float target = swingAmountFor(distanceMoved / dt);
         amount += (target - amount) * (1f - (float) Math.pow(SWING_SMOOTHING, dt));
 
-        phase += amount * PHASE_RATE * dt;
+        phase = (phase + amount * PHASE_RATE * dt) % TWO_PI;
     }
+
+    private static final float TWO_PI = (float) (2 * Math.PI);
+
+    /** 293 period pohupování (~1023 s): dost malé na přesnost floatu, beze švu v pohupování. */
+    static final float TIME_WRAP = (float) (293 * 2 * Math.PI / IDLE_SWAY_RATE);
 
     public float phase()  { return phase; }
     public float amount() { return amount; }

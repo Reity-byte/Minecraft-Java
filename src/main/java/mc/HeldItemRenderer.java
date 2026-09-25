@@ -39,8 +39,8 @@ public class HeldItemRenderer {
     static final int FLOATS_PER_VERTEX = 6;   // pozice(3) + uv(2) + odstín(1)
     static final int VERTICES_PER_BOX = 36;
 
-    /** Nejvíc kvádrů, které model může mít; se šesti stěnami po šesti vrcholech. */
-    private static final int MAX_BOXES = 4;
+    /** Nejvíc kvádrů, které model může mít (z BlockModels, ne odhadem), s rezervou na ruku. */
+    static final int MAX_BOXES = Math.max(4, BlockModels.MAX_BOXES);
     static final int MAX_FLOATS = MAX_BOXES * VERTICES_PER_BOX * FLOATS_PER_VERTEX;
 
     /** Holá ruka je pravá ruka modelu postavy - kvádr 4x12x4 px i jeho UV. */

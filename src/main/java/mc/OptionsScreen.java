@@ -211,6 +211,11 @@ public final class OptionsScreen {
     {
         float t = l.sliderValue(dragged.track(), mouseX);
 
+        // "Změněno" jen když posuvník opravdu přeskočil na jiný krok. Dřív
+        // každá událost kurzoru při tažení spustila applyOptions() - vsync,
+        // režim okna, okruhy světa a jas - i když hodnota zůstala stejná.
+        float before = position(dragged);
+
         switch(dragged)
         {
             case RENDER -> options.setRenderDistance(
@@ -230,7 +235,10 @@ public final class OptionsScreen {
             default -> { return; }
         }
 
-        changed = true;
+        if(position(dragged) != before)
+        {
+            changed = true;
+        }
     }
 
     /** Kde na dráze leží aktuální hodnota posuvníku (0 až 1). */

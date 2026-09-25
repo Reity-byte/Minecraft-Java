@@ -499,9 +499,9 @@ public final class BiomeTuning {
             throw new IllegalArgumentException("koren neni objekt");
         }
 
-        if(root.get("format") instanceof Double format && format.intValue() > FORMAT)
+        if(root.get("format") instanceof Double format && format > FORMAT)
         {
-            problems.add("format " + format.intValue() + " je novejsi nez " + FORMAT
+            problems.add("format " + format + " je novejsi nez " + FORMAT
                     + " - co nezname, se preskoci");
         }
 

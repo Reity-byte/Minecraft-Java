@@ -116,6 +116,11 @@ public class RayTest {
         check("na hranici dosahu se trefi (dosah 2,5)",
                 Raycaster.cast(w3, 8.5f, 100.5f, 8.5f, 1, 0, 0, 2.5f) != null, "");
 
+        // Zastavit workery - jinak by kazdy svet (~17 MB) zil v jedne JVM az do konce AllTests (WLD-13).
+        w.shutdown();
+        w2.shutdown();
+        w3.shutdown();
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
 }

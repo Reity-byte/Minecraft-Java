@@ -151,6 +151,76 @@ public class TextRenderer {
         return font.textWidth(text) * (float) scale;
     }
 
+    /**
+     * Zkrátí text tak, aby se vešel do šířky v GUI pixelech (se třemi tečkami).
+     *
+     * ⚠️ MĚŘÍ SE V GUI PIXELECH, BEZ MĚŘÍTKA. Dřív fit() v labu i ve Widgets
+     * násobilo šířku měřítkem z parametru a text měřítkem z posledního
+     * begin() (widthOf) - dnes se ty dvě hodnoty shodují, ale nic to
+     * nehlídalo. Font měří v GUI pixelech rovnou, takže měřítko tu není
+     * potřeba vůbec. Délka se hledá půlením (log n měření), ne ubíráním po
+     * znaku, které každý frame stavělo n řetězců.
+     */
+    public String fit(String line, int guiWidth)
+    {
+        float limit = guiWidth;   // v GUI pixelech, font měří taky v nich
+
+        if(font.textWidth(line) <= limit)
+        {
+            return line;
+        }
+
+        // Nejdelší prefix, se kterým se "..." ještě vejde (aspoň jeden znak).
+        int low = 1, high = line.length() - 1;
+
+        while(low < high)
+        {
+            int mid = (low + high + 1) >>> 1;
+
+            if(font.textWidth(line.substring(0, mid) + "...") <= limit)
+            {
+                low = mid;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return line.substring(0, low) + "...";
+    }
+
+    /**
+     * Jako fit(), ale nechá KONEC textu a tečky dá na začátek. Pro textová
+     * pole: píše se na konec, takže kurzor a poslední znaky musí být vidět.
+     */
+    public String fitEnd(String line, int guiWidth)
+    {
+        if(font.textWidth(line) <= guiWidth)
+        {
+            return line;
+        }
+
+        // Nejmenší začátek suffixu, se kterým se "..." vejde.
+        int low = 1, high = line.length() - 1;
+
+        while(low < high)
+        {
+            int mid = (low + high) >>> 1;
+
+            if(font.textWidth("..." + line.substring(mid)) <= guiWidth)
+            {
+                high = mid;
+            }
+            else
+            {
+                low = mid + 1;
+            }
+        }
+
+        return "..." + line.substring(low);
+    }
+
     /** Výška řádku na obrazovce, tedy už včetně měřítka z begin(). */
     public float lineHeight()
     {

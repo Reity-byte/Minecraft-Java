@@ -46,8 +46,15 @@ public class TreePreview {
      * volně ve vzduchu, na vlastní plošince. Lokální x a z jsou 8, takže se
      * i koruna o největším povoleném poloměru 6 vejde do jediného sloupce
      * (2 až 14) a nemusí se mešovat sousedi.
+     *
+     * ⚠️ PLOŠINKA (GROUND - 1 = 64) JE PRVNÍ BLOK SEKCE 4. Mešuje se od
+     * sekce plošinky nahoru, a dřív byla plošinka na 63, tedy v sekci 3
+     * (48-63) - spolu s vrchní vrstvou terénu a jezerem. Ty se mešovaly
+     * a přestavovaly při každém kliknutí na +/-, přestože do náhledu
+     * nepatří. Teď terén (povrch 53, voda do 54) leží celý pod mešovanou
+     * částí.
      */
-    static final int X = 8, Z = 8, GROUND = 64;
+    static final int X = 8, Z = 8, GROUND = 65;
 
     /** Plošinka pod kmenem, aby strom nevisel ve vzduchu. */
     private static final int PAD_RADIUS = 3;

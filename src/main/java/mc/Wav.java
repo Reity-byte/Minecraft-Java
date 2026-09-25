@@ -116,6 +116,16 @@ public final class Wav {
                 channels = in.getShort(position + 10) & 0xFFFF;
                 sampleRate = in.getInt(position + 12);
                 bits = in.getShort(position + 22) & 0xFFFF;
+
+                // ⚠️ U WAVE_FORMAT_EXTENSIBLE rozhoduje až SUBFORMÁT: GUID na
+                // offsetu 24 bloku fmt, jehož první dva bajty jsou skutečný
+                // kód formátu. Dřív se obálka přijala bez něj, takže A-law nebo
+                // µ-law v ní se dekódovaly jako PCM a místo placeholderu hrál
+                // šum. Bez subformátu (krátký blok) se soubor odmítne.
+                if(format == FORMAT_EXTENSIBLE)
+                {
+                    format = length >= 40 ? in.getShort(position + 8 + 24) & 0xFFFF : -1;
+                }
             }
             else if(tag(in, position, "data"))
             {
@@ -128,7 +138,7 @@ public final class Wav {
             position += 8 + length + (length & 1);
         }
 
-        if((format != FORMAT_PCM && format != FORMAT_EXTENSIBLE)
+        if(format != FORMAT_PCM
                 || (channels != 1 && channels != 2)
                 || (bits != 8 && bits != 16)
                 || sampleRate <= 0 || dataStart < 0)

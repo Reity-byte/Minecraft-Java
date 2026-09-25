@@ -154,21 +154,9 @@ final class Widgets {
         centered(l, r, line, true);
     }
 
-    /** Zkrátí text tak, aby se vešel do šířky v GUI pixelech (se třemi tečkami). */
+    /** Zkrátí text tak, aby se vešel do šířky v GUI pixelech (viz TextRenderer.fit). */
     String fit(String line, int guiWidth, int scale)
     {
-        float limit = guiWidth * scale;
-
-        if(text.widthOf(line) <= limit)
-        {
-            return line;
-        }
-
-        String cut = line;
-        while(cut.length() > 1 && text.widthOf(cut + "...") > limit)
-        {
-            cut = cut.substring(0, cut.length() - 1);
-        }
-        return cut + "...";
+        return text.fit(line, guiWidth);
     }
 }

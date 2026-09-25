@@ -158,7 +158,10 @@ public class TextureLabTest {
         check("a druhe undo na tu predchozi", editor.tile() == BlockAtlas.TILE_DIRT
                 && Arrays.equals(atlas, original), "");
 
+        // Kazdy tah musi pixel OPRAVDU zmenit - tah beze zmeny krok undo
+        // nepridava. Barva se proto strida po kazdem kole pres 16 pixelu.
         for (int i = 0; i < AtlasEditor.UNDO_LIMIT + 50; i++) {
+            editor.setColor((i / 16) % 2 == 0 ? 0xFF112233 : 0xFF445566);
             editor.beginStroke(i % 16, 0);
             editor.endStroke();
         }
@@ -495,6 +498,28 @@ public class TextureLabTest {
 
         BlockRegistry withBlock = empty.with(empty.define("Marble", 1.5f, true, true, 63, 62, 63));
         check("bunky pouzite blokem z labu se znovu neprideli", BlockDraft.freeTile(withBlock) == 61, "");
+
+        // LAB-15: New tile driv tise prepsal, co bylo namalovane v bunce, kterou
+        // zatim zadny blok nepouziva. Prazdna bunka ma prednost.
+        int[] atlasPx = new int[BlockAtlas.ATLAS_PIXELS * BlockAtlas.ATLAS_PIXELS];
+        atlasPx[AtlasEditor.pixelIndex(63, 4, 4)] = 0xFF00FF00;   // rozmalovana 63
+        check("namalovana volna bunka se preskoci, vezme se prazdna",
+                BlockDraft.freeTileFor(empty, atlasPx) == 62, "" + BlockDraft.freeTileFor(empty, atlasPx));
+        int[] allPainted = new int[atlasPx.length];
+        java.util.Arrays.fill(allPainted, 0xFF808080);
+        check("kdyz prazdna neni, vrati se volna namalovana (lab to rekne)",
+                BlockDraft.freeTileFor(empty, allPainted) == 63, "" + BlockDraft.freeTileFor(empty, allPainted));
+
+        // LAB-15: klik barvou, kterou pixel uz ma, nepridava prazdny krok undo.
+        AtlasEditor same = new AtlasEditor(Textures.blockAtlasPixels());
+        same.setColor(same.get(3, 3));
+        same.beginStroke(3, 3);
+        same.endStroke();
+        check("tah bez zmeny nepridava krok undo", !same.undo(), "");
+        same.setColor(0xFF123456);
+        same.beginStroke(3, 3);
+        same.endStroke();
+        check("tah se zmenou krok undo prida", same.undo(), "");
 
         boolean allBuiltin = true;
         for (int id = 1; id <= World.FENCE; id++) {

@@ -171,10 +171,16 @@ public class CameraTest {
         c.processMouse(0, -1e6);
         check("orez plati i s obracenou osou", c.pitch == Camera.MAX_PITCH, "" + c.pitch);
 
-        // Yaw se neorezava - otoceni dokola je v poradku.
+        // Yaw se neorezava, ale bali do 0-360 (PLR-4): deset otacek = tentyz smer.
         float before = c.yaw;
         c.processMouse(3600 / c.mouseSensitivity, 0);
-        check("yaw se neorezava (deset otacek)", near(c.yaw - before, 3600f, 0.01f), "" + (c.yaw - before));
+        check("deset otacek vrati tentyz smer", near(c.yaw, before, 0.01f), before + " -> " + c.yaw);
+        check("yaw zustava v 0-360", c.yaw >= 0f && c.yaw < 360f, "" + c.yaw);
+        c.processMouse(-10 / c.mouseSensitivity, 0);
+        c.yaw = 5f;
+        c.processMouse(-10 / c.mouseSensitivity, 0);
+        check("pod nulou se bali nahoru (5 - 10 = 355)", near(c.yaw, 355f, 0.01f), "" + c.yaw);
+        check("wrapYaw zaporneho uhlu", near(Camera.wrapYaw(-725f), 355f, 0.01f), "" + Camera.wrapYaw(-725f));
     }
 
     static boolean finite(Matrix4f m) {

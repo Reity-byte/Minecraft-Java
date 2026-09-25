@@ -223,6 +223,16 @@ public class DroppedItemTest {
         for (int i = 0; i < 40; i++) old.update(w, far, nothing, 0.05f);
         check("po LIFETIME zmizi", old.size() == 0, "");
 
+        // ---------- casovace skutecnym casem i pod 20 FPS (INV-8) ----------
+        // Strop dt (0,05 s) patri jen fyzice. Driv se pocital i do stari, takze
+        // pri 10 FPS byla polozka po 10 s "stara" jen 5 s.
+        DroppedItems slow = new DroppedItems();
+        DroppedItem slowItem = slow.dropFromBlock(2, FLOOR + 1, 12, ItemStack.of(World.DIRT, 1));
+        for (int i = 0; i < 100; i++) slow.update(w, far, nothing, 0.1f);   // 10 s pri 10 FPS
+        check("pri 10 FPS bezi stari skutecnym casem", Math.abs(slowItem.age() - 10f) < 0.01f,
+                "age=" + slowItem.age());
+        check("a zpozdeni sberu po nem davno vyprselo", slowItem.canBePickedUp(), "");
+
         // ---------- mesh ----------
         DroppedItems visible = new DroppedItems();
         DroppedItem cube = visible.dropFromBlock(4, FLOOR + 1, 12, ItemStack.of(World.DIRT, 1));

@@ -429,11 +429,11 @@ public final class RecipeBook {
             throw new IllegalArgumentException("chybi cislo \"format\"");
         }
 
-        if(format.intValue() > FORMAT)
+        if(format > FORMAT)
         {
             // Stejně jako u GENERATOR_VERSION: varovat, ale číst - neznámá
             // pole se ignorují a co je známé, se použije.
-            problems.add("format " + format.intValue() + " je novejsi nez " + FORMAT
+            problems.add("format " + format + " je novejsi nez " + FORMAT
                     + " - co nezname, se preskoci");
         }
 

@@ -272,7 +272,10 @@ public final class Options {
      */
     public static Options load(Path file)
     {
-        if(!Files.exists(file))
+        // notExists, ne !exists: když existenci nejde zjistit (práva
+        // adresáře), jde se dál ke čtení a chyba se ohlásí - jako u ostatních
+        // souborů. !exists by to mlčky vzal jako "soubor není".
+        if(Files.notExists(file))
         {
             return defaults();
         }
@@ -374,7 +377,7 @@ public final class Options {
 
         if(root.get("format") instanceof Double format && format > FORMAT)
         {
-            problems.add("format " + format.intValue() + " je novejsi nez " + FORMAT
+            problems.add("format " + format + " je novejsi nez " + FORMAT
                     + " - nezname udaje se ignoruji");
         }
 

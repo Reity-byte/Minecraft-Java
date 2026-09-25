@@ -76,7 +76,7 @@ public class Player {
      * (GC, alt-tab, breakpoint) poslalo dt na půl vteřiny a hráč by se
      * v jediném kroku přesunul o metry - rovnou skrz zeď.
      */
-    private static final float MAX_TIME_STEP = 0.05f;
+    static final float MAX_TIME_STEP = 0.05f;
 
     /**
      * Nejdelší posun, který se testuje najednou. Test kolize kontroluje jen

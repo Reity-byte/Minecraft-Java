@@ -510,7 +510,7 @@ public class MainStateTest {
                 "skinPixels", "skinFromFile", "atlasEditor", "skinEditor", "widgets", "images", "optionsScreen", "selectScreen",
                 "createScreen", "optionsReturnState", "lab", "createdBlocks", "labReturnState",
                 "showDebug", "icons", "sky", "heldItem", "swing", "animation", "playerMesh",
-                "frameCount", "fpsTimer", "currentFps");
+                "frameCount", "fpsTimer", "currentFps", "scrollRemainder");
 
         // Player: stav pohybu patri svetu (resetForNewWorld + spawn/restore). Vstup se plni
         // kazdy frame a rozesly krok (footsteps) klidne pretece - je to zlomek kroku.

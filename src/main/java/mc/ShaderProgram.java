@@ -27,7 +27,19 @@ public class ShaderProgram {
     public ShaderProgram(String vertexSource, String fragmentSource)
     {
         int vertexShader = compile(GL_VERTEX_SHADER, vertexSource, "vertex");
-        int fragmentShader = compile(GL_FRAGMENT_SHADER, fragmentSource, "fragment");
+        int fragmentShader;
+
+        try
+        {
+            fragmentShader = compile(GL_FRAGMENT_SHADER, fragmentSource, "fragment");
+        }
+        catch(RuntimeException e)
+        {
+            // Při chybě uklidit, co už vzniklo - výjimka jinak nechá v GL
+            // viset shader objekty a program, na které nikdo nemá odkaz.
+            glDeleteShader(vertexShader);
+            throw e;
+        }
 
         programId = glCreateProgram();
         glAttachShader(programId, vertexShader);
@@ -36,7 +48,11 @@ public class ShaderProgram {
 
         if(glGetProgrami(programId, GL_LINK_STATUS) == GL_FALSE)
         {
-            throw new RuntimeException("Shader linking failed:\n" + glGetProgramInfoLog(programId));
+            String log = glGetProgramInfoLog(programId);
+            glDeleteProgram(programId);
+            glDeleteShader(vertexShader);
+            glDeleteShader(fragmentShader);
+            throw new RuntimeException("Shader linking failed:\n" + log);
         }
 
         // Po slinkování jsou jednotlivé shadery zbytečné - program si drží svou kopii.
@@ -56,8 +72,9 @@ public class ShaderProgram {
         {
             // Bez tohohle výpisu je ladění shaderů střelba naslepo:
             // špatný shader se nijak neprojeví, jen se nic nevykreslí.
-            throw new RuntimeException("Compilation of " + label + " shader failed:\n"
-                    + glGetShaderInfoLog(shader));
+            String log = glGetShaderInfoLog(shader);
+            glDeleteShader(shader);
+            throw new RuntimeException("Compilation of " + label + " shader failed:\n" + log);
         }
 
         return shader;
@@ -73,12 +90,14 @@ public class ShaderProgram {
         return uniformLocations.computeIfAbsent(name, n -> glGetUniformLocation(programId, n));
     }
 
+    /** Pracovní pole pro setMatrix4 - bez alokace při každém volání (několikrát za frame). */
+    private final float[] matrixValues = new float[16];
+
     /** Matice se do GL posílá jako 16 floatů po sloupcích - to už řeší JOML. */
     public void setMatrix4(String name, Matrix4f matrix)
     {
-        float[] values = new float[16];
-        matrix.get(values);
-        glUniformMatrix4fv(location(name), false, values);
+        matrix.get(matrixValues);
+        glUniformMatrix4fv(location(name), false, matrixValues);
     }
 
     public void setVector2(String name, float x, float y)
