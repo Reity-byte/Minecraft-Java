@@ -24,7 +24,7 @@ import static org.lwjgl.opengl.GL33.GL_CLAMP_TO_EDGE;
  */
 public final class ItemTextures {
 
-    public static final Path FILE = Path.of("textures", "items.png");
+    public static final Path FILE = GameDirs.path("textures", "items.png");
 
     public static final int SIZE = BlockAtlas.ATLAS_PIXELS;
     static final int TILE = BlockAtlas.TILE_PIXELS;

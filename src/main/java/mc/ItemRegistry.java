@@ -64,7 +64,7 @@ public final class ItemRegistry {
     public static final int FORMAT = 1;
 
     /** Vedle blocks.json a atlasu - nepovinná data labu. */
-    public static final Path FILE = Path.of("textures", "items.json");
+    public static final Path FILE = GameDirs.path("textures", "items.json");
 
     public static final int MAX_NAME_LENGTH = BlockRegistry.MAX_NAME_LENGTH;
 

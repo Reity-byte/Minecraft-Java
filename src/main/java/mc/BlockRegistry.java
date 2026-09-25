@@ -45,7 +45,7 @@ public final class BlockRegistry {
     public static final int FORMAT = 1;
 
     /** Vedle atlasu, relativně k pracovnímu adresáři - stejně jako textures/atlas.png. */
-    public static final Path FILE = Path.of("textures", "blocks.json");
+    public static final Path FILE = GameDirs.path("textures", "blocks.json");
 
     /** Delší jméno by se nevešlo do labu ani do ladicího výpisu. */
     public static final int MAX_NAME_LENGTH = 20;

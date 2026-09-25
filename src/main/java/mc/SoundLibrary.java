@@ -34,7 +34,7 @@ import java.util.List;
 public final class SoundLibrary {
 
     /** Adresář se skutečnými zvuky, relativně k pracovnímu adresáři - jako saves/. */
-    public static final Path SOUND_DIR = Path.of("sounds");
+    public static final Path SOUND_DIR = GameDirs.path("sounds");
 
     /**
      * Největší soubor, který se vůbec zkusí číst. Zvuky hry jsou desetiny

@@ -41,7 +41,7 @@ public final class RecipeBook {
     public static final int FORMAT = 1;
 
     /** Vedle blocks.json - obojí jsou nepovinná data labu. */
-    public static final Path FILE = Path.of("textures", "recipes.json");
+    public static final Path FILE = GameDirs.path("textures", "recipes.json");
 
     /**
      * Největší mřížka, kterou umí crafting table. Recept větší než tohle by

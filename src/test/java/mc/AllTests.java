@@ -193,6 +193,10 @@ public class AllTests {
         FurnaceTest.main(args);
         failures += FurnaceTest.failures;
 
+        System.out.println(NEWLINE + "========== GameDirsTest ==========");
+        GameDirsTest.main(args);
+        failures += GameDirsTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

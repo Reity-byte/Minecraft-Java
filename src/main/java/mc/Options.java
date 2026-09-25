@@ -36,7 +36,7 @@ import java.util.Map;
 public final class Options {
 
     /** V pracovním adresáři hry, stejně jako saves/ a textures/. */
-    public static final Path FILE = Path.of("options.json");
+    public static final Path FILE = GameDirs.path("options.json");
 
     public static final int FORMAT = 1;
 

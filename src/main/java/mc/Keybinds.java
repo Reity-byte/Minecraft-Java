@@ -59,7 +59,7 @@ public final class Keybinds {
      * Vedle `options.json` v pracovním adresáři, ne v `textures/`.
      * Klávesy jsou nastavení stroje, ne data labu k texturám.
      */
-    public static final Path FILE = Path.of("keybinds.json");
+    public static final Path FILE = GameDirs.path("keybinds.json");
 
     /** "Žádná klávesa" - akce bez klávesy nebo klávesa v kolizi. */
     public static final int NONE = -1;

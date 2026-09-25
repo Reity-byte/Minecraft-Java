@@ -57,7 +57,7 @@ import java.util.zip.CRC32;
 public final class WorldSaves {
 
     /** Kořen všech světů, relativně k pracovnímu adresáři - jako textures/. */
-    public static final Path ROOT = Path.of("saves");
+    public static final Path ROOT = GameDirs.path("saves");
 
     public static final String WORLD_FILE = "world.dat";
     public static final String META_FILE  = "world.json";

@@ -27,7 +27,7 @@ public final class SmeltBook {
 
     public static final int FORMAT = 1;
 
-    public static final Path FILE = Path.of("textures", "smelting.json");
+    public static final Path FILE = GameDirs.path("textures", "smelting.json");
 
     private static final SmeltBook EMPTY = new SmeltBook(List.of());
 

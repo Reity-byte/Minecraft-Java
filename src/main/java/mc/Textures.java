@@ -101,21 +101,21 @@ public final class Textures {
      * Kam texture lab ukládá upravený atlas a odkud se při startu hry načte.
      * Relativně k pracovnímu adresáři, stejně jako saves/ a sounds/.
      */
-    public static final Path ATLAS_FILE = Path.of("textures", "atlas.png");
+    public static final Path ATLAS_FILE = GameDirs.path("textures", "atlas.png");
 
     /**
      * Kam texture lab ukládá upravenou kůži postavy a odkud se při startu
      * hry načte. Stejný vzor jako atlas.png: NEPOVINNÝ soubor, bez něj se
      * kůže vygeneruje jako dřív.
      */
-    public static final Path SKIN_FILE = Path.of("textures", "skin.png");
+    public static final Path SKIN_FILE = GameDirs.path("textures", "skin.png");
 
     /**
      * Odkud lab importuje hotový atlas, když se mu žádný soubor nepřetáhne
      * do okna. Okno souborů nabídnout nejde: AWT běží headless (viz Main)
      * a tinyfd by byl nový modul LWJGL, tedy další závislost.
      */
-    public static final Path IMPORT_FILE = Path.of("textures", "import.png");
+    public static final Path IMPORT_FILE = GameDirs.path("textures", "import.png");
 
     /** Pixely atlasu a odkud přišly - ladicí výpis i lab to ukazují. */
     public record AtlasPixels(int[] pixels, boolean fromFile) {}

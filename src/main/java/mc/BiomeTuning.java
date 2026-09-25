@@ -45,7 +45,7 @@ public final class BiomeTuning {
     public static final int FORMAT = 1;
 
     /** Vedle `options.json` a `keybinds.json` - nastavení hry, ne data k texturám. */
-    public static final Path FILE = Path.of("biome_tuning.json");
+    public static final Path FILE = GameDirs.path("biome_tuning.json");
 
     // ------------------------------------------------------------------
     // meze
