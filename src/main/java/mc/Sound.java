@@ -34,7 +34,10 @@ public enum Sound {
     PLACE_PLANT(Kind.PLACE, Material.PLANT),
 
     /** Kliknutí na tlačítko v menu. Nemá materiál. */
-    CLICK(Kind.CLICK, null);
+    CLICK(Kind.CLICK, null),
+
+    /** Sebrání položky ze země ("pop"). Nemá materiál, soubor sounds/pickup.wav. */
+    PICKUP(Kind.PICKUP, null);
 
     /**
      * Druh zvuku a pravidla, podle kterých se přehrává.
@@ -52,7 +55,10 @@ public enum Sound {
         STEP (0.15f,        0.08f,        0.35f),
         BREAK(0.10f,        0.10f,        1.00f),
         PLACE(0.10f,        0.10f,        0.85f),
-        CLICK(0.05f,        0.03f,        0.60f);
+        CLICK(0.05f,        0.03f,        0.60f),
+        // Sebrání: výrazná obměna výšky jako v Minecraftu, ať řada sebraných
+        // kousků nezní jako jeden zvuk; cooldown hlídá "kulomet" při sběru hromady.
+        PICKUP(0.06f,       0.25f,        0.45f);
 
         public final float cooldown;
         public final float pitchVariation;

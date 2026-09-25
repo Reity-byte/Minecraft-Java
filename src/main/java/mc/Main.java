@@ -1651,7 +1651,7 @@ public class Main {
         }
 
         if (mining.update(world, dt, miningHeld, hit, mode)) {
-            // Survival: vytěžený kus jde do inventáře, co se nevejde na zem.
+            // Survival: vytěžený kus vypadne na zem, do inventáře ho dá až sebrání.
             // Creative: blok zmizí a nic po něm nezbude.
             mining.harvest(world, inventory, drops, sound, mode);
 
@@ -1662,7 +1662,7 @@ public class Main {
         }
 
         // Až po pohybu hráče, ať se sbírá podle toho, kde hráč stojí teď.
-        drops.update(world, player, inventory, dt);
+        drops.update(world, player, inventory, dt, sound);
 
         renderWorld();
 

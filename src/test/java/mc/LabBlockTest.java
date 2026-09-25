@@ -237,14 +237,20 @@ public class LabBlockTest {
         check("sklo (0,2 s) je rychlejsi nez mramor a mramor nez kamen (1,8 s)",
                 glass > 0 && glass < marble && marble < stone, glass + " < " + marble + " < " + stone);
 
-        // Vytezeny blok z labu jde do inventare jako tentyz blok - a jde znovu polozit.
+        // Vytezeny blok z labu vypadne jako tentyz blok, po sebrani je v inventari
+        // - a jde znovu polozit.
         w.placeBlock(8, Y, 8, MARBLE);
         Inventory inv = new Inventory();
         DroppedItems drops = new DroppedItems();
         m.cancel();
         MiningTest.framesToBreak(w, m, 8, Y, 8, 2000);
         boolean harvested = m.harvest(w, inv, drops, SoundSink.SILENT);
-        check("vytezeny mramor je v inventari",
+        check("vytezeny mramor vypadne na zem jako mramor",
+                drops.size() == 1 && drops.items().get(0).stack().block() == MARBLE, "" + drops.size());
+        Player picker = new Player();
+        picker.x = 8.5f; picker.y = Y; picker.z = 9.2f;
+        for (int i = 0; i < 90; i++) drops.update(w, picker, inv, 1f / 60f);
+        check("vytezeny mramor je po sebrani v inventari",
                 harvested && inv.get(0).block() == MARBLE && inv.get(0).count() == 1
                         && w.getBlock(8, Y, 8) == World.AIR, inv.get(0).toString());
         check("a jde znovu polozit", w.placeBlock(8, Y, 8, inv.get(0).block()) && w.getBlock(8, Y, 8) == MARBLE, "");

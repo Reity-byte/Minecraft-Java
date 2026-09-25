@@ -267,16 +267,19 @@ public class CreativeTest {
         while (!sm.update(survivalWorld, DT, true, at(9, FLOOR, 8), GameMode.SURVIVAL)) { /* kope se */ }
         sm.harvest(survivalWorld, sInv, sDrops, SoundSink.SILENT, GameMode.SURVIVAL);
 
-        check("survival dal dava vytezeny blok do inventare",
-                sInv.countOf(World.STONE) == 1, "" + sInv.countOf(World.STONE));
+        // Survival: blok vypadne na zem (do inventare az sebranim).
+        check("survival vytezeny blok vyhodi na zem",
+                sDrops.size() == 1 && sDrops.items().get(0).stack().block() == World.STONE
+                        && sInv.countOf(World.STONE) == 0, "" + sDrops.size());
 
         // Bez modu (stara signatura) musi vyjit totez.
         World legacyWorld = arena(FLOOR);
         Inventory lInv = new Inventory();
+        DroppedItems lDrops = new DroppedItems();
         Mining lm = new Mining();
         while (!lm.update(legacyWorld, DT, true, at(9, FLOOR, 8))) { /* kope se */ }
-        lm.harvest(legacyWorld, lInv, new DroppedItems(), SoundSink.SILENT);
-        check("harvest BEZ modu je presne survival", lInv.countOf(World.STONE) == 1, "");
+        lm.harvest(legacyWorld, lInv, lDrops, SoundSink.SILENT);
+        check("harvest BEZ modu je presne survival", lDrops.size() == 1 && lInv.countOf(World.STONE) == 0, "");
 
         // ---------- prasklinam v creative nezbyde cas ----------
         Mining stage = new Mining();

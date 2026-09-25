@@ -48,6 +48,7 @@ public final class SoundSynth {
             case BREAK -> render(0.24f, 0.060f, attackOf(sound), 0.90f, sound.ordinal(), timbreOf(sound));
             case PLACE -> render(0.13f, 0.030f, attackOf(sound), 0.80f, sound.ordinal(), timbreOf(sound));
             case CLICK -> render(0.05f, 0.012f, ATTACK, 0.6f, sound.ordinal(), SoundSynth::click);
+            case PICKUP -> render(0.10f, 0.030f, ATTACK, 0.7f, sound.ordinal(), SoundSynth::pop);
         };
     }
 
@@ -117,6 +118,18 @@ public final class SoundSynth {
         float n = noise(i, seed);
         f.low1 = lowPass(f.low1, n, 1500f);
         return n - f.low1;
+    }
+
+    /**
+     * Sebrání položky: krátký tón, jehož výška STOUPÁ (600 -> 1400 Hz za
+     * desetinu vteřiny). Stoupání je to, co z pípnutí dělá "pop" - a odliší ho
+     * od kliknutí v menu, které má výšku pevnou.
+     */
+    private static float pop(int i, float t, int seed, Filters f)
+    {
+        // Fáze = integrál frekvence 600 + 8000 t, tedy 600 t + 4000 t².
+        double phase = 2 * Math.PI * (600.0 * t + 4000.0 * t * t);
+        return (float) Math.sin(phase);
     }
 
     /** Kliknutí v UI: krátké pípnutí 1,4 kHz s alikvótou. */

@@ -188,8 +188,11 @@ public class Mining {
             return true;
         }
 
-        ItemStack rest = inventory.add(ItemStack.of(mined, 1));
-        drops.dropFromBlock(x, y, z, rest);
+        // ⚠️ Vytěžený blok VYPADNE NA ZEM, jako v Minecraftu - do inventáře
+        // se dostane až sebráním (DroppedItems.update, se zvukem PICKUP).
+        // Dřív šel rovnou do inventáře a na zem jen to, co se nevešlo.
+        // Inventář se tu proto nepoužívá; parametr zůstává kvůli volajícím.
+        drops.dropFromBlock(x, y, z, ItemStack.of(mined, 1));
         return true;
     }
 

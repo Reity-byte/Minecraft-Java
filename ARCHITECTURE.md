@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2322 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2324 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -63,7 +63,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `MeshTest` | Mesher proti **nezávislému naivnímu přepočtu stěn** + měření rychlosti |
 | `PhysicsTest` | Gravitace, výška skoku, kolize po osách, rohy, tunelování, let, noclip, a **totéž při 30–1000 FPS** (`onGround` v každém framu, skok hned, schod ano, dvoublokovou zeď ne) |
 | `SwingTest` | Máchnutí rukou: průběh křivky, délka, **držené tlačítko ho nerestartuje** |
-| `MiningTest` | Doba kopání podle tvrdosti, **přepnutí cíle vynuluje postup**, puštění tlačítka, stádia prasklin, kam jde vytěžený blok (inventář, rozdělaná hromádka, **při plném inventáři na zem**), zvuk rozbití podle materiálu ze středu bloku |
+| `MiningTest` | Doba kopání podle tvrdosti, **přepnutí cíle vynuluje postup**, puštění tlačítka, stádia prasklin, kam jde vytěžený blok (**vždycky na zem**, sebrání až po zpoždění, se zvukem `PICKUP` právě jednou, při plném inventáři zůstane ležet a nezazní), zvuk rozbití podle materiálu ze středu bloku |
 | `MenuTest` | Hit-testing tlačítek: pořadí, kraje, mezery, překlopení y z GLFW, změna velikosti okna |
 | `BiomeTest` | Biomy: prahy a data všech osmi, `smoothstep`, **součet vah = přesně 1** a shoda vytknutého `surfaceHeight()` s naivní sumou, `classify()` = biom s největší vahou uvnitř biomu, **determinismus** (opakovaně, po novém načtení, z cizího vlákna, jiný seed = jiné rozložení), podíly biomů a průměrná délka biomu podél přímky, **nekorelovanost tří vrstev šumu**, **plynulost přechodu výšky** (největší skok na hranici proti skoku uvnitř biomu + náběh plání do hor), rozsah výšek a strop, druh stromu podle biomu a hranice lesa, cena `terrainHeight()` a `biomeAt()` |
 | `CaveTest` | Jeskyně (podíl výkopu, **šířka chodeb**, propojenost, netknutý povrch, dno světa, **na strmém tuningu žádná jeskyně nesousedí s vodou ani nemá vchod do stran**) a rudy (četnost, hloubky, shlukování, záporné souřadnice, **změřený poměr železa v horách proti zbytku světa**) |
@@ -97,7 +97,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `CreativeTest` | Creative mód: přepínač na obrazovce zakládání světa (cyklus, nepřekryje Create/Cancel, `reset()` vrací survival), **okamžitá těžba** (praskne v prvním framu i u železa, ale vzduch, voda, puštěné tlačítko a kurzor mimo blok dál ne; **klik 100 ms = jeden blok při 30–1000 FPS**, držení 1 s = 4 bloky, nový klik hned), **vytěžený blok mizí** (nic do inventáře, nic na zem, ani s plným inventářem), pokládání neubírá z hotbaru (50 položení, jeden kus vydrží 200), obsah přehledu (přesně jeden záznam na placovatelný vestavěný blok i na každý lab blok, bez `blocks.json` jen vestavěné, determinismus, pořadí), **nekonečný zdroj** (braní kopíruje, shift-klik kopíruje do hotbaru, položení do přehledu zahodí, rolování a klik po odrolování), let (stoupání i klesání, obě klávesy se vyruší, Shift zrychlí, **kolize v letu platí** proti propadnutí s noclipem, po vypnutí letu dopad), dvojstisk mezerníku (**z trojice přepne jen druhý**, reset, běžné skákání ne), mód ve `world.json` (tam a zpět, `touch()` ho zachová, **chybějící klíč i překlep → survival**) — a ke každému pravidlu **kontrola, že survival větev je nezměněná** |
 | `OptionsTest` | Nastavení: výchozí hodnoty = dnešní hra, oříznutí na meze, **render ≤ simulation po 2000 náhodných změnách**, převod na čísla enginu (dohled < `(loadRadius-1)·16`), `options.json` tam a zpět, **chybějící i šest druhů poškozeného souboru → výchozí hodnoty**, jedna špatná hodnota → výchozí jen pro ni, záloha `.bak`, obrazovka Options (hit-testy, tažení posuvníku i mimo dráhu, žádné překryvy), výběr monitoru pro fullscreen, **počet skutečných přepnutí monitoru** (start ve fullscreenu přepne přesně jednou, i když `init()` volá `apply()` dvakrát; F11 tam a zpět pokaždé), plánování stropu FPS, křivka jasu, GUI měřítko |
 | `BlockRegistryTest` | `textures/blocks.json`: tvar výstupu, round-trip přes text i disk, **neexistující a poškozený soubor → jen vestavěné bloky** (náhodné bajty, useknutý JSON, špatné typy), přeskočení jednotlivých neplatných bloků, **stabilita id přes víc sezení** (i po ručním smazání bloku ze souboru), novější `format`, escape v JSON, plný registr, **záloha poškozeného souboru do `.bak`** |
-| `LabBlockTest` | Blok z labu ve hře: pevný/neprůhledný/obojí ne, neznámé id, **doba kopání podle tvrdosti z dat** (`Mining`), vytěžený blok do inventáře a zpět do světa, **každá stěna meshe bere UV ze své dlaždice**, culling a stín podle neprůhlednosti, hráč duchem propadne a na mramoru stojí, paprsek zaměří i ducha, zvuk podle tvrdosti, náhled labu = mesh hry, **uložený svět nese id beze změny formátu** (svět bez bloků z labu je bajt po bajtu stejný), koloběh lab → soubor → restart |
+| `LabBlockTest` | Blok z labu ve hře: pevný/neprůhledný/obojí ne, neznámé id, **doba kopání podle tvrdosti z dat** (`Mining`), vytěžený blok vypadne, po sebrání je v inventáři a jde zpět do světa, **každá stěna meshe bere UV ze své dlaždice**, culling a stín podle neprůhlednosti, hráč duchem propadne a na mramoru stojí, paprsek zaměří i ducha, zvuk podle tvrdosti, náhled labu = mesh hry, **uložený svět nese id beze změny formátu** (svět bez bloků z labu je bajt po bajtu stejný), koloběh lab → soubor → restart |
 
 **Testovat jde všechno kromě renderu** — `World`, `Player`, `Raycaster`, `ChunkMesh.build()`,
 `Menu.buttonAt()`, `BlockAtlas`, `Textures.blockAtlasPixels()`, `DroppedItems`,
@@ -1245,10 +1245,14 @@ začátku kroku vězí v pevném bloku, posune se o buňku výš (o jednu za fra
 `DroppedItemTest` to zkouší se dvěma bloky nad sebou. Zakazovat pokládání bloku na položku by
 nedávalo smysl — hráč ji často ani nevidí.
 
-**Těžba jde dál rovnou do inventáře, na zem padá jen přebytek** (`Mining.harvest()`). Minecraft
-vyhazuje entitu vždycky a hráč ji pak sebere; tady by to znamenalo, že kopání vzdáleného bloku
-(paprsek sahá 8 bloků) nic nedá, dokud si pro něj hráč nedojde. Přebytek vypadne ze středu
-rozbitého bloku s malým výskokem, ať je vidět, že něco vypadlo.
+**Vytěžený blok vždycky vypadne na zem** (`Mining.harvest()`), jako v Minecraftu: ze středu
+rozbitého bloku s malým výskokem, sebrat jde po 0,5 s. Do inventáře se dostane až sebráním
+(`DroppedItems.update`), které zahraje zvuk `PICKUP` — jednou za frame, i když se sebere víc
+položek naráz. Dřív šel blok rovnou do inventáře a na zem jen přebytek; rozhodnutí se otočilo
+na přání uživatele (2026-09-25). Cena: vzdálený blok (paprsek sahá 8 bloků) je potřeba dojít sebrat.
+
+**Zvuk `PICKUP`** je syntetizovaný „pop": krátký tón, jehož výška stoupá 600 → 1400 Hz,
+s obměnou výšky ±25 %. Nahradit ho jde souborem `sounds/pickup.wav`.
 
 **Vyhození: Q jeden kus, Ctrl+Q celá hromádka** — schéma Minecraftu, takže sedí do ruky. Ctrl tu
 zároveň znamená plížení; hráč se při vyhození jen na okamžik přikrčí, což nevadí. Držené Q sype
@@ -2701,11 +2705,11 @@ druhým průchodem, plavání. Změřeno: vodu má 7 % sloupců.
 
 **Inventář a crafting — hotovo.** `Container` + `ContainerScreen` jako znovupoužitelná
 dvojice, obrazovka na E s mřížkou 2×2, crafting table s 3×3 po kliknutí na položený stůl.
-Těžba padá do inventáře, pokládání z něj ubírá. Inventář se ukládá spolu se světem.
+Těžba (po sebrání) plní inventář, pokládání z něj ubírá. Inventář se ukládá spolu se světem.
 
 **Shift-klik, tažení myší a předměty na zemi — hotovo.** Shift-klik mezi hotbarem a batohem
 (i z crafting mřížky), tažení levým (rovnoměrně) i pravým (po jednom) s náhledem, vyhazování
-z ruky na Q / Ctrl+Q. Co se při těžbě nevejde do inventáře, vypadne na zem a dá se sebrat.
+z ruky na Q / Ctrl+Q. Vytěžené bloky padají na zem a sbírají se se zvukem.
 
 **Recepty z labu — hotovo.** Mód Recipes skládá tvarované recepty do
 `textures/recipes.json`; přidávají se k vestavěným a platí okamžitě, bez restartu.

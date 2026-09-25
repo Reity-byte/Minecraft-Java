@@ -130,52 +130,56 @@ public class MiningTest {
             if (m.update(w, DT, true, at(11, FLOOR, 8))) brokeWater = true;
         check("voda se rozbit neda", !brokeWater && !m.isActive(), "");
 
-        // ---------- kam jde vytezeny blok ----------
+        // ---------- kam jde vytezeny blok: NA ZEM, pak sebrat ----------
+        // Jako v Minecraftu: blok vypadne a do inventare ho dostane az sebrani
+        // (se zvukem PICKUP). Driv sel rovnou do inventare.
         DroppedItems drops = new DroppedItems();
 
-        // Misto v inventari: rovnou do nej, na zem nic.
         Inventory roomy = new Inventory();
         w.placeBlock(12, FLOOR, 8, World.DIRT);
         m.cancel();
         framesToBreak(w, m, 12, FLOOR, 8, 2000);
         SoundTest.Recorder heard = new SoundTest.Recorder();
         boolean harvested = m.harvest(w, roomy, drops, heard);
-        check("vytezeny blok jde do inventare", harvested && roomy.countOf(World.DIRT) == 1, "");
+        check("vytezeny blok NEjde rovnou do inventare", harvested && roomy.countOf(World.DIRT) == 0, "");
         check("rozbiti zazni zvukem materialu, v prostoru ze stredu bloku",
                 heard.played.size() == 1 && heard.last().sound() == Sound.BREAK_EARTH
                         && heard.last().positional()
                         && heard.last().x() == 12.5f && heard.last().y() == FLOOR + 0.5f && heard.last().z() == 8.5f,
                 heard.played.toString());
-        check("s mistem v inventari nic nevypadne", drops.size() == 0, "" + drops.size());
         check("blok je pryc", !w.isSolid(12, FLOOR, 8), "");
 
-        // Plny inventar: vypadne na zem na miste rozbiteho bloku.
+        DroppedItem dropped = drops.size() == 1 ? drops.items().get(0) : null;
+        check("vytezeny blok vypadne na zem (i s mistem v inventari)",
+                dropped != null && dropped.stack().block() == World.DIRT && dropped.stack().count() == 1,
+                dropped == null ? drops.size() + " polozek" : dropped.stack().toString());
+        check("polozka se objevi na miste rozbiteho bloku",
+                dropped != null && Math.abs(dropped.x - 12.5f) < 1e-4f && Math.abs(dropped.z - 8.5f) < 1e-4f
+                        && dropped.y >= FLOOR && dropped.y < FLOOR + 1,
+                dropped == null ? "" : dropped.x + " " + dropped.y + " " + dropped.z);
+
+        // Hrac stoji vedle: po zpozdeni sberu se polozka sebere a zazni PICKUP.
+        Player near = new Player();
+        near.x = 13.2f; near.y = FLOOR; near.z = 8.5f;
+        heard.played.clear();
+        for (int i = 0; i < 10; i++) drops.update(w, near, roomy, DT, heard);
+        check("pred zpozdenim sberu (0,5 s) se nesebere", roomy.countOf(World.DIRT) == 0 && heard.played.isEmpty(), "");
+        for (int i = 0; i < 60; i++) drops.update(w, near, roomy, DT, heard);
+        check("sebrani da blok do inventare", roomy.countOf(World.DIRT) == 1 && drops.size() == 0,
+                roomy.countOf(World.DIRT) + ", na zemi " + drops.size());
+        check("a zazni PICKUP, prave jednou", heard.played.size() == 1 && heard.last().sound() == Sound.PICKUP
+                && !heard.last().positional(), heard.played.toString());
+
+        // Plny inventar: polozka zustane lezet a nic nezazni.
         Inventory full = InventoryTest.filled(World.STONE);
         w.placeBlock(13, FLOOR, 8, World.DIRT);
         m.cancel();
         framesToBreak(w, m, 13, FLOOR, 8, 2000);
         m.harvest(w, full, drops, SoundSink.SILENT);
-
-        DroppedItem dropped = drops.size() == 1 ? drops.items().get(0) : null;
-        check("pri plnem inventari vytezeny blok vypadne na zem",
-                dropped != null && dropped.stack().block() == World.DIRT && dropped.stack().count() == 1,
-                dropped == null ? drops.size() + " polozek" : dropped.stack().toString());
-        check("polozka se objevi na miste rozbiteho bloku",
-                dropped != null && Math.abs(dropped.x - 13.5f) < 1e-4f && Math.abs(dropped.z - 8.5f) < 1e-4f
-                        && dropped.y >= FLOOR && dropped.y < FLOOR + 1,
-                dropped == null ? "" : dropped.x + " " + dropped.y + " " + dropped.z);
-        check("plny inventar se nezmenil",
-                full.countOf(World.STONE) == Inventory.SIZE * ItemStack.MAX_COUNT
-                        && full.countOf(World.DIRT) == 0, "");
-
-        // Skoro plny: slije se s rozdelanou hromadkou, na zem nic.
-        full.set(3, ItemStack.of(World.DIRT, 63));
-        w.placeBlock(14, FLOOR, 8, World.DIRT);
-        m.cancel();
-        framesToBreak(w, m, 14, FLOOR, 8, 2000);
-        m.harvest(w, full, drops, SoundSink.SILENT);
-        check("posledni volne misto v rozdelane hromadce se vyuzije",
-                full.get(3).count() == 64 && drops.size() == 1, full.get(3) + ", na zemi " + drops.size());
+        heard.played.clear();
+        for (int i = 0; i < 70; i++) drops.update(w, near, full, DT, heard);
+        check("pri plnem inventari zustane na zemi a nic nezazni",
+                drops.size() == 1 && heard.played.isEmpty() && full.countOf(World.DIRT) == 0, "" + drops.size());
 
         // Kamen zni jako kamen - rozdeleni podle materialu, ne jeden zvuk na vsechno.
         w.placeBlock(15, FLOOR, 8, World.STONE);
@@ -187,8 +191,9 @@ public class MiningTest {
 
         // Bez dokopaneho bloku se nic nevytezi.
         int before = heard.played.size();
+        int onGround = drops.size();
         check("harvest na vzduchu nic neudela ani nezazni",
-                !m.harvest(w, roomy, drops, heard) && roomy.countOf(World.DIRT) == 1 && drops.size() == 1
+                !m.harvest(w, roomy, drops, heard) && drops.size() == onGround
                         && heard.played.size() == before, "");
 
         w.shutdown();

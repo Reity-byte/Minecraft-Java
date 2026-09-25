@@ -139,6 +139,17 @@ public class DroppedItems {
      */
     public void update(World world, Player player, Container inventory, float dt)
     {
+        update(world, player, inventory, dt, SoundSink.SILENT);
+    }
+
+    /**
+     * Totéž se zvukem: když se v tomhle framu něco sebralo, jednou zazní PICKUP
+     * (i když se sebralo víc položek naráz - hromada nemá znít jako kulomet).
+     */
+    public void update(World world, Player player, Container inventory, float dt, SoundSink sounds)
+    {
+        boolean picked = false;
+
         // Pozpátku, aby šlo mazat rovnou během průchodu.
         for(int i = items.size() - 1; i >= 0; i--)
         {
@@ -168,6 +179,11 @@ public class DroppedItems {
 
             ItemStack rest = inventory.add(item.stack());
 
+            if(rest.count() != item.stack().count() || rest.isEmpty())
+            {
+                picked = true;
+            }
+
             if(rest.isEmpty())
             {
                 items.remove(i);
@@ -176,6 +192,11 @@ public class DroppedItems {
             {
                 item.setStack(rest);
             }
+        }
+
+        if(picked)
+        {
+            sounds.play(Sound.PICKUP);
         }
     }
 
