@@ -135,6 +135,51 @@ public class CameraTest {
 
         w.shutdown();
 
+        mouse();
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+
+    // ---------- mys: citlivost, obracena osa, orez pitch ----------
+    static void mouse() {
+        Camera c = camera(Camera.View.FIRST_PERSON, 0f, 0f);
+        c.mouseSensitivity = 0.1f;
+
+        c.processMouse(10, 0);
+        check("mys doprava otoci yaw o dx * citlivost", near(c.yaw, 1f, 1e-5f), "" + c.yaw);
+
+        c.processMouse(0, 20);
+        check("dy posune pitch o dy * citlivost", near(c.pitch, 2f, 1e-5f), "" + c.pitch);
+
+        c.invertMouseY = true;
+        c.processMouse(0, 20);
+        check("obracena osa Y: tentyz pohyb vrati pitch zpet", near(c.pitch, 0f, 1e-5f), "" + c.pitch);
+        c.invertMouseY = false;
+
+        // Oreze se na +-MAX_PITCH: presne na 90 by smer pohledu byl rovnobezny
+        // s vektorem "nahoru" a setLookAt by vratil NaN matici (cerny obraz).
+        c.processMouse(0, 1e6);
+        check("pitch se orizne na MAX_PITCH", c.pitch == Camera.MAX_PITCH, "" + c.pitch);
+        check("MAX_PITCH je pod 90", Camera.MAX_PITCH < 90f, "" + Camera.MAX_PITCH);
+        check("pohledova matice na horni mezi je konecna", finite(c.viewMatrix(new Matrix4f())), "");
+
+        c.processMouse(0, -1e6);
+        check("a dole na -MAX_PITCH", c.pitch == -Camera.MAX_PITCH, "" + c.pitch);
+        check("pohledova matice na dolni mezi je konecna", finite(c.viewMatrix(new Matrix4f())), "");
+
+        c.invertMouseY = true;
+        c.processMouse(0, -1e6);
+        check("orez plati i s obracenou osou", c.pitch == Camera.MAX_PITCH, "" + c.pitch);
+
+        // Yaw se neorezava - otoceni dokola je v poradku.
+        float before = c.yaw;
+        c.processMouse(3600 / c.mouseSensitivity, 0);
+        check("yaw se neorezava (deset otacek)", near(c.yaw - before, 3600f, 0.01f), "" + (c.yaw - before));
+    }
+
+    static boolean finite(Matrix4f m) {
+        float[] v = m.get(new float[16]);
+        for (float f : v) if (!Float.isFinite(f)) return false;
+        return true;
     }
 }

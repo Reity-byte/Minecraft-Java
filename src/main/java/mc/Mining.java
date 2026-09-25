@@ -28,6 +28,23 @@ public class Mining {
     private float progress = 0f;
 
     /**
+     * Prodleva mezi dvěma bloky v creative, v sekundách - 5 ticků jako ve
+     * vanille.
+     *
+     * ⚠️ BEZ NÍ ROZHODOVALO FPS. Okamžité kopání vracelo "praskl" v každém
+     * framu s drženým tlačítkem, takže další frame paprsek trefil blok ZA
+     * rozbitým a padl taky. Obyčejný klik (tlačítko dole 80-120 ms) tak
+     * vykopal tunel: 6 bloků při 60 FPS, 8 (strop dosahu) při 240.
+     */
+    public static final float CREATIVE_DELAY = 0.25f;
+
+    /**
+     * Kolik ještě zbývá do dalšího rozbití v creative. Běží jen s drženým
+     * tlačítkem; puštění ho vynuluje, takže každý nový klik rozbije hned.
+     */
+    private float cooldown = 0f;
+
+    /**
      * Posune kopání o jeden frame. Vrací true právě ve framu, kdy blok praskl.
      *
      * hit smí být null (kurzor nemíří na nic) a held false (tlačítko není
@@ -52,9 +69,19 @@ public class Mining {
     public boolean update(World world, float dt, boolean held, Raycaster.RaycastHit hit,
                           GameMode mode)
     {
-        if(!held || hit == null)
+        if(!held)
         {
             cancel();
+            return false;
+        }
+
+        // Prodleva běží, i když zrovna nic nezaměřuji - jinak by šlo
+        // pohybem myši přes oblohu prodlevu "přeskočit".
+        cooldown = Math.max(0f, cooldown - dt);
+
+        if(hit == null)
+        {
+            stop();
             return false;
         }
 
@@ -62,7 +89,7 @@ public class Mining {
 
         if(!World.isTargetable(target))
         {
-            cancel();
+            stop();
             return false;
         }
 
@@ -77,12 +104,22 @@ public class Mining {
             progress = 0f;
         }
 
-        // Creative: žádné čekání. cancel() je tu ze stejného důvodu jako
+        // Creative: žádné čekání. stop() je tu ze stejného důvodu jako
         // na konci survival větve - postup se vynuluje, ale x/y/z zůstanou,
         // takže na ně harvest() ve stejném framu ještě dosáhne.
         if(mode.instantMining())
         {
-            cancel();
+            // Po rozbití se s drženým tlačítkem čeká CREATIVE_DELAY, než
+            // padne další blok - viz tam.
+            // Tolerance kvůli odčítání floatů: 0,25 - 15 × (1/60) nevyjde
+            // přesně nula a blok by padl o frame později.
+            if(cooldown > 1e-4f)
+            {
+                return false;
+            }
+
+            stop();
+            cooldown = CREATIVE_DELAY;
             return true;
         }
 
@@ -102,7 +139,7 @@ public class Mining {
             return false;
         }
 
-        cancel();
+        stop();
         return true;
     }
 
@@ -112,7 +149,7 @@ public class Mining {
      * dřív to tiše propadlo.
      *
      * Volat ve framu, kdy update() vrátil true: x(), y(), z() pak pořád
-     * ukazují na dokopaný blok (cancel() nuluje postup, ne pozici).
+     * ukazují na dokopaný blok (stop() nuluje postup, ne pozici).
      * Vrací true, když se blok opravdu rozbil.
      *
      * Rozbití zazní v prostoru, ze středu bloku, zvukem jeho materiálu.
@@ -156,7 +193,21 @@ public class Mining {
         return true;
     }
 
+    /**
+     * Zruší kopání úplně - i s prodlevou creative, takže další klik rozbije
+     * hned. Volá se při puštění tlačítka a když Main mění obrazovku.
+     */
     public void cancel()
+    {
+        stop();
+        cooldown = 0f;
+    }
+
+    /**
+     * Zastaví postup na tomhle bloku, prodleva creative běží dál. Uvnitř
+     * update(): mířit s drženým tlačítkem na oblohu nesmí prodlevu vynulovat.
+     */
+    private void stop()
     {
         active = false;
         progress = 0f;

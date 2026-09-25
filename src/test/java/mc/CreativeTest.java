@@ -275,6 +275,73 @@ public class CreativeTest {
         stage.update(w, DT, true, at(8, FLOOR, 8), GameMode.CREATIVE);
         check("v creative se nekresli zadne stadium prasklin",
                 stage.stage() == -1 && !stage.isActive(), "" + stage.stage());
+
+        // ---------- prodleva mezi bloky: pocet nezavisi na FPS ----------
+        // Driv padl blok v kazdem framu s drzenym tlacitkem, takze obycejny
+        // klik (100 ms) vykopal tunel: 6 bloku pri 60 FPS, 8 pri 240.
+        for (int fps : new int[]{30, 60, 240, 1000}) {
+            check("klik 100 ms rozbije jeden blok (" + fps + " FPS)",
+                    heldBreaks(FLOOR, 0.1f, fps) == 1, "" + heldBreaks(FLOOR, 0.1f, fps));
+        }
+        for (int fps : new int[]{60, 240}) {
+            int n = heldBreaks(FLOOR, 1.0f, fps);
+            check("drzeni 1 s = 4 bloky (v 0; 0,25; 0,5; 0,75 s) i pri " + fps + " FPS", n == 4, "" + n);
+        }
+
+        Mining clicks = new Mining();
+        World clickWorld = arena(FLOOR);
+        clicks.update(clickWorld, DT, true, at(8, FLOOR, 8), GameMode.CREATIVE);
+        clicks.update(clickWorld, DT, false, null, GameMode.CREATIVE);
+        check("pusteni a novy klik rozbije hned (prodleva jen pri drzeni)",
+                clicks.update(clickWorld, DT, true, at(9, FLOOR, 8), GameMode.CREATIVE), "");
+
+        Mining sky = new Mining();
+        clickWorld.placeBlock(11, FLOOR, 8, World.STONE);
+        sky.update(clickWorld, DT, true, at(10, FLOOR, 8), GameMode.CREATIVE);
+        sky.update(clickWorld, DT, true, null, GameMode.CREATIVE);
+        check("mireni na oblohu s drzenym tlacitkem prodlevu nevynuluje",
+                !sky.update(clickWorld, DT, true, at(11, FLOOR, 8), GameMode.CREATIVE), "");
+        boolean later = false;
+        for (int i = 0; i < 20 && !later; i++) {
+            later = sky.update(clickWorld, DT, true, at(11, FLOOR, 8), GameMode.CREATIVE);
+        }
+        check("a po prodleve ten blok padne", later, "");
+
+        // Survival prodlevou nijak nedotcena: dokopany blok a hned dalsi.
+        Mining surv = new Mining();
+        World survWorld = arena(FLOOR);
+        survWorld.placeBlock(11, FLOOR, 8, World.STONE);
+        survWorld.placeBlock(12, FLOOR, 8, World.STONE);
+        int frames = 0;
+        while (!surv.update(survWorld, DT, true, at(11, FLOOR, 8), GameMode.SURVIVAL)) frames++;
+        int second = 0;
+        while (!surv.update(survWorld, DT, true, at(12, FLOOR, 8), GameMode.SURVIVAL)) second++;
+        check("survival: druhy blok se kope stejne dlouho jako prvni", second == frames,
+                frames + " vs " + second);
+    }
+
+    /**
+     * Kolik bloku padne ve sloupci pod hracem, kdyz se `seconds` drzi LMB
+     * pri danem FPS. Po kazdem rozbiti miri paprsek na dalsi blok niz -
+     * presne to, co ve hre udela pohled dolu.
+     */
+    static int heldBreaks(int floor, float seconds, int fps) {
+        World w = arena(floor);
+        for (int y = floor - 12; y < floor; y++) w.placeBlock(8, y, 8, World.STONE);
+
+        Mining m = new Mining();
+        float dt = 1f / fps;
+        int frames = Math.round(seconds * fps);
+        int broken = 0;
+        int y = floor;
+        for (int i = 0; i < frames; i++) {
+            if (m.update(w, dt, true, at(8, y, 8), GameMode.CREATIVE)) {
+                m.harvest(w, new Inventory(), new DroppedItems(), SoundSink.SILENT, GameMode.CREATIVE);
+                broken++;
+                y--;
+            }
+        }
+        return broken;
     }
 
     // ==================================================================

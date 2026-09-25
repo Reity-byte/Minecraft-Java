@@ -50,33 +50,9 @@ public class Raycaster {
         float tDeltaZ = Math.abs(1f / dirZ);
 
         // vzdálenost k NEJBLIŽŠÍ hranici bloku v dané ose (od aktuální pozice)
-        float tMaxX;
-        if(stepX == 1)
-        {
-            tMaxX = ((blockX+1)-startX)/Math.abs(dirX);
-        }
-        else
-        {
-            tMaxX = (startX - blockX)/Math.abs(dirX);
-        }
-        float tMaxY;
-        if(stepY == 1)
-        {
-            tMaxY = ((blockY+1)-startY)/Math.abs(dirY);
-        }
-        else
-        {
-            tMaxY = (startY - blockY)/Math.abs(dirY);
-        }
-        float tMaxZ;
-        if(stepZ == 1)
-        {
-            tMaxZ = ((blockZ+1)-startZ)/Math.abs(dirZ);
-        }
-        else
-        {
-            tMaxZ = (startZ - blockZ)/Math.abs(dirZ);
-        }
+        float tMaxX = firstBoundary(startX, blockX, dirX);
+        float tMaxY = firstBoundary(startY, blockY, dirY);
+        float tMaxZ = firstBoundary(startZ, blockZ, dirZ);
 
         float traveled = 0f;
 
@@ -113,6 +89,14 @@ public class Raycaster {
                 normalX = 0; normalY = 0; normalZ = -stepZ;
             }
 
+            // Do buňky jsme vstoupili až ZA dosahem - ta už se nepočítá.
+            // Dřív se testovala, takže paprsek trefil blok až o buňku dál,
+            // než je maxDistance.
+            if(traveled > maxDistance)
+            {
+                break;
+            }
+
             if(world.isTargetable(blockX, blockY, blockZ))
             {
                 return new RaycastHit(blockX, blockY, blockZ, normalX, normalY, normalZ);
@@ -120,5 +104,26 @@ public class Raycaster {
         }
 
         return null; // nic nenalezeno
+    }
+
+    /**
+     * Vzdálenost podél paprsku k první hranici bloku v jedné ose.
+     *
+     * ⚠️ NULOVÁ SLOŽKA SMĚRU = NEKONEČNO, ne dělení nulou. Paprsek, který se
+     * v ose nehýbe, její hranici nikdy nepřekročí. Dřív se dělilo i tady:
+     * start přesně na celé souřadnici dal 0/0 = NaN a NaN v Y nebo Z
+     * zablokoval výběr os (každé porovnání s NaN je false), takže se
+     * krokovalo v Z, `traveled` vyšlo NaN a smyčka skončila bez zásahu -
+     * hráč na z = 8,0 s pohledem po +X nezaměřil kámen tři bloky před sebou.
+     * (Mimo start na celé souřadnici vyšlo x/0 = nekonečno náhodou správně.)
+     */
+    static float firstBoundary(float start, int block, float dir)
+    {
+        if(dir == 0f)   // platí i pro -0,0
+        {
+            return Float.POSITIVE_INFINITY;
+        }
+
+        return (dir > 0 ? (block + 1) - start : start - block) / Math.abs(dir);
     }
 }

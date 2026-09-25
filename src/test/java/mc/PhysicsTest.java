@@ -184,6 +184,72 @@ public class PhysicsTest {
         check("sikma chuze neni rychlejsi nez rovne", near(straight, diagonal, 0.01f),
                 "rovne=" + straight + " sikmo=" + diagonal);
 
+        // ---------- 14) totez pri ruznem FPS ----------
+        for (int fps : new int[]{30, 60, 144, 240, 1000}) framerate(GROUND, fps);
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+
+    /**
+     * Pravidla pohybu, ktera nesmi zaviset na FPS. Vsechno ostatni tady bezi
+     * s dt = 1/60 - a vychozi maxFps je Unlimited s vypnutym vsyncem.
+     *
+     * Vyska skoku se s dt MENI (1,29 pri 30 FPS az 1,47 pri 1000 - Euler
+     * s pevnym krokem neni presny), proto se hlida jen to, na cem hra stoji:
+     * schod o jeden blok vyleze, dvoublokovou zed ne.
+     */
+    static void framerate(int ground, int fps) {
+        float dt = 1f / fps;
+        float stand = ground + 1;
+        String at = " (" + fps + " FPS)";
+
+        World w = new World();
+        w.updateBlocking(8.5f, 8.5f);
+        platform(w, -4, -4, 20, 20, ground);
+
+        // Stani: onGround v KAZDEM framu. Driv pri 240 FPS jen v polovine,
+        // pri 1000 FPS v osmine - pad za frame byl kratsi nez EPSILON.
+        Player p = new Player();
+        p.x = 8.5f; p.z = 8.5f; p.y = stand + 0.5f;
+        for (int i = 0; i < fps; i++) p.update(w, dt, 0f);
+        int grounded = 0;
+        for (int i = 0; i < fps; i++) {
+            p.update(w, dt, 0f);
+            if (p.onGround) grounded++;
+        }
+        check("stojici hrac je na zemi v kazdem framu" + at, grounded == fps, grounded + "/" + fps);
+        check("a nepropada se" + at, p.y >= stand && p.y < stand + 0.01f, "y=" + p.y);
+
+        // Drzeny mezernik: skok hned v prvnim framu, ne az po par framech.
+        p.inputJump = true;
+        p.update(w, dt, 0f);
+        check("drzeny mezernik vyskoci v prvnim framu" + at, p.vy > 0f, "vy=" + p.vy);
+        p.inputJump = false;
+
+        float peak = p.y;
+        for (int i = 0; i < fps * 3; i++) {
+            p.update(w, dt, 0f);
+            peak = Math.max(peak, p.y);
+        }
+        float height = peak - stand;
+        check("skok je mezi 1,05 a 2 bloky" + at, height > 1.05f && height < 2f, "vyska=" + height);
+
+        // Schod o jeden blok vyleze, dvoublokovou zed ne.
+        World steps = new World();
+        steps.updateBlocking(8.5f, 8.5f);
+        platform(steps, -4, -4, 20, 20, ground);
+        platform(steps, 12, -4, 20, 20, ground + 1);
+        wall(steps, 16, -4, 17, 20, ground + 2, ground + 3);
+        Player q = new Player();
+        q.x = 8.5f; q.z = 8.5f; q.y = stand; q.onGround = true;
+        q.inputForward = 1;
+        boolean climbed = false;
+        for (int i = 0; i < fps * 8; i++) {
+            q.inputJump = q.onGround;
+            q.update(steps, dt, 0f);
+            if (q.onGround && q.x > 12.3f && q.y > stand + 0.5f) climbed = true;
+        }
+        check("vyleze na schod o 1 blok" + at, climbed, "x=" + q.x + " y=" + q.y);
+        check("dvoublokovou zed neprekona" + at, q.x < 16f, "x=" + q.x);
     }
 }

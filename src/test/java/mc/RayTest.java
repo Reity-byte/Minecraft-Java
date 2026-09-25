@@ -92,6 +92,30 @@ public class RayTest {
         ray(w2, "zaporne souradnice: shora dolu",
                 -99.5f, 104.5f, -99.5f, 0, -1, 0, -100, 100, -100, 0, 1, 0);
 
+        // ---------- start na cele souradnici, nulova slozka smeru (WLD-7) ----------
+        // Driv (start - blok) / |0| = 0/0 = NaN v ose Y nebo Z zablokovalo
+        // vyber os a paprsek skoncil bez zasahu. Kamen 3 bloky v +X od oka.
+        World w3 = new World();
+        w3.updateBlocking(8.5f, 8.5f);
+        w3.placeBlock(11, 100, 8, World.STONE);
+        ray(w3, "start na cele Z (8,0), smer +X", 8.5f, 100.5f, 8.0f, 1, 0, 0, 11, 100, 8, -1, 0, 0);
+        ray(w3, "start na cele Y (100,0), smer +X", 8.5f, 100.0f, 8.5f, 1, 0, 0, 11, 100, 8, -1, 0, 0);
+        ray(w3, "start na cele Y i Z, smer +X", 8.5f, 100.0f, 8.0f, 1, 0, 0, 11, 100, 8, -1, 0, 0);
+        ray(w3, "zaporna nula ve smeru (-0,0)", 8.5f, 100.5f, 8.0f, 1, -0f, -0f, 11, 100, 8, -1, 0, 0);
+        check("hranice: nulovy smer = nekonecno, ne NaN",
+                Raycaster.firstBoundary(8f, 8, 0f) == Float.POSITIVE_INFINITY
+                        && Raycaster.firstBoundary(8f, 8, -0f) == Float.POSITIVE_INFINITY, "");
+        check("nulovy vektor smeru nic netrefi a neuvizne",
+                Raycaster.cast(w3, 8.5f, 100.5f, 8.5f, 0, 0, 0, 5f) == null, "");
+
+        // ---------- dosah se neprekroci (WLD-11) ----------
+        // Stena bloku 11 je 2,5 od oka. Driv se testovala i bunka, do ktere
+        // se vstoupilo ZA dosahem, takze trefil i paprsek s dosahem 2.
+        check("blok za dosahem se netrefi (stena 2,5, dosah 2)",
+                Raycaster.cast(w3, 8.5f, 100.5f, 8.5f, 1, 0, 0, 2f) == null, "");
+        check("na hranici dosahu se trefi (dosah 2,5)",
+                Raycaster.cast(w3, 8.5f, 100.5f, 8.5f, 1, 0, 0, 2.5f) != null, "");
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
 }

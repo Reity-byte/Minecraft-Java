@@ -355,6 +355,19 @@ public class Player {
             moveY(world, stepY);
             moveZ(world, stepZ);
         }
+
+        // ⚠️ SONDA ZEMĚ PRO KRÁTKÉ FRAMY. Stojící hráč má nohy EPSILON nad
+        // blokem. Při vysokém FPS je pád za jeden frame (½·g·dt² a méně)
+        // kratší než EPSILON - pod ~6 ms na frame - takže pohyb dolů kolizi
+        // nenajde a onGround vyjde false. Při 240 FPS to byla polovina
+        // framů, při 1000 FPS sedm z osmi, a skok s drženým mezerníkem se
+        // opozdil o frame až pět. Blok těsně pod nohama tedy znamená "stojím"
+        // i bez kolize; rychlost se vynuluje, jako by dosedl.
+        if(!onGround && !flying && vy <= 0f && collides(world, x, y - 2 * EPSILON, z))
+        {
+            onGround = true;
+            vy = 0f;
+        }
     }
 
     private void moveX(World world, float dx)

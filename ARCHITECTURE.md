@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2176 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2238 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -58,10 +58,10 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 
 | Test | Co hlídá |
 |---|---|
-| `RayTest` | DDA raycast: normály ve všech 6 směrech, dosah, start uvnitř bloku, záporné souřadnice |
+| `RayTest` | DDA raycast: normály ve všech 6 směrech, dosah (i **blok těsně za dosahem se netrefí**), start uvnitř bloku, záporné souřadnice, **start na celé souřadnici s nulovou složkou směru** (i −0,0 a nulový vektor) |
 | `ChunkTest` | Chunk systém, převod souřadnic v záporných číslech, vrstvy terénu, rozsah FBM, load/unload |
 | `MeshTest` | Mesher proti **nezávislému naivnímu přepočtu stěn** + měření rychlosti |
-| `PhysicsTest` | Gravitace, výška skoku, kolize po osách, rohy, tunelování, let, noclip |
+| `PhysicsTest` | Gravitace, výška skoku, kolize po osách, rohy, tunelování, let, noclip, a **totéž při 30–1000 FPS** (`onGround` v každém framu, skok hned, schod ano, dvoublokovou zeď ne) |
 | `SwingTest` | Máchnutí rukou: průběh křivky, délka, **držené tlačítko ho nerestartuje** |
 | `MiningTest` | Doba kopání podle tvrdosti, **přepnutí cíle vynuluje postup**, puštění tlačítka, stádia prasklin, kam jde vytěžený blok (inventář, rozdělaná hromádka, **při plném inventáři na zem**), zvuk rozbití podle materiálu ze středu bloku |
 | `MenuTest` | Hit-testing tlačítek: pořadí, kraje, mezery, překlopení y z GLFW, změna velikosti okna |
@@ -83,7 +83,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků** (podle tvaru každého druhu), kmen stojí na zemi, řetěz kmen→prkna→stůl pro všechna tři dřeva, vlastní dlaždice každého druhu, a **změřená hustota a druh stromu v každém biomu** |
 | `AtlasTest` | Mapování blok+stěna → dlaždice, UV uvnitř atlasu, půltexelové zúžení, obsah a determinismus textur |
 | `PlayerModelTest` | Animace: rozmach podle rychlosti, **opačná fáze nohou**, ruka proti noze, délka kroku, strop při letu, **nezávislost na FPS**, pohupování, máchnutí z `HandSwing`, držení. Model: rozměry jako hitbox, **pravá ruka vpravo, obličej vepředu**, končetiny v póze, držený blok u pěsti, odstín podle směru ve světě. Skin: každá stěna míří do vybarvené části. **Holá ruka v první osobě:** tytéž UV jako pravá ruka postavy, 4×12×4 px, v klidu vpravo dole před kamerou, při máchnutí u zaměřovače, **zpátky jde níž než tam (oblouk)**, po doběhnutí přesně klid; s blokem v ruce dál blok |
-| `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku |
+| `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku, **myš** (citlivost, obrácená osa, ořez pitch na ±89 i s konečnou maticí pohledu) |
 | `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
 | `TextureLabTest` | **Boční panel** (šířka proti měřítku na devíti rozlišeních, tlačítka pod sebou, ikona uvnitř tlačítka, klik do mezery i mimo pruh nic nepřepne, panel zná jen počet módů, převod souřadnic panel vs. obsah), rozvržení módu Recipes bez překryvů, index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře**, **sledování změněných pixelů** (`DirtyRect` sám o sobě; tah zůstane uvnitř jedné dlaždice a obsahuje všechny změněné pixely; undo hlásí svou dlaždici, import celý atlas), **mapování pixelu na stěnu dílu těla** (obdélníky sedí na UV, která vydává `PlayerModelMesh.unfold()`; round-trip pixel → index → stěna; 1632 pokrytých pixelů; plátno má řádek 0 dole), **editace kůže** (tah jen ve své stěně, kapátko, undo i s návratem výběru), **PNG kůže bez překlápění** a **přesné znění hlášky o rozměru** |
 | `MouseScaleTest` | Přepočet myši z bodů okna na pixely framebufferu: poměr pro 1,0 / 1,5 / 2,0 / 3,0, každá osa zvlášť, ochrana proti dělení nulou — a **simulovaná Retina přes všechny klikací obrazovky** (menu, deset položek Options i konec posuvníku, řádek seznamu světů, pole seedu, dlaždice a pixel plátna v labu, slot hotbaru): co je nakreslené na daném místě, to tam po přepočtu i reaguje. Jedna kontrola schválně hlídá, že bez přepočtu by klik trefil jiné tlačítko |
@@ -91,7 +91,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) — přeměřené na generátoru s biomy, viz `GENERATOR_VERSION` |
 | `ThumbnailTest` | Náhled: orientace (horní řádek obrazovky = horní řádek obrázku), výřez středu podle poměru stran, zmenšení průměrováním, PNG tam a zpět, odmítnutí příliš velkého obrázku |
 | `WorldScreenTest` | Obrazovky světů: psaní do pole se jménem i seedem, náhled cílové složky (i s `(2)`), Tab/Esc/Enter/Ctrl+V, seznam od naposledy hraného, výběr klikem, **dvojklik hraje**, šipky a rolování, **mazání až po potvrzení**, prázdný seznam, a celá cesta založit → uložit → najít v seznamu → načíst se stejným terénem |
-| `CreativeTest` | Creative mód: přepínač na obrazovce zakládání světa (cyklus, nepřekryje Create/Cancel, `reset()` vrací survival), **okamžitá těžba** (praskne v prvním framu i u železa, ale vzduch, voda, puštěné tlačítko a kurzor mimo blok dál ne), **vytěžený blok mizí** (nic do inventáře, nic na zem, ani s plným inventářem), pokládání neubírá z hotbaru (50 položení, jeden kus vydrží 200), obsah přehledu (přesně jeden záznam na placovatelný vestavěný blok i na každý lab blok, bez `blocks.json` jen vestavěné, determinismus, pořadí), **nekonečný zdroj** (braní kopíruje, shift-klik kopíruje do hotbaru, položení do přehledu zahodí, rolování a klik po odrolování), let (stoupání i klesání, obě klávesy se vyruší, Shift zrychlí, **kolize v letu platí** proti propadnutí s noclipem, po vypnutí letu dopad), dvojstisk mezerníku (**z trojice přepne jen druhý**, reset, běžné skákání ne), mód ve `world.json` (tam a zpět, `touch()` ho zachová, **chybějící klíč i překlep → survival**) — a ke každému pravidlu **kontrola, že survival větev je nezměněná** |
+| `CreativeTest` | Creative mód: přepínač na obrazovce zakládání světa (cyklus, nepřekryje Create/Cancel, `reset()` vrací survival), **okamžitá těžba** (praskne v prvním framu i u železa, ale vzduch, voda, puštěné tlačítko a kurzor mimo blok dál ne; **klik 100 ms = jeden blok při 30–1000 FPS**, držení 1 s = 4 bloky, nový klik hned), **vytěžený blok mizí** (nic do inventáře, nic na zem, ani s plným inventářem), pokládání neubírá z hotbaru (50 položení, jeden kus vydrží 200), obsah přehledu (přesně jeden záznam na placovatelný vestavěný blok i na každý lab blok, bez `blocks.json` jen vestavěné, determinismus, pořadí), **nekonečný zdroj** (braní kopíruje, shift-klik kopíruje do hotbaru, položení do přehledu zahodí, rolování a klik po odrolování), let (stoupání i klesání, obě klávesy se vyruší, Shift zrychlí, **kolize v letu platí** proti propadnutí s noclipem, po vypnutí letu dopad), dvojstisk mezerníku (**z trojice přepne jen druhý**, reset, běžné skákání ne), mód ve `world.json` (tam a zpět, `touch()` ho zachová, **chybějící klíč i překlep → survival**) — a ke každému pravidlu **kontrola, že survival větev je nezměněná** |
 | `OptionsTest` | Nastavení: výchozí hodnoty = dnešní hra, oříznutí na meze, **render ≤ simulation po 2000 náhodných změnách**, převod na čísla enginu (dohled < `(loadRadius-1)·16`), `options.json` tam a zpět, **chybějící i šest druhů poškozeného souboru → výchozí hodnoty**, jedna špatná hodnota → výchozí jen pro ni, záloha `.bak`, obrazovka Options (hit-testy, tažení posuvníku i mimo dráhu, žádné překryvy), výběr monitoru pro fullscreen, **počet skutečných přepnutí monitoru** (start ve fullscreenu přepne přesně jednou, i když `init()` volá `apply()` dvakrát; F11 tam a zpět pokaždé), plánování stropu FPS, křivka jasu, GUI měřítko |
 | `BlockRegistryTest` | `textures/blocks.json`: tvar výstupu, round-trip přes text i disk, **neexistující a poškozený soubor → jen vestavěné bloky** (náhodné bajty, useknutý JSON, špatné typy), přeskočení jednotlivých neplatných bloků, **stabilita id přes víc sezení** (i po ručním smazání bloku ze souboru), novější `format`, escape v JSON, plný registr, **záloha poškozeného souboru do `.bak`** |
 | `LabBlockTest` | Blok z labu ve hře: pevný/neprůhledný/obojí ne, neznámé id, **doba kopání podle tvrdosti z dat** (`Mining`), vytěžený blok do inventáře a zpět do světa, **každá stěna meshe bere UV ze své dlaždice**, culling a stín podle neprůhlednosti, hráč duchem propadne a na mramoru stojí, paprsek zaměří i ducha, zvuk podle tvrdosti, náhled labu = mesh hry, **uložený svět nese id beze změny formátu** (svět bez bloků z labu je bajt po bajtu stejný), koloběh lab → soubor → restart |
@@ -283,6 +283,19 @@ nejde — nepoznáš, o kterou stěnu se zarazit, a hráč se zasekává v rozí
 **Pohyb se dělí na kroky ≤ 0,4 bloku.** Test kolize kontroluje jen cílovou polohu, ne cestu
 k ní; bez dělení by pád terminální rychlostí proletěl skrz jednovrstvou podlahu.
 K tomu `dt` se stropem 0,05 s — jinak by jedno zaseknutí poslalo hráče skrz zeď.
+
+**⚠️ Stojící hráč pozná zem i bez kolize.** Nohy stojí `EPSILON` (0,001) nad blokem, a když je
+pád za jeden frame (`½·g·dt²`) kratší — pod ~6 ms na frame, tedy nad ~167 FPS — pohyb dolů
+kolizi nenajde a `onGround` vyšel false: při 240 FPS v polovině framů, při 1000 FPS v sedmi
+z osmi, a skok s drženým mezerníkem se opozdil. Proto po pohybu ještě sonda: blok do
+`2·EPSILON` pod nohama = stojím (a `vy = 0`). `PhysicsTest` projde stání, skok, schod a zeď
+při 30, 60, 144, 240 i 1000 FPS. Výška skoku se s FPS mění (1,29–1,47, pevný krok Eulera);
+hlídá se jen to, na čem hra stojí — schod o blok vyleze, dvoublokovou zeď ne.
+
+**⚠️ Raycaster: nulová složka směru = nekonečno, ne dělení nulou.** Dřív start přesně na celé
+souřadnici s nulovou složkou dal `0/0 = NaN`, NaN zablokoval výběr os a paprsek nic netrefil
+(oko na z = 8,0, pohled po +X). A buňka, do které se vstoupí až ZA `maxDistance`, se už
+netestuje — dřív šel zásah o buňku dál, než je dosah.
 
 **⚠️ Překryv buňky s intervalem je `floor(a)` až `ceil(b)-1`, ne `floor(b)`.** S `floor(b)` se
 u hráče stojícího přesně na hraně testuje i buňka, které se jen dotýká, a hráč se zasekne
@@ -2381,8 +2394,13 @@ ověřuje, že volání bez módu vyjde stejně jako předtím.
 zkracuje jen ČEKÁNÍ — test na `World.isTargetable()` zůstává nad ní, takže se vzduch ani
 voda nerozbijí ani v creative. Praskliny se nestihnou objevit (`stage()` vrací −1), což
 je správně: blok praskne ve framu, kdy se na něj začne s drženým tlačítkem mířit.
-Držená myš pak při přejíždění boří blok za blokem, stejně jako ve vanille; zvuk před
-kulometem chrání `SoundThrottle`, který tam byl dřív.
+
+**⚠️ S drženým tlačítkem padá další blok až po 0,25 s** (`Mining.CREATIVE_DELAY`, 5 ticků
+jako ve vanille). Dřív padl blok v KAŽDÉM framu: rozbitý blok zmizel, paprsek v dalším framu
+trefil ten za ním, a obyčejný klik (tlačítko dole 80–120 ms) vykopal tunel — 6 bloků při
+60 FPS, 8 při 240. Počet tak rozhodovalo FPS. Prodleva běží jen s drženým tlačítkem
+(puštění ji vynuluje, nový klik rozbije hned) a mířením na oblohu se nepřeskočí. Survival
+se nemění. Zvuk hlídá `SoundThrottle` jako dřív.
 
 **Vytěžený blok v creative MIZÍ** — nejde do inventáře ani nevypadne na zem.
 `Mining.harvest()` se v creative inventáře a seznamu položek vůbec nedotkne, takže se
