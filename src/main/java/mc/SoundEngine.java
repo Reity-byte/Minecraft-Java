@@ -29,7 +29,12 @@ import static org.lwjgl.system.MemoryUtil.NULL;
  *
  * Všechny zvuky se nahrají do bufferů hned při otevření - je jich pár desítek
  * kilobajtů, takže není co odkládat. Zvuk má jednu až několik variant
- * (SoundLibrary.variants); každé přehrání vybere náhodně jednu. Přehrává se z pevného fondu zdrojů;
+ * (SoundLibrary.variants); každé přehrání vybere náhodně jednu.
+ *
+ * Smyčky prostředí (Sound.loops) mají každá VLASTNÍ zdroj mimo fond: hrají
+ * od otevření pořád dokola s hlasitostí 0 a Ambience jim přes loop() jen
+ * mění hlasitost. Rozjíždět a zastavovat je by znamenalo, že by pokaždé
+ * začaly od začátku. Přehrává se z pevného fondu zdrojů;
  * když jsou všechny obsazené, nový zvuk se zahodí (proti "kulometu" chrání
  * hlavně cooldown, fond je jen pojistka).
  * ---------------------------------------------------------------------------
@@ -56,6 +61,9 @@ public final class SoundEngine implements SoundSink {
     /** Buffery variant: buffers[zvuk.ordinal()][varianta]. */
     private final int[][] buffers = new int[Sound.values().length][];
     private final int[] sources = new int[SOURCES];
+
+    /** Zdroj smyčky: loops[zvuk.ordinal()], 0 = zvuk není smyčka. */
+    private final int[] loops = new int[Sound.values().length];
 
     private final SoundThrottle throttle = new SoundThrottle();
     private final Random random = new Random();
@@ -135,6 +143,21 @@ public final class SoundEngine implements SoundSink {
             sources[i] = source;
         }
 
+        for(Sound sound : Sound.values())
+        {
+            if(sound.loops())
+            {
+                int source = alGenSources();
+                alSourcei(source, AL_BUFFER, buffers[sound.ordinal()][0]);
+                alSourcei(source, AL_LOOPING, AL_TRUE);
+                alSourcei(source, AL_SOURCE_RELATIVE, AL_TRUE);
+                alSource3f(source, AL_POSITION, 0f, 0f, 0f);
+                alSourcef(source, AL_GAIN, 0f);
+                alSourcePlay(source);
+                loops[sound.ordinal()] = source;
+            }
+        }
+
         int error = alGetError();
 
         if(error != AL_NO_ERROR)
@@ -200,6 +223,17 @@ public final class SoundEngine implements SoundSink {
         alSourcePlay(source);
     }
 
+    @Override
+    public void loop(Sound sound, float gain)
+    {
+        if(!open || sound == null || loops[sound.ordinal()] == 0)
+        {
+            return;
+        }
+
+        alSourcef(loops[sound.ordinal()], AL_GAIN, Math.max(0f, gain) * sound.kind.gain);
+    }
+
     /**
      * Připraví volný zdroj pro zvuk, nebo vrátí 0, když zvuk hrát nemá:
      * engine je tichý, blok nezní, druh je v cooldownu, nebo nic není volné.
@@ -258,6 +292,16 @@ public final class SoundEngine implements SoundSink {
                     alSourceStop(sources[i]);
                     alDeleteSources(sources[i]);
                     sources[i] = 0;
+                }
+            }
+
+            for(int i = 0; i < loops.length; i++)
+            {
+                if(loops[i] != 0)
+                {
+                    alSourceStop(loops[i]);
+                    alDeleteSources(loops[i]);
+                    loops[i] = 0;
                 }
             }
 

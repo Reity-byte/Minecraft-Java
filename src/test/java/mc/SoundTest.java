@@ -44,6 +44,13 @@ public class SoundTest {
             if (sound != null) played.add(new Played(sound, true, x, y, z));
         }
 
+        /** Posledni hlasitost kazde smycky prostredi. */
+        final java.util.Map<Sound, Float> loops = new java.util.EnumMap<>(Sound.class);
+
+        @Override public void loop(Sound sound, float gain) {
+            if (sound != null) loops.put(sound, gain);
+        }
+
         Played last() { return played.isEmpty() ? null : played.get(played.size() - 1); }
     }
 
@@ -56,6 +63,7 @@ public class SoundTest {
         wav();
         library();
         variants();
+        loops();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -271,7 +279,8 @@ public class SoundTest {
             for (short x : a) peak = Math.max(peak, Math.abs(x));
 
             audible &= a.length > 0 && peak > Short.MAX_VALUE / 3;
-            cleanEdges &= Math.abs(a[0]) < 500 && Math.abs(a[a.length - 1]) < 500;
+            // Smycka zacina a konci uprostred signalu - hlida ji loops() nize.
+            if (!s.loops()) cleanEdges &= Math.abs(a[0]) < 500 && Math.abs(a[a.length - 1]) < 500;
             deterministic &= Arrays.equals(a, b);
             if (peak <= Short.MAX_VALUE / 3) detail = s + " spicka " + peak;
         }
@@ -368,6 +377,31 @@ public class SoundTest {
     }
 
     // ==================================================================
+
+    static void loops() {
+        List<Sound> loops = new ArrayList<>();
+        for (Sound s : Sound.values()) if (s.loops()) loops.add(s);
+        check("tri smycky prostredi: vitr, jeskyne, voda",
+                loops.equals(List.of(Sound.AMBIENT_WIND, Sound.AMBIENT_CAVE, Sound.AMBIENT_WATER)), loops.toString());
+
+        // Bez svu: skok z posledniho vzorku na prvni neni vetsi nez nejvetsi
+        // skok mezi sousednimi vzorky uvnitr smycky. Lupnuti by bylo mnohem vic.
+        boolean seamless = true, length = true, different = true;
+        String detail = "";
+        for (Sound s : loops) {
+            short[] a = SoundSynth.synthesize(s).samples();
+            int inside = 0;
+            for (int i = 1; i < a.length; i++) inside = Math.max(inside, Math.abs(a[i] - a[i - 1]));
+            int wrap = Math.abs(a[0] - a[a.length - 1]);
+            if (wrap > inside) { seamless = false; detail = s + ": sev " + wrap + " > " + inside; }
+            length &= Math.abs(SoundSynth.synthesize(s).seconds() - SoundSynth.LOOP_SECONDS) < 0.01f;
+            different &= SoundSynth.variants(s) == 1;
+        }
+        check("smycky navazuji beze svu (konec -> zacatek)", seamless, detail);
+        check("smycky maji delku LOOP_SECONDS a jednu variantu", length && different, "");
+        check("smycky se neprehravaji jako jednorazove zvuky, kapka ano",
+                !Sound.CAVE_DRIP.loops() && Sound.AMBIENT_WIND.kind.pitchVariation == 0f, "");
+    }
 
     static void variants() throws IOException {
         // ---------- syntetizovane ----------

@@ -181,6 +181,10 @@ public class AllTests {
         MotionTest.main(args);
         failures += MotionTest.failures;
 
+        System.out.println(NEWLINE + "========== AmbienceTest ==========");
+        AmbienceTest.main(args);
+        failures += AmbienceTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

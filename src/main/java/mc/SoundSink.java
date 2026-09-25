@@ -14,6 +14,12 @@ public interface SoundSink {
     /** Zvuk v prostoru na světových souřadnicích - rozbití a položení bloku. */
     void playAt(Sound sound, float x, float y, float z);
 
+    /**
+     * Hlasitost smyčky prostředí (Sound.loops()), 0 = ticho. Smyčka hraje
+     * pořád; volá se každý frame s aktuální hlasitostí.
+     */
+    default void loop(Sound sound, float gain) {}
+
     /** Nic nehraje. Pro testy, které zvuk nezajímá. */
     SoundSink SILENT = new SoundSink() {
         @Override public void play(Sound sound) {}

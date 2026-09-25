@@ -207,6 +207,9 @@ public class Main {
 
     /** Setrvačnost ruky v první osobě při otočení myší. */
     private final HandSway handSway = new HandSway();
+
+    /** Zvuky prostředí: vítr, jeskyně, voda a kapky. */
+    private final Ambience ambience = new Ambience(new java.util.Random());
     private final PlayerModelMesh playerMesh = new PlayerModelMesh();
 
     /** Otevřená obrazovka kontejneru, nebo null. */
@@ -1113,6 +1116,14 @@ public class Main {
                 }
             }
 
+            // Prostředí hraje, dokud běží svět: ve hře (updatePlaying) i nad
+            // otevřenou truhlou. Pauza, nastavení, lab a menu ho ztlumí.
+            if (state == GameState.CONTAINER) {
+                ambience.update(world, camera.x, camera.y, camera.z, dt, sound);
+            } else if (state != GameState.PLAYING) {
+                ambience.silence(dt, sound);
+            }
+
             glfwSwapBuffers(window);
             glfwPollEvents();
 
@@ -1646,6 +1657,9 @@ public class Main {
         if (player.stepped) {
             sound.play(Sound.stepOf(player.stepBlock));
         }
+
+        // Prostředí podle toho, kde jsou uši - tedy kamera, jako posluchač.
+        ambience.update(world, camera.x, camera.y, camera.z, dt, sound);
 
         // ⚠️ Míří se z OČÍ, ne z kamery. Ve třetí osobě by paprsek z kamery
         // za zády trefil blok mezi kamerou a hráčem a zepředu by mířil úplně

@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2361 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2384 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -81,6 +81,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `AsyncTest` | Async generování: shoda se synchronním blok po bloku, nejhorší `update()` při chůzi, omezený počet sloupců, kritický okruh, `shutdown()` |
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
+| `AmbienceTest` | Cíle hlasitosti: venku fouká a ve výšce víc, v budově ne, pod stromem o dost míň; jeskyně jen ve tmě **a** pod mořem (dům ani roklina nehučí); voda slábne se vzdáleností, pod vodou naplno a ostatní ztichnou. Nejbližší voda ve skutečném světě (5 bloků), **hlasitost se dotahuje, neskočí**, po 10 s sedí s cílem, v pauze dozní; v jeskyni za minutu 4–15 kapek, poziční a kolem hlavy. V `SoundTest` navíc **smyčky beze švu** (skok konec → začátek ne větší než uvnitř) |
 | `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty |
@@ -1504,9 +1505,9 @@ jen kód, který zvuk spočítá (`SoundSynth`): šum z hashe (vyjde pokaždé s
 filtry a obálka s náběhem a doběhem do nuly (bez lupnutí). Zvuk je druh × materiál. Druh dává
 délku a doznívání — krok 0,09 s, položení 0,13 s, rozbití 0,24 s —, materiál barvu: hlína je
 tlumený zrnitý šum, kámen ostřejší šum s cvaknutím 140 Hz, dřevo tlumený tón 200 Hz
-s klepnutím, listí vysoký šum s pomalým náběhem. Kliknutí je pípnutí 1,4 kHz. Všech 50 bufferů
-(12 zvuků bloků × 4 varianty, kliknutí a sebrání) má dohromady ~330 KB a 7,5 s; syntéza se
-vejde do otevření enginu.
+s klepnutím, listí vysoký šum s pomalým náběhem. Kliknutí je pípnutí 1,4 kHz. Všech 54 bufferů
+(12 zvuků bloků × 4 varianty, kliknutí, sebrání, kapka a tři šestisekundové smyčky) má
+dohromady ~1,1 MB a 26 s; syntéza se vejde do otevření enginu.
 
 **⚠️ Syntéza nevyrábí vzorky pro OpenAL, ale SOUBOR WAV v paměti.** Nahrávka z disku je jen jiný
 zdroj týchž bajtů a obojí jde stejným dekodérem (`Wav.decode`). Výměna za skutečné zvuky proto
@@ -1521,6 +1522,27 @@ kroků za sebou nezní jako jedna nahrávka. Jakmile jde přečíst aspoň jeden
 se pro ten zvuk nepoužije vůbec. Bez souborů má každý zvuk bloku **4 syntetizované varianty**
 (jiné semínko šumu, doznívání ±12 %, stejná délka); kliknutí a sebrání jsou čisté tóny,
 semínko by je nezměnilo, takže mají jednu.
+
+**Zvuky prostředí (`Ambience`)** jsou tři smyčky — vítr, hučení jeskyně, šplouchání vody —
+a občasná kapka v podzemí. Smyčky mají v `SoundEngine` **vlastní zdroje mimo fond**, hrají
+od otevření pořád dokola s hlasitostí 0 a `Ambience` jim každý frame jen nastaví hlasitost
+(`SoundSink.loop`); rozjíždět je znovu by je pokaždé pustilo od začátku. Cíle podle buňky
+s kamerou:
+
+- **vítr** — sluneční světlo buňky na druhou (pod stromem už skoro nefouká) krát výška: 35 %
+  u hladiny moře, naplno o 40 bloků výš. Sluneční světlo buňky, ne denní doba — fouká i v noci.
+- **jeskyně** — tma od oblohy krát hloubka pod hladinou moře (naplno 10 bloků pod ní). Tmavý
+  dům na povrchu ani dno rokliny pod otevřeným nebem nehučí.
+- **voda** — lineárně podle vzdálenosti k nejbližší vodě do 8 bloků (hledá se 2× za sekundu
+  v ±8 / ±4 blocích); pod vodou naplno a vítr s jeskyní ztichnou.
+- **kapka** — když jeskyně hučí aspoň z půlky, jednou za 4–14 s, POZIČNĚ z náhodného místa do
+  6 bloků, takže má směr i útlum.
+
+Hlasitosti se k cíli dotahují (časová konstanta 0,8 s), vstup do jeskyně nezní jako vypínač.
+Hraje ve hře a nad truhlou; pauza, nastavení, lab a menu ho nechají doznít. Smyčky se
+syntetizují **beze švu**: počítá se o 0,5 s víc a přesah se prolne do začátku, pomalé
+modulace mají celý počet period na smyčku. Nahradit jdou soubory `sounds/ambient_wind.wav`,
+`ambient_cave.wav`, `ambient_water.wav` a `cave_drip.wav` — smyčka ze souboru musí navazovat sama.
 
 **Čte se WAV PCM 8 i 16 bit, mono i stereo; .ogg zatím ne.** Dekodér Vorbisu je v LWJGL
 v modulu `lwjgl-stb` (STBVorbis), tedy další závislost. Až bude potřeba, je to jeden modul

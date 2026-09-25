@@ -37,7 +37,18 @@ public enum Sound {
     CLICK(Kind.CLICK, null),
 
     /** Sebrání položky ze země ("pop"). Nemá materiál, soubor sounds/pickup.wav. */
-    PICKUP(Kind.PICKUP, null);
+    PICKUP(Kind.PICKUP, null),
+
+    /**
+     * Smyčky prostředí (Ambience): hrají pořád, jen se jim mění hlasitost.
+     * Soubor sounds/ambient_wind.wav atd. musí jít hrát dokola beze švu.
+     */
+    AMBIENT_WIND(Kind.AMBIENT, null),
+    AMBIENT_CAVE(Kind.AMBIENT, null),
+    AMBIENT_WATER(Kind.AMBIENT, null),
+
+    /** Kápnutí vody v jeskyni - občas, poziční, někde kolem hráče. */
+    CAVE_DRIP(Kind.DRIP, null);
 
     /**
      * Druh zvuku a pravidla, podle kterých se přehrává.
@@ -58,7 +69,11 @@ public enum Sound {
         CLICK(0.05f,        0.03f,        0.60f),
         // Sebrání: výrazná obměna výšky jako v Minecraftu, ať řada sebraných
         // kousků nezní jako jeden zvuk; cooldown hlídá "kulomet" při sběru hromady.
-        PICKUP(0.06f,       0.25f,        0.45f);
+        PICKUP(0.06f,       0.25f,        0.45f),
+        // Smyčka: hlasitost řídí Ambience každý frame, výška se nemění.
+        AMBIENT(0f,         0f,           1.00f),
+        // Kapka: výrazná obměna výšky, ať každá zní jinak.
+        DRIP (0.50f,        0.30f,        0.50f);
 
         public final float cooldown;
         public final float pitchVariation;
@@ -132,6 +147,12 @@ public enum Sound {
 
     public final Kind kind;
     public final Material material;
+
+    /** Hraje dokola (smyčka prostředí), ne jednou. */
+    public boolean loops()
+    {
+        return kind == Kind.AMBIENT;
+    }
 
     Sound(Kind kind, Material material)
     {

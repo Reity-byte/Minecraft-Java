@@ -47,7 +47,7 @@ public final class SoundSynth {
      */
     public static int variants(Sound sound)
     {
-        return sound.material != null ? 4 : 1;
+        return sound.material != null ? 4 : 1;   // smyčky, kliknutí, sebrání, kapka: 1
     }
 
     public static Wav.Pcm synthesize(Sound sound)
@@ -73,7 +73,132 @@ public final class SoundSynth {
             case PLACE -> render(0.13f, 0.030f * d, attackOf(sound), 0.80f, seed, timbreOf(sound));
             case CLICK -> render(0.05f, 0.012f, ATTACK, 0.6f, seed, SoundSynth::click);
             case PICKUP -> render(0.10f, 0.030f, ATTACK, 0.7f, seed, SoundSynth::pop);
+            case DRIP   -> render(0.12f, 0.035f, ATTACK, 0.6f, seed, SoundSynth::drip);
+            case AMBIENT -> switch(sound)
+            {
+                case AMBIENT_WIND  -> renderLoop(0.5f, seed, SoundSynth::wind);
+                case AMBIENT_CAVE  -> renderLoop(0.6f, seed, SoundSynth::cave);
+                default            -> renderLoop(0.5f, seed, SoundSynth::water);
+            };
         };
+    }
+
+    // ------------------------------------------------------------------
+    // smyčky prostředí
+    // ------------------------------------------------------------------
+
+    /**
+     * Délka smyčky. Všechny pomalé modulace mají CELÝ počet period na
+     * smyčku, takže navazují; šum navazuje díky prolnutí (renderLoop).
+     */
+    static final float LOOP_SECONDS = 6f;
+
+    /** Jak dlouhý kus konce se prolne do začátku. */
+    private static final float LOOP_FADE = 0.5f;
+
+    /** sin s k celými periodami za smyčku - navazuje přes konec smyčky. */
+    private static float cycle(float t, int k, float offset)
+    {
+        return (float) Math.sin(2 * Math.PI * k * t / LOOP_SECONDS + offset);
+    }
+
+    /**
+     * Smyčka bez obálky: spočítá o LOOP_FADE víc a ten přesah prolne do
+     * začátku (sqrt váhy, ať šum v půlce prolnutí nezeslábne). Poslední
+     * vzorek pak plynule navazuje na první - bez lupnutí při každém opakování.
+     *
+     * ⚠️ Jen varianta 0: smyčka hraje pořád tatáž, varianty by nebylo kdy
+     * vystřídat (SoundSynth.variants vrací pro smyčky 1).
+     */
+    private static Wav.Pcm renderLoop(float peak, int seed, Timbre timbre)
+    {
+        int count = Math.round(LOOP_SECONDS * SAMPLE_RATE);
+        int fade = Math.round(LOOP_FADE * SAMPLE_RATE);
+        float[] raw = new float[count + fade];
+        Filters filters = new Filters();
+
+        for(int i = 0; i < raw.length; i++)
+        {
+            raw[i] = timbre.sample(i, i / (float) SAMPLE_RATE, seed, filters);
+        }
+
+        float[] signal = new float[count];
+        float loudest = 0f;
+
+        for(int i = 0; i < count; i++)
+        {
+            signal[i] = raw[i];
+
+            if(i < fade)
+            {
+                float w = i / (float) fade;
+                signal[i] = raw[count + i] * (float) Math.sqrt(1 - w) + raw[i] * (float) Math.sqrt(w);
+            }
+
+            loudest = Math.max(loudest, Math.abs(signal[i]));
+        }
+
+        float scale = loudest > 0f ? peak / loudest : 0f;
+        short[] samples = new short[count];
+
+        for(int i = 0; i < count; i++)
+        {
+            samples[i] = (short) Math.round(signal[i] * scale * Short.MAX_VALUE);
+        }
+
+        return new Wav.Pcm(samples, SAMPLE_RATE);
+    }
+
+    /** Síla poryvu 0 až 1 - tři pomalé vlny s celými periodami na smyčku. */
+    private static float gust(float t)
+    {
+        return 0.5f + 0.25f * cycle(t, 1, 0f) + 0.15f * cycle(t, 2, 1.3f) + 0.1f * cycle(t, 5, 2.1f);
+    }
+
+    /**
+     * Vítr: šum přes dolní propust, jejíž mez jede s poryvem (silnější vítr
+     * = vyšší hučení), bez nejhlubších basů, hlasitost podle poryvu.
+     */
+    private static float wind(int i, float t, int seed, Filters f)
+    {
+        float g = gust(t);
+        float cutoff = 200f + 500f * g;
+        f.low1 = lowPass(f.low1, noise(i, seed), cutoff);
+        f.low2 = lowPass(f.low2, f.low1, cutoff * 1.5f);
+        f.high = lowPass(f.high, f.low2, 60f);
+        return (f.low2 - f.high) * (0.3f + 0.7f * g);
+    }
+
+    /**
+     * Jeskyně: hluboké hučení - šum pod 90 Hz a slabý tón 55 Hz (330 period
+     * za smyčku, navazuje), který pomalu dýchá.
+     */
+    private static float cave(int i, float t, int seed, Filters f)
+    {
+        f.low1 = lowPass(f.low1, noise(i, seed), 90f);
+        f.low2 = lowPass(f.low2, f.low1, 90f);
+        float drone = (float) Math.sin(2 * Math.PI * 55f * t) * (0.7f + 0.3f * cycle(t, 1, 0f));
+        return f.low2 * 6f + 0.15f * drone;
+    }
+
+    /**
+     * Voda: pásmo šumu 400 až 1800 Hz (šplouchání), rozvlněné dvěma
+     * rychlejšími vlnami - voda "bublá", nesyčí rovnoměrně.
+     */
+    private static float water(int i, float t, int seed, Filters f)
+    {
+        f.low1 = lowPass(f.low1, noise(i, seed), 1800f);
+        f.high = lowPass(f.high, f.low1, 400f);
+        float ripple = 0.55f + 0.25f * cycle(t, 13, 0f) + 0.2f * cycle(t, 29, 0.7f);
+        return (f.low1 - f.high) * ripple;
+    }
+
+    /** Kapka: tón, jehož výška KLESÁ (1800 -> 1100 Hz) - obráceně než sebrání. */
+    private static float drip(int i, float t, int seed, Filters f)
+    {
+        // Fáze = integrál frekvence 1800 - 6000 t.
+        double phase = 2 * Math.PI * (1800.0 * t - 3000.0 * t * t);
+        return (float) Math.sin(phase);
     }
 
     /** Odstup semínek variant - větší než počet zvuků, ať se nepotkají. */

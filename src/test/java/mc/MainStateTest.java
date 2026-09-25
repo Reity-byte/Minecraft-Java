@@ -509,7 +509,7 @@ public class MainStateTest {
                 "mouseScale", "glReady", "blockAtlas", "playerSkin", "atlasPixels", "atlasFromFile",
                 "skinPixels", "skinFromFile", "atlasEditor", "skinEditor", "widgets", "images", "optionsScreen", "selectScreen",
                 "createScreen", "optionsReturnState", "lab", "createdBlocks", "labReturnState",
-                "showDebug", "icons", "sky", "heldItem", "swing", "animation", "handSway", "playerMesh",
+                "showDebug", "icons", "sky", "heldItem", "swing", "animation", "handSway", "ambience", "playerMesh",
                 "frameCount", "fpsTimer", "currentFps", "scrollRemainder");
 
         // Player: stav pohybu patri svetu (resetForNewWorld + spawn/restore). Vstup se plni
