@@ -76,6 +76,12 @@ public class ContainerScreen {
     private Container resultSlot;
 
     /**
+     * Pec, jejíž sloty obrazovka ukazuje, nebo null. Kvůli šipce a plamínku
+     * a shift-kliku, který z inventáře posílá surovinu a palivo do pece.
+     */
+    private FurnaceState furnace;
+
+    /**
      * Co drží kurzor. Není to slot žádného kontejneru schválně: v Minecraftu
      * to při zavření obrazovky spadne zpátky do inventáře, a takhle je jasné,
      * kdo je za to zodpovědný.
@@ -119,6 +125,22 @@ public class ContainerScreen {
     {
         grids.add(new SlotGrid(container, 0, 1, 1, guiX, guiY, true, false));
         resultSlot = container;
+        return this;
+    }
+
+    /**
+     * Výstupní slot na daném indexu kontejneru, bez craftingu - výstup pece.
+     * Vzetí ho vyprázdní (nic se nespotřebovává, výsledek už je hotový).
+     */
+    public ContainerScreen addOutput(Container container, int index, int guiX, int guiY)
+    {
+        grids.add(new SlotGrid(container, index, 1, 1, guiX, guiY, true, false));
+        return this;
+    }
+
+    public ContainerScreen withFurnace(FurnaceState state)
+    {
+        furnace = state;
         return this;
     }
 
@@ -526,12 +548,50 @@ public class ContainerScreen {
 
         if(container == playerInventory)
         {
-            playerInventory.quickMove(hit.index());
+            // U pece jde surovina a palivo z inventáře rovnou do ní.
+            if(furnace == null || !moveIntoFurnace(hit.index(), playerInventory))
+            {
+                playerInventory.quickMove(hit.index());
+            }
         }
-        else if(container == craftingGrid)
+        else if(container == craftingGrid || (furnace != null && container == furnace.slots))
         {
             container.set(hit.index(), playerInventory.add(stackAt(hit)));
         }
+    }
+
+    /**
+     * Shift-klik z inventáře u pece: co se taví, do suroviny; co hoří, do
+     * paliva (surovina má přednost - kmen se dá tavit i pálit, jako
+     * v Minecraftu). Slije se jen se stejnou věcí. Vrací false, když to do
+     * pece nepatří - pak se hromádka přesouvá obvyklým způsobem.
+     */
+    private boolean moveIntoFurnace(int index, Inventory playerInventory)
+    {
+        ItemStack stack = playerInventory.get(index);
+        int target = !Smelting.resultOf(stack).isEmpty() ? FurnaceState.INPUT
+                : Fuel.isFuel(stack.id()) ? FurnaceState.FUEL : -1;
+
+        if(target < 0)
+        {
+            return false;
+        }
+
+        ItemStack slot = furnace.slots.get(target);
+
+        if(slot.isEmpty())
+        {
+            furnace.slots.set(target, stack);
+            playerInventory.set(index, ItemStack.EMPTY);
+        }
+        else if(slot.sameItem(stack))
+        {
+            int moved = Math.min(Math.max(0, slot.space()), stack.count());
+            furnace.slots.set(target, slot.plus(moved));
+            playerInventory.set(index, stack.plus(-moved));
+        }
+
+        return true;
     }
 
     /**
@@ -714,7 +774,7 @@ public class ContainerScreen {
      */
     private void takeResult(SlotHit hit, Container playerInventory)
     {
-        ItemStack result = hit.grid().container().get(0);
+        ItemStack result = stackAt(hit);
 
         if(result.isEmpty())
         {
@@ -746,8 +806,17 @@ public class ContainerScreen {
             playerInventory.add(result);
         }
 
-        Recipes.consume(craftingGrid);
-        refreshResult();
+        // Crafting spotřebuje suroviny a výsledek přepočítá; výstup pece je
+        // hotová věc, takže se jen vyprázdní.
+        if(craftingGrid != null)
+        {
+            Recipes.consume(craftingGrid);
+            refreshResult();
+        }
+        else
+        {
+            hit.grid().container().set(hit.index(), ItemStack.EMPTY);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -784,6 +853,7 @@ public class ContainerScreen {
         }
 
         drawScrollbar(shapes, screenWidth, screenHeight, scale);
+        drawFurnaceGauges(shapes, screenWidth, screenHeight, scale);
 
         shapes.end();
 
@@ -897,6 +967,62 @@ public class ContainerScreen {
         }
 
         icons.end();
+    }
+
+    /** Šipka postupu (vpravo od suroviny) a plamínek (mezi surovinou a palivem). */
+    static final int ARROW_X = 80, ARROW_Y = 35, ARROW_W = 22, ARROW_H = 16;
+    static final int FLAME_X = 57, FLAME_Y = 37, FLAME_SIZE = 14;
+
+    private static final float[] GAUGE_BACK = {0.55f, 0.55f, 0.55f, 1f};
+    private static final float[] ARROW_FILL = {1f, 1f, 1f, 1f};
+    private static final float[] FLAME_FILL = {1f, 0.55f, 0.1f, 1f};
+
+    /**
+     * Ukazatele pece. Šipka se plní zleva podle postupu tavení, plamínek
+     * odshora ubývá podle zbývajícího ohně - jako v Minecraftu, jen z obdélníků.
+     */
+    private void drawFurnaceGauges(Renderer2D shapes, int screenWidth, int screenHeight, int scale)
+    {
+        if(furnace == null)
+        {
+            return;
+        }
+
+        float left = panelLeft(screenWidth, scale, panelWidth);
+        float bottom = panelBottom(screenHeight, scale, panelHeight);
+
+        // Šipka: tělo a hrot ze dvou obdélníků, nejdřív šedá, pak bílá podle postupu.
+        float ax = left + ARROW_X * scale;
+        float ay = bottom + (panelHeight - ARROW_Y - ARROW_H) * scale;
+        float bodyH = 6 * scale, bodyY = ay + 5 * scale;
+        float headW = 7 * scale, bodyW = (ARROW_W - 7) * scale;
+
+        shapes.fillRect(ax, bodyY, bodyW, bodyH, GAUGE_BACK);
+        shapes.fillRect(ax + bodyW, ay + 2 * scale, headW, (ARROW_H - 4) * scale, GAUGE_BACK);
+
+        float filled = furnace.progress() * ARROW_W * scale;
+
+        if(filled > 0f)
+        {
+            shapes.fillRect(ax, bodyY, Math.min(filled, bodyW), bodyH, ARROW_FILL);
+
+            if(filled > bodyW)
+            {
+                shapes.fillRect(ax + bodyW, ay + 2 * scale, filled - bodyW, (ARROW_H - 4) * scale, ARROW_FILL);
+            }
+        }
+
+        // Plamínek: šedý čtverec, zdola oranžový podle zbývajícího ohně.
+        float fx = left + FLAME_X * scale;
+        float fy = bottom + (panelHeight - FLAME_Y - FLAME_SIZE) * scale;
+        float size = FLAME_SIZE * scale;
+
+        shapes.fillRect(fx + 3 * scale, fy, size - 6 * scale, size, GAUGE_BACK);
+
+        if(furnace.isBurning())
+        {
+            shapes.fillRect(fx + 3 * scale, fy, size - 6 * scale, Math.max(scale, size * furnace.flame()), FLAME_FILL);
+        }
     }
 
     /** Pruhy výdrže opotřebených nástrojů ve slotech - nad ikonami, pod počty. */
@@ -1029,6 +1155,22 @@ public class ContainerScreen {
                 .add(crafting, 0, 3, 3, 30, 17)
                 .addOutput(result, 124, 35)
                 .withCrafting(crafting, 3, 3);
+    }
+
+    /**
+     * Pec: surovina nahoře, palivo pod ní, mezi nimi plamínek, vpravo šipka
+     * a výstup - rozvržení Minecraftu. Sloty jsou přímo sloty pece, takže co
+     * se do nich položí, taví se dál i po zavření obrazovky.
+     */
+    public static ContainerScreen furnace(Container inventory, FurnaceState state)
+    {
+        return new ContainerScreen("Furnace")
+                .add(inventory, Inventory.HOTBAR_SIZE, 9, 3, 8, 84)
+                .add(inventory, 0, 9, 1, 8, 142)
+                .add(state.slots, FurnaceState.INPUT, 1, 1, 56, 17)
+                .add(state.slots, FurnaceState.FUEL, 1, 1, 56, 53)
+                .addOutput(state.slots, FurnaceState.OUTPUT, 116, 35)
+                .withFurnace(state);
     }
 
     // ------------------------------------------------------------------

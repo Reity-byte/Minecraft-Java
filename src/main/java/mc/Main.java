@@ -777,6 +777,14 @@ public class Main {
                     return;
                 }
 
+                // Pec otevře svoje sloty. create(): pec bez stavu (třeba ze
+                // souboru, kde se stav nezapsal) dostane prázdný.
+                if (World.isFurnace(world.getBlock(hit.x(), hit.y(), hit.z()))) {
+                    screen = ContainerScreen.furnace(inventory, furnaces.create(hit.x(), hit.y(), hit.z()));
+                    setState(GameState.CONTAINER);
+                    return;
+                }
+
                 // Pokládá se do buňky PŘED zasaženou stěnou, ne do zasaženého
                 // bloku - proto potřebuje raycast vracet normálu.
                 int px = hit.placeX();

@@ -17,6 +17,7 @@ public class FurnaceTest {
         blocks();
         smelting();
         storage();
+        screen();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -134,6 +135,89 @@ public class FurnaceTest {
                 && SmeltBook.fromJson(book.toJson()).size() == 1, "");
         SmeltBook.activate(SmeltBook.empty());
         check("bez knihy se pisek netavi", Smelting.resultOf(ItemStack.of(World.SAND, 1)).isEmpty(), "");
+    }
+
+    static final int W = 1024, H = 768;
+
+    /** Stred slotu na GUI pozici (levy horni roh slotu v panelu) v souradnicich GLFW. */
+    static double[] at(int guiX, int guiY) {
+        int scale = Gui.scale(W, H);
+        int left = ContainerScreen.panelLeft(W, scale);
+        int bottom = ContainerScreen.panelBottom(H, scale);
+        double x = left + (guiX + 9) * scale;
+        double fromBottom = bottom + (ContainerScreen.PANEL_HEIGHT - guiY - ContainerScreen.SLOT_PITCH + 9) * scale;
+        return new double[]{x, H - fromBottom};
+    }
+
+    static void shiftClick(ContainerScreen s, Inventory inv, int guiX, int guiY) {
+        double[] p = at(guiX, guiY);
+        s.press(p[0], p[1], W, H, true, true, inv);
+        s.release(p[0], p[1], W, H, true, inv);
+    }
+
+    static void click(ContainerScreen s, Inventory inv, int guiX, int guiY) {
+        double[] p = at(guiX, guiY);
+        s.click(p[0], p[1], W, H, true, inv);
+    }
+
+    static void screen() {
+        Inventory inv = new Inventory();
+        inv.set(0, ItemStack.of(World.IRON_ORE, 2));
+        inv.set(1, ItemStack.of(ItemRegistry.COAL, 3));
+        inv.set(2, ItemStack.of(World.STONE, 5));
+        FurnaceState f = new FurnaceState();
+        ContainerScreen s = ContainerScreen.furnace(inv, f);
+
+        // Hotbar: guiY 142, sloty po 18 od guiX 8.
+        shiftClick(s, inv, 8, 142);
+        shiftClick(s, inv, 26, 142);
+        check("shift-klik: ruda do suroviny, uhli do paliva",
+                f.slots.get(FurnaceState.INPUT).equals(ItemStack.of(World.IRON_ORE, 2))
+                        && f.slots.get(FurnaceState.FUEL).equals(ItemStack.of(ItemRegistry.COAL, 3))
+                        && inv.get(0).isEmpty() && inv.get(1).isEmpty(), f.slots.get(FurnaceState.INPUT) + "");
+        shiftClick(s, inv, 44, 142);
+        check("kamen do pece nepatri - presune se jako obvykle (do batohu)",
+                inv.get(2).isEmpty() && inv.countOf(World.STONE) == 5 && f.slots.get(FurnaceState.INPUT).id() == World.IRON_ORE, "");
+
+        run(f, 10.1f);
+        click(s, inv, 116, 35);
+        check("klik na vystup vezme ingot do ruky a vystup vyprazdni",
+                s.held().equals(ItemStack.of(ItemRegistry.IRON_INGOT, 1)) && f.slots.get(FurnaceState.OUTPUT).isEmpty()
+                        && f.slots.get(FurnaceState.INPUT).count() == 1, s.held() + "");
+
+        click(s, inv, 116, 35);
+        check("do vystupu se nic polozit neda", s.held().count() == 1 && f.slots.get(FurnaceState.OUTPUT).isEmpty(), "");
+
+        run(f, 10.1f);
+        click(s, inv, 116, 35);
+        check("dalsi ingot se prida k tomu v ruce", s.held().count() == 2, s.held() + "");
+
+        // Shift s necim v ruce se ignoruje (Minecraft) - nejdriv ingoty polozit do hotbaru.
+        click(s, inv, 8 + 4 * 18, 142);
+        shiftClick(s, inv, 56, 53);
+        check("shift-klik na palivo ho vrati do inventare",
+                f.slots.get(FurnaceState.FUEL).isEmpty() && inv.countOf(ItemRegistry.COAL) == 2
+                        && inv.get(4).equals(ItemStack.of(ItemRegistry.IRON_INGOT, 2)), inv.countOf(ItemRegistry.COAL) + "");
+
+        click(s, inv, 56, 17);   // vezme zbylou rudu do ruky
+        ItemStack left = s.returnItems(inv);
+        check("zavreni: kurzor zpatky do inventare, pec si nechava sve sloty",
+                left.isEmpty() && inv.countOf(World.IRON_ORE) == 0 && f.slots.get(FurnaceState.INPUT).isEmpty()
+                        && s.held().isEmpty(), inv.countOf(World.IRON_ORE) + "");
+        check("obrazovka pece se jmenuje Furnace", s.title().equals("Furnace"), "");
+
+        // Crafting vystup (index 0 + spotreba) funguje dal - zmena takeResult ho nerozbila.
+        Container grid = new Container(4), result = new Container(1);
+        Inventory inv2 = new Inventory();
+        ContainerScreen craft = ContainerScreen.playerInventory(inv2, grid, result);
+        grid.set(0, ItemStack.of(World.LOG, 1));
+        craft.refreshResult();
+        double[] out = new double[]{0, 0};
+        int scale = Gui.scale(W, H);
+        out[0] = ContainerScreen.panelLeft(W, scale) + (154 + 9) * scale;
+        out[1] = H - (ContainerScreen.panelBottom(H, scale) + (ContainerScreen.PANEL_HEIGHT - 28 - 18 + 9) * scale);
+        craft.click(out[0], out[1], W, H, true, inv2);
+        check("crafting vystup dal spotrebuje suroviny", craft.held().id() == World.PLANKS && grid.get(0).isEmpty(), craft.held() + "");
     }
 
     static void blocks() {
