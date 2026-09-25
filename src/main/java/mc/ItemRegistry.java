@@ -164,11 +164,17 @@ public final class ItemRegistry {
     /** Má už nějaký předmět (i vestavěný) tohle jméno? Bez ohledu na velikost písmen. */
     public boolean hasName(String name)
     {
+        return hasName(name, -1);
+    }
+
+    /** Totéž, ale předmět exceptId se nepočítá - úprava si smí nechat své jméno. */
+    public boolean hasName(String name, int exceptId)
+    {
         String wanted = name.trim().toLowerCase(Locale.ROOT);
 
         for(ItemDef def : items())
         {
-            if(def.name().toLowerCase(Locale.ROOT).equals(wanted))
+            if(def.id() != exceptId && def.name().toLowerCase(Locale.ROOT).equals(wanted))
             {
                 return true;
             }

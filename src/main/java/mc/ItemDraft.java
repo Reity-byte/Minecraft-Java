@@ -45,9 +45,71 @@ final class ItemDraft {
     int speedStep = DEFAULT_SPEED;
     int durabilityStep = 0;
 
+    /** Id upravovaného předmětu, nebo -1 u nového. */
+    final int editing;
+
     ItemDraft(int startTile)
     {
         tile = startTile;
+        editing = -1;
+    }
+
+    /**
+     * Úprava existujícího předmětu z labu. Hodnoty se přichytí k nejbližšímu
+     * stupni (ručně psaný items.json může mít třeba hromádku 20) - uložení
+     * pak zapíše ten stupeň.
+     */
+    ItemDraft(ItemDef def)
+    {
+        editing = def.id();
+        name = def.name();
+        tile = def.tile();
+        tool = def.tool();
+        stackStep = nearest(STACK_STEPS, def.maxStack());
+        speedStep = nearest(SPEED_STEPS, def.toolSpeed());
+        durabilityStep = nearest(DURABILITY_STEPS, def.durability());
+
+        // Ručně psaný soubor může mít výdrž s hromádkou přes 1 - uložit by to
+        // nešlo (validate), takže se hned srovná jako v nextDurability().
+        if(durability() > 0)
+        {
+            stackStep = 0;
+        }
+    }
+
+    boolean isEdit()
+    {
+        return editing >= 0;
+    }
+
+    private static int nearest(int[] steps, int value)
+    {
+        int best = 0;
+
+        for(int i = 1; i < steps.length; i++)
+        {
+            if(Math.abs(steps[i] - value) < Math.abs(steps[best] - value))
+            {
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
+    private static int nearest(float[] steps, float value)
+    {
+        int best = 0;
+
+        for(int i = 1; i < steps.length; i++)
+        {
+            if(Math.abs(steps[i] - value) < Math.abs(steps[best] - value))
+            {
+                best = i;
+            }
+        }
+
+        return best;
     }
 
     int stack()
@@ -141,17 +203,20 @@ final class ItemDraft {
         return key.substring(0, 1).toUpperCase(Locale.ROOT) + key.substring(1);
     }
 
-    /** Předmět podle návrhu s id, které by v registru dostal. Registr nemění. */
+    /**
+     * Předmět podle návrhu: u nového s id, které by v registru dostal,
+     * u úpravy se svým id. Registr nemění.
+     */
     ItemDef toDef(ItemRegistry registry)
     {
-        return registry.define(name, tile).withStack(stack()).withTool(tool, speed())
-                .withDurability(durability());
+        ItemDef base = isEdit() ? ItemDef.plain(editing, name.trim(), tile) : registry.define(name, tile);
+        return base.withStack(stack()).withTool(tool, speed()).withDurability(durability());
     }
 
     /** Proč předmět nejde založit (anglicky, pro stavový řádek), nebo null. */
     String problem(ItemRegistry registry)
     {
-        if(registry.isFull())
+        if(!isEdit() && registry.isFull())
         {
             return "No free item id - the lab has used all "
                     + (ItemRegistry.LAST_ID - ItemRegistry.FIRST_ID + 1);
@@ -164,7 +229,7 @@ final class ItemDraft {
             return invalid;
         }
 
-        if(registry.hasName(name))
+        if(registry.hasName(name, editing))
         {
             return "An item named " + name.trim() + " already exists";
         }

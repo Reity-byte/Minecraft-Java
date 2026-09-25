@@ -492,6 +492,25 @@ public class ItemTest {
         d.nextTool(); d.nextTool();
         check("zpatky na obycejny predmet: bez vydrze a 64", d.tool == ItemDef.Tool.NONE && d.durability() == 0 && d.stack() == 64, "");
 
+        // Uprava existujiciho predmetu.
+        ItemDef odd = new ItemDef(ItemRegistry.FIRST_ID + 5, "Odd", 30, 20, ItemDef.Tool.SHOVEL, 5f, 140);
+        ItemRegistry withOdd = r.with(odd);
+        ItemDraft e = new ItemDraft(odd);
+        check("uprava: navrh z predmetu, hodnoty prichycene ke stupnum",
+                e.isEdit() && e.editing == odd.id() && e.name.equals("Odd") && e.tile == 30
+                        && e.tool == ItemDef.Tool.SHOVEL && e.speed() == 4f && e.durability() == 131,
+                e.stack() + " " + e.speed() + " " + e.durability());
+        check("vydrz s hromadkou 20 z rucniho souboru se srovna na 1", e.stack() == 1, "" + e.stack());
+        ItemDraft plain = new ItemDraft(odd.withDurability(0));
+        check("bez vydrze se hromadka 20 prichyti k 16", plain.stack() == 16, "" + plain.stack());
+        check("uprava si smi nechat sve jmeno", e.problem(withOdd) == null, "" + e.problem(withOdd));
+        e.name = "Pick";
+        check("ale ne vzit jmeno jineho predmetu", e.problem(withOdd) != null, "");
+        e.name = "Odd";
+        ItemDef saved = e.toDef(withOdd);
+        check("toDef u upravy nese puvodni id (ne nextId)", saved.id() == odd.id() && withOdd.nextId() == odd.id() + 1, "");
+        check("hasName s vyjimkou", withOdd.hasName("odd") && !withOdd.hasName("odd", odd.id()), "");
+
         ItemRegistry.activate(ItemRegistry.empty());
     }
 

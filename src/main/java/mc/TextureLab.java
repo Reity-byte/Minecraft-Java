@@ -353,7 +353,8 @@ public class TextureLab {
         public String leaveWarning()
         {
             return draft != null ? "The new block is not created yet"
-                    : itemDraft != null ? "The new item is not created yet" : null;
+                    : itemDraft != null ? (itemDraft.isEdit() ? "The item edit is not saved yet"
+                    : "The new item is not created yet") : null;
         }
 
         /**
@@ -1275,6 +1276,66 @@ public class TextureLab {
         say("New item: type a name, paint the tile, set stack and tool, then Create");
     }
 
+    /** Předmět z labu, který má vybranou dlaždici - ten jde upravit; jinak null. */
+    private ItemDef labItemOnSelectedTile()
+    {
+        for(ItemDef def : ItemRegistry.active().labItems())
+        {
+            if(def.tile() == editor.tile())
+            {
+                return def;
+            }
+        }
+
+        return null;
+    }
+
+    /** Otevře formulář s existujícím předmětem z labu. */
+    private void editItem(ItemDef def)
+    {
+        itemDraft = new ItemDraft(def);
+        editingName = false;
+        say("Editing " + def.name() + " - change it, then Save item (or Delete item)");
+    }
+
+    /**
+     * Smaže upravovaný předmět - napoprvé jen varuje (LabGuard), smaže až
+     * druhý klik. Hromádky v uložených světech zůstanou jako neznámý předmět
+     * (šachovnice); id se znovu nepoužije, takže se nikdy nepromění v jiný.
+     * Recepty, které ho potřebují, se přestanou nabízet (RecipeBook se
+     * znovu načte a neplatné přeskočí).
+     */
+    private void deleteItem()
+    {
+        ItemDef def = ItemRegistry.active().get(itemDraft.editing);
+
+        if(def == null)
+        {
+            cancelItem();
+            return;
+        }
+
+        if(!guard.allow("delete item " + def.id(), "delete"))
+        {
+            say("Click Delete item again to delete " + def.name() + " - worlds keep it as an unknown item");
+            return;
+        }
+
+        ItemRegistry without = ItemRegistry.active().without(def.id());
+
+        if(!without.save(ItemRegistry.FILE))
+        {
+            say(SafeFiles.writeFailed(ItemRegistry.FILE) + " - item not deleted");
+            return;
+        }
+
+        ItemRegistry.activate(without);
+        RecipeBook.activate(RecipeBook.load(RecipeBook.FILE));
+        itemDraft = null;
+        editingName = false;
+        say("Deleted " + def.name() + " (id " + def.id() + " stays retired)");
+    }
+
     /** Návrhu dá čerstvou dlaždici s kopií té dosavadní. */
     private void newItemTile()
     {
@@ -1313,10 +1374,11 @@ public class TextureLab {
 
         ItemDef def = itemDraft.toDef(base);
         ItemRegistry created = base.with(def);
+        boolean edit = itemDraft.isEdit();
 
         if(!AtlasImage.save(itemEditor.pixels(), ItemTextures.FILE))
         {
-            say(SafeFiles.writeFailed(ItemTextures.FILE) + " - item not created");
+            say(SafeFiles.writeFailed(ItemTextures.FILE) + (edit ? " - item not saved" : " - item not created"));
             return;
         }
 
@@ -1325,23 +1387,31 @@ public class TextureLab {
 
         if(!created.save(ItemRegistry.FILE))
         {
-            say(SafeFiles.writeFailed(ItemRegistry.FILE) + " - item not created");
+            say(SafeFiles.writeFailed(ItemRegistry.FILE) + (edit ? " - item not saved" : " - item not created"));
             return;
         }
 
         ItemRegistry.activate(created);
         itemDraft = null;
         editingName = false;
-        createdItems.add(def.id());
 
+        // Upravený předmět hráč nedostává znovu - už ho má (nebo si ho vyrobí).
+        if(edit)
+        {
+            RecipeBook.activate(RecipeBook.load(RecipeBook.FILE));
+            say("Saved " + def.name() + " (id " + def.id() + ")");
+            return;
+        }
+
+        createdItems.add(def.id());
         say("Created " + def.name() + " (id " + def.id() + ") - " + def.maxStack() + " go to your inventory");
     }
 
     private void cancelItem()
     {
+        say(itemDraft != null && itemDraft.isEdit() ? "Edit cancelled" : "New item cancelled");
         itemDraft = null;
         editingName = false;
-        say("New item cancelled");
     }
 
     private boolean pressItemForm(TextureLabLayout layout, double mouseX, double mouseY)
@@ -1379,7 +1449,15 @@ public class TextureLab {
         }
         else if(layout.hit(TextureLabLayout.NEW_TILE, mouseX, mouseY))
         {
-            newItemTile();
+            // U úpravy je na místě "New tile" smazání - obrázek se maluje rovnou.
+            if(itemDraft.isEdit())
+            {
+                deleteItem();
+            }
+            else
+            {
+                newItemTile();
+            }
         }
         else if(layout.hit(TextureLabLayout.CREATE, mouseX, mouseY))
         {
@@ -1557,7 +1635,16 @@ public class TextureLab {
         {
             if(itemsMode())
             {
-                startItem();
+                ItemDef existing = labItemOnSelectedTile();
+
+                if(existing != null)
+                {
+                    editItem(existing);
+                }
+                else
+                {
+                    startItem();
+                }
             }
             else
             {
@@ -2351,9 +2438,10 @@ public class TextureLab {
         }
         else if(itemsMode())
         {
-            label(layout, 8, TextureLabLayout.TITLE_Y, fit("Lab   new item, id "
-                    + ItemRegistry.active().nextId() + "   items: " + source + unsaved,
-                    TextureLabLayout.CONTENT_WIDTH - 16, scale));
+            label(layout, 8, TextureLabLayout.TITLE_Y, fit((itemDraft.isEdit()
+                    ? "Lab   edit item, id " + itemDraft.editing
+                    : "Lab   new item, id " + ItemRegistry.active().nextId())
+                    + "   items: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
             drawItemFormTexts(layout);
         }
         else if(draft == null)
@@ -2462,7 +2550,7 @@ public class TextureLab {
         centered(layout, TextureLabLayout.SAVE, "Save");
         centered(layout, TextureLabLayout.REVERT, "Revert");
         centered(layout, TextureLabLayout.IMPORT, "Import PNG");
-        centered(layout, TextureLabLayout.NEW_BLOCK, "New item");
+        centered(layout, TextureLabLayout.NEW_BLOCK, labItemOnSelectedTile() != null ? "Edit item" : "New item");
         centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / " + Keybinds.activeKeyName(Keybinds.Action.LAB) + ")");
     }
 
@@ -2492,8 +2580,8 @@ public class TextureLab {
         TextureLabLayout.Rect p = TextureLabLayout.PREVIEW;
         label(layout, p.x() + 3, p.y() + 3, itemDraft.name.isBlank() ? "New item" : itemDraft.name.trim());
 
-        centered(layout, TextureLabLayout.NEW_TILE, "New tile");
-        centered(layout, TextureLabLayout.CREATE, "Create item");
+        centered(layout, TextureLabLayout.NEW_TILE, itemDraft.isEdit() ? "Delete item" : "New tile");
+        centered(layout, TextureLabLayout.CREATE, itemDraft.isEdit() ? "Save item" : "Create item");
         centered(layout, TextureLabLayout.CANCEL, "Cancel  (Esc)");
     }
 
