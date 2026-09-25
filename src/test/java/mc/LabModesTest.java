@@ -15,8 +15,13 @@ import static org.lwjgl.glfw.GLFW.*;
  * mód zapamatovat sám (lastMessage) a hub má rozhodnutí jako statickou
  * funkci TextureLab.closesLab(), takže jde projít se skutečnými módy.
  *
+ * Dál tu je sjednocení labů: výchozí metody LabMode (mód přidaný jedním
+ * řádkem), rozepsaná práce přežije přepnutí módu, unsaved() proti tomu,
+ * co platí, pojistka zavření (LabGuard) a vnořené fáze měření.
+ *
  * ⚠️ Co tu NENÍ: PixelMode (Blocks a Skin) je vnitřní třída labu a bez GL
- * nevznikne. Jeho klávesy (Ctrl+Z, F3, hex) testuje jen ruční zkouška.
+ * nevznikne. Jeho klávesy (Ctrl+Z, hex) a přepínání měření hubem (F3)
+ * testuje jen ruční zkouška.
  * ---------------------------------------------------------------------------
  */
 public class LabModesTest {
@@ -31,15 +36,21 @@ public class LabModesTest {
     public static void main(String[] args) {
         Keybinds before = Keybinds.active();
         BiomeTuning tuningBefore = BiomeTuning.active();
+        RecipeBook recipesBefore = RecipeBook.active();
 
         try {
             Keybinds.activate(Keybinds.defaults());
             convention();
             keybindWaiting();
             tunerSteps();
+            modeDefaults();
+            draftsSurvive();
+            guard();
+            profilerNesting();
         } finally {
             Keybinds.activate(before);
             BiomeTuning.activate(tuningBefore);
+            RecipeBook.activate(recipesBefore);
         }
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
@@ -57,7 +68,7 @@ public class LabModesTest {
         RecipeLab recipes = new RecipeLab(null, null, null);
         recipes.onEnter();
         KeybindLab keys = new KeybindLab(null, null, null);
-        keys.onEnter();
+        keys.edit(Keybinds.active());
         BiomeTunerLab biomes = new BiomeTunerLab(null, null, null);
         biomes.edit(BiomeTuning.defaults());
 
@@ -82,7 +93,7 @@ public class LabModesTest {
         keys.arm(Keybinds.Action.FULLSCREEN);
         check("Keys pri cekani: F11 je CONSUMED (jde ji priradit, fullscreen se neprepne)",
                 TextureLab.route(keys, GLFW_KEY_F11, 0) == TextureLab.KeyResult.CONSUMED, "");
-        keys.onEnter();
+        keys.edit(Keybinds.active());
 
         // Klavesa labu zavira i po prebindovani - hub se pta Keybinds, ne GLFW konstanty.
         Keybinds moved = Keybinds.defaults().with(Keybinds.Action.LAB, GLFW_KEY_F7);
@@ -100,7 +111,7 @@ public class LabModesTest {
         System.out.println("\n-- Keybind Lab: cekani na klavesu --");
 
         KeybindLab keys = new KeybindLab(null, null, null);
-        keys.onEnter();
+        keys.edit(Keybinds.active());
         int labKey = Keybinds.defaults().key(Keybinds.Action.LAB);
 
         check("bez cekani si mod klavesy nebere", !keys.key(GLFW_KEY_J, 0), "");
@@ -117,7 +128,7 @@ public class LabModesTest {
         check("Save kolizi odmitne", keys.problem() != null, "");
 
         // Esc pri cekani ceka zrusi, lab nezavre a nic neprepise.
-        keys.onEnter();
+        keys.edit(Keybinds.active());
         int jumpBefore = keys.draft().key(Keybinds.Action.JUMP);
         keys.arm(Keybinds.Action.JUMP);
         check("Esc pri cekani lab nezavre", !TextureLab.closesLab(keys, GLFW_KEY_ESCAPE, 0), "");
@@ -131,7 +142,7 @@ public class LabModesTest {
         check("ale neprirazuje", keys.draft().key(Keybinds.Action.JUMP) == jumpBefore, "");
 
         // Prohozeni dvou klaves: mezistav je kolize, konec uz ne.
-        keys.onEnter();
+        keys.edit(Keybinds.active());
         int w = keys.draft().key(Keybinds.Action.FORWARD);
         int s = keys.draft().key(Keybinds.Action.BACK);
         keys.arm(Keybinds.Action.FORWARD);
@@ -189,6 +200,184 @@ public class LabModesTest {
 
         check("jiny biom se tim nezmenil",
                 lab.draft().tune(otherThan(biome)).equals(BiomeTuning.defaults().tune(otherThan(biome))), "");
+    }
+
+    // ==================================================================
+    // LabMode: výchozí odpovědi = "nic", aby šel mód přidat jedním řádkem
+    // ==================================================================
+
+    static void modeDefaults() {
+        System.out.println("\n-- LabMode: vychozi odpovedi modu, ktery nic navic neumi --");
+
+        // Nejmenší možný mód - přesně to, co by vzniklo "třídou a jedním řádkem".
+        LabMode bare = new LabMode() {
+            public String title() { return "Bare"; }
+            public String hint() { return "Bare: nothing here"; }
+            public void drawIcon(Renderer2D s, float l, float b, float size) {}
+            public void drawShapes(TextureLabLayout l, int w, int h, double x, double y) {}
+            public void drawText(TextureLabLayout l, int w, int h, double x, double y) {}
+        };
+
+        // Dřív hub nápovědu, kolečko i úklid rozhodoval podle identity módu
+        // a šestý mód by ukazoval nápovědu Biomes.
+        check("napoveda bez vlastni verze = hint()", bare.help(null, 0, 0).equals(bare.hint()),
+                bare.help(null, 0, 0));
+        check("pretazeny soubor neumi (hub rekne kde to jde)",
+                !bare.fileDropped(java.nio.file.Path.of("x.png")), "");
+        check("nema neulozenou praci", !bare.unsaved(), "");
+        check("odchod nic nezahodi", bare.leaveWarning() == null, "");
+        bare.scroll(1);
+        bare.delete();
+        check("kolecko a uklid projdou bez chyby", true, "");
+        check("zadny mod = nic neulozeneho", LabGuard.unsavedModes(java.util.List.of(bare)) == null, "");
+    }
+
+    // ==================================================================
+    // rozepsaná práce přežije přepnutí módu a unsaved() ji pozná
+    // ==================================================================
+
+    static void draftsSurvive() {
+        System.out.println("\n-- rozepsana prace: prepnuti modu, (unsaved) --");
+
+        // --- Keys ---
+        Keybinds.activate(Keybinds.defaults());
+        KeybindLab keys = new KeybindLab(null, null, null);
+        check("Keys: cerstvy lab nema nic neulozeneho", !keys.unsaved(), "");
+
+        keys.arm(Keybinds.Action.JUMP);
+        keys.key(GLFW_KEY_J, 0);
+        check("Keys: prebindovani = neulozene", keys.unsaved(), "");
+
+        // Přesně scénář z auditu (LAB-5): Keys -> Blocks -> Keys.
+        keys.onLeave();
+        keys.onEnter();
+        check("Keys: odskok do jineho modu navrh NEZAHODI",
+                keys.draft().key(Keybinds.Action.JUMP) == GLFW_KEY_J,
+                Keybinds.keyName(keys.draft().key(Keybinds.Action.JUMP)));
+        check("Keys: a porad je neulozeny", keys.unsaved(), "");
+
+        // Save = zapsat a aktivovat; tady jen aktivace (test nesmí psát do projektu).
+        Keybinds.activate(keys.draft());
+        check("Keys: po aktivaci uz neulozeny neni", !keys.unsaved(), "");
+
+        // Titulek dřív říkal "built-in" podle NÁVRHU: po Defaults ukázal
+        // built-in, i když ve hře platily vlastní klávesy. Teď je to rozdíl proti aktivním.
+        keys.reset();
+        check("Keys: Defaults pri vlastnich aktivnich klavesach = neulozene", keys.unsaved(), "");
+        Keybinds.activate(Keybinds.defaults());
+
+        // --- Biomes ---
+        BiomeTuning.activate(BiomeTuning.defaults());
+        BiomeTunerLab biomes = new BiomeTunerLab(null, null, null);
+        biomes.edit(BiomeTuning.active());
+        check("Biomes: bez zmeny nic neulozeneho", !biomes.unsaved(), "");
+        biomes.step(BiomeTunerLab.Row.BASE, +1);
+        check("Biomes: krok = neulozene", biomes.unsaved(), "");
+        biomes.onLeave();
+        check("Biomes: odchod z modu navrh drzi", biomes.unsaved(), "");
+        BiomeTuning.activate(biomes.draft());
+        check("Biomes: po aktivaci uz neulozeny neni", !biomes.unsaved(), "");
+        BiomeTuning.activate(BiomeTuning.defaults());
+
+        // --- Recipes ---
+        RecipeBook.activate(RecipeBook.empty());
+        RecipeLab recipes = new RecipeLab(null, null, null);
+        recipes.onEnter();
+        check("Recipes: prazdna mrizka nic neulozeneho", !recipes.unsaved(), "");
+        recipes.grid().set(0, ItemStack.of(World.STONE, 1));
+        recipes.grid().set(4, ItemStack.of(World.DIRT, 1));
+        check("Recipes: recept v mrizce = neulozeny", recipes.unsaved(), "");
+        recipes.onLeave();
+        recipes.onEnter();
+        check("Recipes: prepnuti mrizku necha", !recipes.grid().isEmpty(), "");
+        RecipeBook.activate(RecipeBook.active().with(recipes.draft()));
+        check("Recipes: vzor uz v knize je = nic neulozeneho", !recipes.unsaved(), "");
+
+        // Hub: seznam módů s neuloženou prací, v pořadí panelu.
+        keys.edit(Keybinds.defaults().with(Keybinds.Action.JUMP, GLFW_KEY_J));
+        biomes.edit(BiomeTuning.defaults());
+        biomes.step(BiomeTunerLab.Row.BASE, -1);
+        String unsaved = LabGuard.unsavedModes(java.util.List.of(recipes, keys, biomes));
+        check("hub vyjmenuje mody s neulozenou praci v poradi panelu",
+                (keys.title() + ", " + biomes.title()).equals(unsaved), "" + unsaved);
+
+        RecipeBook.activate(RecipeBook.empty());
+    }
+
+    // ==================================================================
+    // LabGuard: napoprvé varuje, podruhé pustí
+    // ==================================================================
+
+    static void guard() {
+        System.out.println("\n-- LabGuard: zavreni a prepnuti s neulozenou praci --");
+
+        LabGuard g = new LabGuard();
+        check("nic neulozeneho -> zavre hned", g.allow("close", null), "");
+        check("neulozene -> napoprve ne", !g.allow("close", "Keys"), "");
+        check("hned podruhe ano", g.allow("close", "Keys"), "");
+        check("a potreti zase varuje (potvrzeni se spotrebovalo)", !g.allow("close", "Keys"), "");
+
+        g = new LabGuard();
+        g.allow("close", "Keys");
+        check("varovani pred zavrenim nepusti prepnuti modu", !g.allow("mode 2", "block"), "");
+        check("a prepnuti pak potvrdi jen tentyz mod", !g.allow("mode 3", "block"), "");
+        check("tentyz mod podruhe ano", g.allow("mode 3", "block"), "");
+
+        g = new LabGuard();
+        g.allow("close", "Keys");
+        g.update(LabGuard.CONFIRM_SECONDS + 0.1f);
+        check("po vyprseni se znovu varuje", !g.allow("close", "Keys"), "");
+
+        g = new LabGuard();
+        g.allow("close", "Keys");
+        g.allow("close", null);
+        check("mezitim ulozeno (nic k zahozeni) -> dalsi zmena se varuje znovu",
+                !g.allow("close", "Keys"), "");
+    }
+
+    // ==================================================================
+    // LabProfiler: vnořené fáze se nepočítají dvakrát
+    // ==================================================================
+
+    static void profilerNesting() {
+        System.out.println("\n-- LabProfiler: vnorene faze --");
+
+        // Hub měří obsah módu jako SHAPES a Blocks/Skin uvnitř jemněji.
+        // Vnořená fáze musí vnější pozastavit, jinak by se čas započítal dvakrát.
+        LabProfiler p = new LabProfiler();
+        p.toggle();
+
+        for (int frame = 0; frame < LabProfiler.WINDOW; frame++) {
+            p.beginFrame();
+            p.start(LabProfiler.SHAPES);
+            p.start(LabProfiler.UPLOAD);
+            busy(200_000);                 // 0,2 ms jen ve vnořené fázi
+            p.stop(LabProfiler.UPLOAD);
+            p.stop(LabProfiler.SHAPES);
+            p.endFrame();
+        }
+
+        double shapes = p.millis(LabProfiler.SHAPES);
+        double upload = p.millis(LabProfiler.UPLOAD);
+        check("vnorena faze ma svuj cas", upload >= 0.19, String.format("upload %.3f ms", upload));
+        check("vnejsi faze ho nezapocita znovu", shapes < upload / 2,
+                String.format("shapes %.3f ms, upload %.3f ms", shapes, upload));
+
+        // Nespárovaný stop (jiná fáze, než která běží) nic nerozbije.
+        p.beginFrame();
+        p.start(LabProfiler.TEXT);
+        p.stop(LabProfiler.IMAGES);
+        p.stop(LabProfiler.TEXT);
+        p.endFrame();
+        check("nesparovany stop se ignoruje", true, "");
+    }
+
+    /** Aktivní čekání - sleep má na Windows krok ~1 ms a test by trval zbytečně dlouho. */
+    static void busy(long nanos) {
+        long end = System.nanoTime() + nanos;
+        while (System.nanoTime() < end) {
+            Thread.onSpinWait();
+        }
     }
 
     static Biome otherThan(Biome biome) {

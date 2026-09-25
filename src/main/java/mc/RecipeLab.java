@@ -139,7 +139,18 @@ public final class RecipeLab implements LabMode {
     {
         // Rozepsaný recept se schválně NEMAŽE: přepnout se na chvíli do
         // Blocks a podívat se, jak surovina vypadá, je normální postup.
-        // Zahodí ho až tlačítko Clear.
+        // Zahodí ho až tlačítko Clear (nebo zavření labu, viz unsaved()).
+    }
+
+    /**
+     * Je v mřížce recept, který kniha nezná? Po Save mřížka zůstává, ale
+     * její vzor už v knize je, takže zavření labu nic nezahodí.
+     */
+    @Override
+    public boolean unsaved()
+    {
+        Recipes.Recipe draft = draft();
+        return draft != null && !RecipeBook.active().containsPattern(draft);
     }
 
     /**
@@ -350,7 +361,7 @@ public final class RecipeLab implements LabMode {
 
         if(!updated.save(RecipeBook.FILE))
         {
-            say("Could not write " + RecipeBook.FILE.toString().replace('\\', '/'));
+            say(SafeFiles.writeFailed(RecipeBook.FILE));
             return;
         }
 
@@ -373,7 +384,8 @@ public final class RecipeLab implements LabMode {
     }
 
     /** Kolečko roluje přehledem bloků, když se nevejdou. */
-    void scroll(double yoffset)
+    @Override
+    public void scroll(double yoffset)
     {
         int rows = (available.size() + TextureLabLayout.PICKER_COLUMNS - 1)
                 / TextureLabLayout.PICKER_COLUMNS;
@@ -508,9 +520,10 @@ public final class RecipeLab implements LabMode {
         int scale = layout.scale();
         text.begin(screenWidth, screenHeight, scale);
 
-        String file = RecipeBook.FILE.toString().replace('\\', '/');
+        String file = SafeFiles.shown(RecipeBook.FILE);
         lab.label(layout, 8, TextureLabLayout.TITLE_Y,
-                "Lab   recipes: " + file + "   saved: " + RecipeBook.active().size());
+                "Lab   recipes: " + file + "   saved: " + RecipeBook.active().size()
+                        + (unsaved() ? "   (unsaved)" : ""));
 
         lab.centered(layout, TextureLabLayout.RECIPE_SAVE, "Save recipe");
         lab.centered(layout, TextureLabLayout.RECIPE_CLEAR, "Clear grid");
@@ -546,7 +559,8 @@ public final class RecipeLab implements LabMode {
     }
 
     /** Nápověda dole podle toho, na čem je myš. */
-    String help(TextureLabLayout layout, double mouseX, double mouseY)
+    @Override
+    public String help(TextureLabLayout layout, double mouseX, double mouseY)
     {
         if(layout.recipeCellAt(mouseX, mouseY) >= 0)
         {
@@ -565,7 +579,7 @@ public final class RecipeLab implements LabMode {
 
         if(layout.hit(TextureLabLayout.RECIPE_SAVE, mouseX, mouseY))
         {
-            return "Writes " + RecipeBook.FILE.toString().replace('\\', '/')
+            return "Writes " + SafeFiles.shown(RecipeBook.FILE)
                     + " and the recipe works right away, no restart";
         }
 

@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **1914 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2176 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -71,6 +71,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `DroppedItemTest` | Předměty na zemi: dopad, stabilní ležení, tunelování, zeď, tření, voda, **vytlačení z položeného bloku**, vyhození z ruky, **zpoždění a dosah sběru**, slévání při sběru, plný a skoro plný inventář, zánik (`LIFETIME`, zahozený sloupec), mesh relativní ke kameře a jeho světlo |
 | `WaterTest` | Zaplavení po hladinu, suché jeskyně, pravidla viditelnosti stěn (ručně spočítané), suchý spawn, plavání |
 | `MainStateTest` | Stav, který nepatří `World`, ale přežije výměnu světa: **reset inventáře, obou crafting mřížek, výsledkového slotu a vybraného slotu**, reset denní doby, meze `DayCycle.setTime` (NaN, nekonečno, mimo rozsah), čas tam a zpět přes `world.dat` a **soubor ze starší verze formátu bez času**, a celá cesta svět A → svět B → načtení A zpátky |
+| `LabModesTest` | Logika módů labu bez GL: **konvence `LabMode.key()`** (zavírá hub, ne mód; Delete v Recipes lab nezavře), čekání na klávesu v Keys (Esc zruší, klávesa labu se přiřadí), kroky čísel v Biomes, **výchozí metody `LabMode`** na nejmenším možném módu, **rozepsaná práce přežije přepnutí módu** a `unsaved()` proti tomu, co platí (i Defaults při vlastních aktivních klávesách), **`LabGuard`** (napoprvé varuje, podruhé pustí, jen tentýž úkon, vypršení) a **vnořené fáze `LabProfiler`** |
 | `RecipeLabTest` | Recepty z labu: kontrola hodnot, **ořez vzoru na nejmenší obdélník**, `recipes.json` tam a zpět (i bajtová stabilita druhého zápisu), poškozený a chybějící soubor, **přeskočení jednoho vadného receptu a záloha `.bak`**, novější `format`, **recept z labu se chová jako vestavěný** (hledá se kdekoliv v mřížce, surovina navíc ho vyřadí, vestavěný má přednost), platnost **hned bez restartu** a logika módu (co se uloží a proč se to někdy odmítne) |
 | `KeybindTest` | Přebindování kláves: **výchozí klávesy = to, co měl `Main` natvrdo** (kontrolované proti GLFW konstantám, ne proti enumu), výchozí nastavení bez kolize, jména kláves tam a zpět včetně neznámého kódu jako `#kód`, **kolize nespustí ANI JEDNU akci** (`actionFor` null, `effectiveKey` NONE, ale `key` zůstává, aby šla opravit), tři akce na jedné klávese = jeden řádek, nepřiřazené akce nejsou kolize, `keybinds.json` tam a zpět (i bajtová stabilita druhého zápisu), sedm druhů poškozeného souboru → výchozí klávesy, jedna vadná položka shodí jen sebe, ruční kolize v souboru, `.bak`, **platnost hned po Save** i po „restartu", a mezistav výměny dvou kláves |
 | `BiomeTuningTest` | Ore/Biome Tuner: **výchozí tuning dá 25 sloupců blok po bloku stejně** jako bez něj a strop terénu vyjde na dnešních 114, výchozí čísla se čtou z `Biome` a jsou už oříznutá, hodnoty mimo meze (přehozený rozsah se **prohodí**, NaN, nulová hustota), `biome_tuning.json` tam a zpět, poškozený a chybějící soubor, `.bak`, **násobky rud** (3× v horách trefí dnešní `IRON_RARITY_MOUNTAINS`, nula = ruda v biomu není — ověřeno i přes generátor), **rozsah opravdu losuje** (měří počet různých výšek kmene i poloměrů koruny přes desítky tisíc vzorků), **výška kmene není spřažená s poloměrem koruny**, jednoprvkový rozsah dá pořád tu jednu hodnotu, **determinismus** (týž seed a souřadnice, i záporné; jiný seed = jiné stromy; kmen nikdy pod minimem), natuněný terén se opravdu zvedne, nulová hustota vypne stromy, větší koruna zvětší dosah razítkování, a **náhled staví týž strom, jaký razítkuje generátor** |
@@ -192,7 +193,8 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 **Lab (F6)**
 - `TextureLab` — **hub labu**: seznam módů, boční panel, panel, stavový řádek; a k tomu
   pixelové módy (přehled, plátno, paleta, HSV, hex, tlačítka)
-- `LabMode` — rozhraní jednoho módu labu: jméno, ikona, kreslení a vstup; **přidat mód = třída + řádek v seznamu**
+- `LabMode` — rozhraní jednoho módu labu: jméno, ikona, kreslení, vstup, nápověda, kolečko, přetažený soubor, úklid a neuložená práce (vše s výchozí odpovědí „nic“); **přidat mód = třída + řádek v seznamu**
+- `LabGuard` — pojistka labu: zavření nebo přepnutí, které by zahodilo rozepsanou práci, napoprvé jen varuje; **bez GL**
 - `LabSidebar` — rozvržení a hit-testy bočního pruhu, čistá aritmetika nad POČTEM módů; **bez GL**
 - `RecipeLab` — mód Recipes: mřížka 3×3, výběr bloků, výsledek a počet, ukládání
 - `KeybindLab` — mód Keys: seznam akcí ve dvou sloupcích, čekání na novou klávesu, kolize
@@ -208,7 +210,7 @@ opravdu kreslí glyfy (a ne prázdno). Splnil jednorázový účel, v repu není
 - `BlockDraft` — rozepsaný nový blok: vlastnosti, dlaždice stěn, přidělení volné buňky; **bez GL**
 - `BlockPreview` — živá kostka: malý skutečný svět → `ChunkMesh` → světový shader, kamera obíhá
 - `SkinPreview` — živá postava: `PlayerModelMesh` → světový shader s texturou kůže, kamera obíhá
-- `LabProfiler` — čas fází vykreslení labu a draw cally, zapíná se v labu na F3
+- `LabProfiler` — čas fází vykreslení labu (fáze jdou vnořovat) a draw cally, zapíná se v labu klávesou ladicího výpisu (F3) ve všech módech
 - `ImageRenderer` — libovolný výřez textury jako obdélník (shader `UI_TEXTURED`)
 
 **Hra**
@@ -1853,7 +1855,9 @@ se právě tohle projeví jako sekání. **Proto to bylo vidět jen v labu a jen
 `glReadPixels` z obou verzí dá identický PNG. Dávkování tedy nezměnilo pořadí kreslení ani
 barvy — jen počet příkazů, kterými se to samé nakreslí.
 
-**Jak se to měří: F3 v labu.** Zapne dva řádky místo stavu a nápovědy:
+**Jak se to měří: F3 v labu** (klávesa ladicího výpisu z `Keybinds`, ve všech módech). Zapne
+dva řádky místo stavu a nápovědy — **hláška ale má přednost** před prvním z nich, jinak by
+se zapnutým měřením nebylo vidět „Could not write …“ ani „Press a key for …“:
 
 ```
 lab frame 1,04 ms   draw calls 8   (F3 hides)
@@ -1902,9 +1906,9 @@ módů a ikonu si kreslí každý mód sám.
 ```java
 modes.add(new PixelMode(Mode.BLOCKS, "Blocks", "…"));
 modes.add(new PixelMode(Mode.SKIN,   "Skin",   "…"));
-modes.add(recipeLab);
-modes.add(keybindLab);   // Keys
-modes.add(biomeLab);     // Biomes
+modes.add(new RecipeLab(this, shapes, text));
+modes.add(new KeybindLab(this, shapes, text));     // Keys
+modes.add(new BiomeTunerLab(this, shapes, text));  // Biomes
 // příští: modes.add(new SoundLab(…));
 ```
 
@@ -1944,6 +1948,44 @@ samostatné `LabMode`, takže se panel nemusí ptát, jestli jsou „vlastně je
 přebindovatelná jako všechno ostatní (viz **Keybind Lab**), takže se `TextureLab`
 ptá `Keybinds`, ne konstanty. Kolečko myši jde do aktivního módu (Recipes jím
 roluje přehledem bloků, Biomes přepíná biom); ostatní módy ho ignorují.
+
+**⚠️ HUB SE NEPTÁ NA IDENTITU MÓDU.** Kolečko, nápověda dole, přetažený soubor,
+úklid GL prostředků i neuložená práce jdou přes metody `LabMode` s výchozí
+odpovědí „nic“ (`scroll`, `help`, `fileDropped`, `delete`, `unsaved`,
+`leaveWarning`). Dřív se hub rozhodoval podle `current() == recipeLab`
+a poslední větev nápovědy byla bez podmínky — šestý mód přidaný jedním řádkem
+by ukazoval nápovědu Biomes, ignoroval kolečko a neuvolnil své GL prostředky.
+`LabModesTest` to hlídá nejmenším možným módem (jen jméno, ikona, kreslení).
+
+**Rozepsaná práce: přepnutí módu ji drží, zavření labu napoprvé varuje.**
+Dřív to měl každý mód jinak: Recipes návrh držel, Keys a Biomes ho v `onEnter()`
+tiše přepsaly aktivním nastavením (pět přebindovaných kláves zmizelo po odskoku
+do Blocks) a zavření labu zahodilo všechno kromě pixelů. Teď:
+
+- **Přepnutí módu** návrh nezahodí — módy vznikají s labem a žijí, dokud je
+  otevřený. Výjimka je **rozepsaný blok**: drží aktivní dočasný registr, a ten
+  nesmí viset v módu, kde o něm není nic vidět (Recipes by nabízel blok, který
+  neexistuje). Klik na jiný mód proto napoprvé nepřepne a řekne „The new block
+  is not created yet - click Skin again to discard it“.
+- **Zavření labu** (Esc, klávesa labu, tlačítko Close) s neuloženou prací
+  napoprvé nezavře a řekne, kde co je: „Unsaved work in Keys, Biomes - close
+  again to discard it“. Další pokus do 5 s zavře. Držený Esc (`GLFW_REPEAT`)
+  varování nepotvrdí.
+- **„(unsaved)“ v titulku** Recipes, Keys a Biomes = návrh se liší od toho, co
+  PLATÍ (`Keybinds.active()`, `BiomeTuning.active()`, vzor v `RecipeBook`), ne
+  od výchozích hodnot. „built-in“/„custom“ v titulku popisuje aktivní nastavení;
+  dřív popisovalo návrh, takže po Defaults ukázalo „built-in“, i když ve hře
+  platily vlastní klávesy.
+
+Pixely atlasu a kůže pojistka neřeší — žijí ve hře i po zavření labu (drží je
+`Main`) a mají vlastní „(unsaved)“. Zavření **celého okna** z labu pojistkou
+neprochází: návrhy Recipes, Keys a Biomes se ztratí stejně jako dřív (svět se
+uloží, viz `run()`).
+
+Pojistka je `LabGuard` bez GL: potvrzuje jen TENTÝŽ úkon (varování před
+zavřením nepustí přepnutí módu a naopak) a úkon, u kterého není co ztratit,
+potvrzení zruší. Chyby zápisu hlásí všechny laby stejně přes
+`SafeFiles.writeFailed()`: „Could not write <soubor> - see console“.
 
 **Módů je teď pět** — Blocks, Skin, Recipes, Keys, Biomes — a do pruhu se jich
 vejde osm (`LabSidebar.capacity(300)`). `LabSidebar` ani jeho test se kvůli
@@ -2479,7 +2521,7 @@ předčasné.** Vrátit se k nim, až render distance nebo počet chunků narost
 | v labu Biomes: záložky / `-` `+` / kolečko | biom / číslo generátoru / přepnutí biomu; Reroll losuje nový strom |
 | v labu Recipes: LMB / PMB / kolečko | položit vybraný blok do mřížky / vymazat buňku / rolovat přehledem bloků |
 | v labu: New block / Import PNG | nový blok z labu (Esc zruší) / načíst `textures/import.png` (atlas 128×128, kůže 64×64); PNG přetažené do okna se naimportuje hned |
-| v labu: F3 | měření vykreslení labu — čas fází a počet draw callů |
+| v labu: F3 (klávesa ladicího výpisu) | měření vykreslení labu — čas fází a počet draw callů, ve všech módech |
 | PMB na crafting table | otevře mřížku 3×3 |
 | LMB (držet) | kopat — doba podle tvrdosti bloku |
 | T | posun času o desetinu cyklu (ladění) |

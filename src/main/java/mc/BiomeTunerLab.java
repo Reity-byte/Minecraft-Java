@@ -162,7 +162,18 @@ public final class BiomeTunerLab implements LabMode {
             preview = new TreePreview();
         }
 
-        edit(BiomeTuning.active());
+        // ⚠️ Pokračuje se v ROZEPSANÉM tuningu, ne v aktivním. Dřív tu bylo
+        // edit(BiomeTuning.active()) a natuněná čísla zmizela, stačilo
+        // odskočit do jiného módu. Návrh vzniká s labem z aktivního tuningu
+        // (pole výš); zavření s neuloženým hlídá hub (unsaved()).
+        edit(draft);
+    }
+
+    /** Liší se návrh od tuningu, se kterým vzniknou příští světy? */
+    @Override
+    public boolean unsaved()
+    {
+        return !draft.sameNumbers(BiomeTuning.active());
     }
 
     /**
@@ -329,7 +340,7 @@ public final class BiomeTunerLab implements LabMode {
     {
         if(!draft.save(BiomeTuning.FILE))
         {
-            say("Could not write " + BiomeTuning.FILE.toString().replace('\\', '/'));
+            say(SafeFiles.writeFailed(BiomeTuning.FILE));
             return;
         }
 
@@ -412,7 +423,8 @@ public final class BiomeTunerLab implements LabMode {
     }
 
     /** Kolečko přepíná biom - je to jediný seznam, kterým se tu roluje. */
-    void scroll(double yoffset)
+    @Override
+    public void scroll(double yoffset)
     {
         Biome[] biomes = Biome.values();
         int index = selected.ordinal() - (int) Math.signum(yoffset);
@@ -479,10 +491,11 @@ public final class BiomeTunerLab implements LabMode {
         int scale = layout.scale();
         text.begin(screenWidth, screenHeight, scale);
 
-        String file = BiomeTuning.FILE.toString().replace('\\', '/');
+        String file = SafeFiles.shown(BiomeTuning.FILE);
         lab.label(layout, 8, TextureLabLayout.TITLE_Y,
                 "Lab   tuning: " + file + "   "
-                        + (draft.isDefault() ? "built-in numbers" : "custom numbers"));
+                        + (BiomeTuning.active().isDefault() ? "built-in numbers" : "custom numbers")
+                        + (unsaved() ? "   (unsaved)" : ""));
 
         Biome[] biomes = Biome.values();
 
@@ -608,7 +621,8 @@ public final class BiomeTunerLab implements LabMode {
     }
 
     /** Nápověda dole podle toho, na čem je myš. */
-    String help(TextureLabLayout layout, double mouseX, double mouseY)
+    @Override
+    public String help(TextureLabLayout layout, double mouseX, double mouseY)
     {
         if(layout.biomeTabAt(mouseX, mouseY, Biome.values().length) >= 0)
         {
@@ -640,7 +654,7 @@ public final class BiomeTunerLab implements LabMode {
 
         if(layout.hit(TextureLabLayout.TUNE_SAVE, mouseX, mouseY))
         {
-            return "Writes " + BiomeTuning.FILE.toString().replace('\\', '/')
+            return "Writes " + SafeFiles.shown(BiomeTuning.FILE)
                     + " - new numbers apply to the next world, not this one";
         }
 
@@ -663,6 +677,7 @@ public final class BiomeTunerLab implements LabMode {
         };
     }
 
+    @Override
     public void delete()
     {
         if(preview != null)

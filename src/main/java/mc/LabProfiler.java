@@ -18,7 +18,7 @@ import java.util.Locale;
  * Windows - proto tam lab sekal a jinde ne.
  *
  * Průměruje se přes okno posledních WINDOW framů, ať čísla neposkakují.
- * Zapíná se v labu klávesou F3, jako ladicí výpis ve hře.
+ * Zapíná se v labu klávesou ladicího výpisu (výchozí F3), jako ve hře.
  * ---------------------------------------------------------------------------
  */
 public final class LabProfiler {
@@ -45,8 +45,17 @@ public final class LabProfiler {
     private int drawAverage = 0;
 
     private int frames = 0;
+
+    /**
+     * Rozběhnuté fáze, vnořené do sebe. Hub měří obsah módu jako celek
+     * (SHAPES) a Blocks a Skin uvnitř něj měří jemněji; vnořená fáze
+     * vnější POZASTAVÍ, takže se žádný čas nepočítá dvakrát.
+     */
+    private final int[] stack = new int[8];
+    private int depth = 0;
+
+    /** Od kdy běží fáze na vrcholu zásobníku. */
     private long running = 0;
-    private int runningPhase = -1;
 
     public boolean enabled()
     {
@@ -76,30 +85,43 @@ public final class LabProfiler {
         }
 
         java.util.Arrays.fill(current, 0L);
+        depth = 0;
         GlStats.resetFrame();
         frameStart = System.nanoTime();
     }
 
     public void start(int phase)
     {
-        if(!enabled)
+        if(!enabled || depth == stack.length)
         {
             return;
         }
 
-        running = System.nanoTime();
-        runningPhase = phase;
+        long now = System.nanoTime();
+
+        if(depth > 0)
+        {
+            // Vnější fáze se pozastaví - vnořená si svůj čas započítá sama.
+            current[stack[depth - 1]] += now - running;
+        }
+
+        stack[depth++] = phase;
+        running = now;
     }
 
     public void stop(int phase)
     {
-        if(!enabled || runningPhase != phase)
+        if(!enabled || depth == 0 || stack[depth - 1] != phase)
         {
             return;
         }
 
-        current[phase] += System.nanoTime() - running;
-        runningPhase = -1;
+        long now = System.nanoTime();
+        current[phase] += now - running;
+        depth--;
+
+        // Vnější fáze (je-li) běží dál od teď.
+        running = now;
     }
 
     /** Konec vykreslení labu - přičte frame do okna a případně přepočítá průměry. */
@@ -165,8 +187,8 @@ public final class LabProfiler {
         }
 
         return new String[]{
-                String.format(Locale.ROOT, "lab frame %.2f ms   draw calls %d   (F3 hides)",
-                        frameAverage, drawAverage),
+                String.format(Locale.ROOT, "lab frame %.2f ms   draw calls %d   (%s hides)",
+                        frameAverage, drawAverage, Keybinds.activeKeyName(Keybinds.Action.DEBUG)),
                 phases.toString()
         };
     }

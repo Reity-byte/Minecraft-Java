@@ -106,18 +106,31 @@ public final class KeybindLab implements LabMode {
         shapes.fillRect(left + 3.2f * unit, bottom + 3.4f * unit, 2.6f * unit, unit, letter);
     }
 
-    @Override
-    public void onEnter()
-    {
-        // Vždycky se začíná od toho, co doopravdy platí - jinak by tu po
-        // návratu z jiného módu visely zapomenuté rozepsané změny.
-        draft = Keybinds.active();
-        arming = null;
-    }
+    // ⚠️ onEnter() návrh NEPŘEPISUJE. Dřív tu bylo `draft = Keybinds.active()`
+    // a pět přebindovaných kláves zmizelo, stačilo odskočit do Blocks a zpět
+    // - bez jediného slova. Návrh vzniká s labem (pole výš) a žije, dokud je
+    // lab otevřený; zavření s neuloženými klávesami hlídá hub (unsaved()).
 
     @Override
     public void onLeave()
     {
+        arming = null;
+    }
+
+    /** Liší se návrh od kláves, které ve hře platí? */
+    @Override
+    public boolean unsaved()
+    {
+        return !draft.sameKeys(Keybinds.active());
+    }
+
+    /**
+     * Začne upravovat tyhle klávesy - pro testy, které potřebují čistý
+     * začátek (lab sám začíná od aktivních při svém vzniku).
+     */
+    void edit(Keybinds keys)
+    {
+        draft = keys;
         arming = null;
     }
 
@@ -210,7 +223,7 @@ public final class KeybindLab implements LabMode {
 
         if(!draft.save(Keybinds.FILE))
         {
-            say("Could not write " + Keybinds.FILE.toString().replace('\\', '/'));
+            say(SafeFiles.writeFailed(Keybinds.FILE));
             return;
         }
 
@@ -357,9 +370,12 @@ public final class KeybindLab implements LabMode {
         int scale = layout.scale();
         text.begin(screenWidth, screenHeight, scale);
 
-        String file = Keybinds.FILE.toString().replace('\\', '/');
+        // "built-in"/"custom" popisuje klávesy, které PLATÍ, ne návrh - viz
+        // LabMode.unsaved(). Rozepsané změny říká "(unsaved)".
         lab.label(layout, 8, TextureLabLayout.TITLE_Y,
-                "Lab   keys: " + file + "   " + (draft.isDefault() ? "built-in" : "custom"));
+                "Lab   keys: " + SafeFiles.shown(Keybinds.FILE) + "   "
+                        + (Keybinds.active().isDefault() ? "built-in" : "custom")
+                        + (unsaved() ? "   (unsaved)" : ""));
 
         Keybinds.Action[] actions = Keybinds.Action.values();
 
@@ -413,7 +429,8 @@ public final class KeybindLab implements LabMode {
     }
 
     /** Nápověda dole podle toho, na čem je myš. */
-    String help(TextureLabLayout layout, double mouseX, double mouseY)
+    @Override
+    public String help(TextureLabLayout layout, double mouseX, double mouseY)
     {
         if(arming != null)
         {
@@ -431,7 +448,7 @@ public final class KeybindLab implements LabMode {
 
         if(layout.hit(TextureLabLayout.KEYBIND_SAVE, mouseX, mouseY))
         {
-            return "Writes " + Keybinds.FILE.toString().replace('\\', '/')
+            return "Writes " + SafeFiles.shown(Keybinds.FILE)
                     + " and the keys work right away, no restart";
         }
 

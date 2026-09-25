@@ -342,9 +342,15 @@ public final class Keybinds {
     }
 
     /** Jsou to přesně výchozí klávesy? */
+    /** Stejné klávesy pro všechny akce? Lab tím pozná neuložené změny. */
+    public boolean sameKeys(Keybinds other)
+    {
+        return Arrays.equals(keys, other.keys);
+    }
+
     public boolean isDefault()
     {
-        return Arrays.equals(keys, DEFAULTS.keys);
+        return sameKeys(DEFAULTS);
     }
 
     // ------------------------------------------------------------------

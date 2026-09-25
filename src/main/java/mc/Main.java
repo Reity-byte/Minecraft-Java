@@ -484,7 +484,7 @@ public class Main {
                     return;
                 }
 
-                TextureLab.KeyResult result = lab.key(key, mods);
+                TextureLab.KeyResult result = lab.key(key, mods, action == GLFW_REPEAT);
 
                 if (result == TextureLab.KeyResult.CLOSE && action == GLFW_PRESS) {
                     closeTextureLab();
@@ -1912,8 +1912,8 @@ public class Main {
                         key(Keybinds.Action.INVENTORY), usedSlots(), Inventory.SIZE, drops.size()),
                 String.format("sound %s   atlas %s   skin %s   lab blocks %d",
                         sound.isOpen() ? String.format("on (%.0f ms)", sound.openMillis()) : "off",
-                        atlasFromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural",
-                        skinFromFile ? Textures.SKIN_FILE.toString().replace('\\', '/') : "built-in",
+                        atlasFromFile ? SafeFiles.shown(Textures.ATLAS_FILE) : "procedural",
+                        skinFromFile ? SafeFiles.shown(Textures.SKIN_FILE) : "built-in",
                         BlockRegistry.active().size()),
                 mining.isActive()
                         ? String.format("mining %.0f%%   stage %d",

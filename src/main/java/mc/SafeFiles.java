@@ -48,6 +48,28 @@ final class SafeFiles {
     /** Kolik záloh jednoho souboru nejvýš vedle sebe leží (.bak a .bak.1 až .bak.9). */
     static final int MAX_BACKUPS = 10;
 
+    /**
+     * Cesta, jak ji ukazuje UI: s lomítky i na Windows, ať hláška vypadá
+     * všude stejně (a sedí s tím, co píše ARCHITECTURE.md).
+     */
+    static String shown(Path file)
+    {
+        return file.toString().replace('\\', '/');
+    }
+
+    /**
+     * Hláška pro UI, když se soubor nepovedlo zapsat.
+     *
+     * ⚠️ JEDNO ZNĚNÍ PRO VŠECHNY LABY. Dřív pixelové módy psaly "Save failed
+     * - see console" (bez souboru) a ostatní "Could not write <soubor>" (bez
+     * odkazu na konzoli), takže tatáž chyba vypadala pokaždé jinak. Důvod
+     * (plný disk, práva…) vypsal writeAtomically na stderr, UI říká jen kde.
+     */
+    static String writeFailed(Path file)
+    {
+        return "Could not write " + shown(file) + " - see console";
+    }
+
     /** Kam jde první záloha souboru, který nešel celý načíst: vedle něj, s příponou .bak. */
     static Path backupOf(Path file)
     {

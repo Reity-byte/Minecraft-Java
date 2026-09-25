@@ -284,10 +284,16 @@ public final class BiomeTuning {
         return new BiomeTuning(copy);
     }
 
+    /** Stejná čísla ve všech biomech? Lab tím pozná neuložené změny. */
+    public boolean sameNumbers(BiomeTuning other)
+    {
+        return java.util.Arrays.equals(tunes, other.tunes);
+    }
+
     /** Jsou to přesně dnešní hodnoty z kódu? */
     public boolean isDefault()
     {
-        return java.util.Arrays.equals(tunes, DEFAULTS.tunes);
+        return sameNumbers(DEFAULTS);
     }
 
     /**

@@ -98,13 +98,14 @@ public class TextureLab {
     private final BlockPreview preview = new BlockPreview();
     private final SkinPreview skinPreview = new SkinPreview();
 
-    /** Měření času vykreslení labu po fázích - zapíná se v labu klávesou F3. */
+    /**
+     * Měření času vykreslení labu po fázích - zapíná se klávesou ladicího
+     * výpisu (Keybinds DEBUG, výchozí F3), stejnou jako ve hře, a ve všech módech.
+     */
     private final LabProfiler profiler = new LabProfiler();
 
-    /** Mód Recipes. Vzniká s labem, aby se rozepsaný recept nezahodil přepnutím. */
-    private final RecipeLab recipeLab;
-    private final KeybindLab keybindLab;
-    private final BiomeTunerLab biomeLab;
+    /** Pojistka proti zavření nebo přepnutí, které by zahodilo rozepsanou práci. */
+    private final LabGuard guard = new LabGuard();
 
     /**
      * Ikony bloků pro mód Recipes - tytéž izometrické kostky jako v hotbaru
@@ -214,22 +215,20 @@ public class TextureLab {
                 2, 2, GL_REPEAT);
 
         blockIcons = new BlockIcon(atlas);
-        recipeLab = new RecipeLab(this, shapes, text);
-        keybindLab = new KeybindLab(this, shapes, text);
-        biomeLab = new BiomeTunerLab(this, shapes, text);
 
         selectTile(0);
         setColor(editor.get(0, 0));
 
         // ⚠️ POŘADÍ V SEZNAMU = POŘADÍ V BOČNÍM PANELU. Další mód se přidá
-        // sem a nikam jinam; LabSidebar zná jen počet.
+        // sem a nikam jinam; LabSidebar zná jen počet. Módy vznikají s labem
+        // a žijí, dokud je otevřený - proto rozepsaná práce přežije přepnutí.
         modes.add(new PixelMode(Mode.BLOCKS, "Blocks",
                 "Blocks: pick an atlas tile on the left, paint it in the middle"));
         modes.add(new PixelMode(Mode.SKIN, "Skin",
                 "Skin: pick a body face on the left, paint it in the middle"));
-        modes.add(recipeLab);
-        modes.add(keybindLab);
-        modes.add(biomeLab);
+        modes.add(new RecipeLab(this, shapes, text));
+        modes.add(new KeybindLab(this, shapes, text));
+        modes.add(new BiomeTunerLab(this, shapes, text));
 
         current().onEnter();
     }
@@ -292,8 +291,42 @@ public class TextureLab {
         {
             // Rozepsaný blok patří k atlasu; nechat ho viset v jiném módu
             // by znamenalo aktivní dočasný registr, o kterém není nic vidět.
+            // Sem se ale dojde až po potvrzení - viz leaveWarning().
             cancelBlock();
             release();
+        }
+
+        /**
+         * Rozepsaný blok je jediná práce v labu, kterou přepnutí módu
+         * zahodí (viz `LabMode.leaveWarning()`), takže se na ni ptá.
+         */
+        @Override
+        public String leaveWarning()
+        {
+            return draft != null ? "The new block is not created yet" : null;
+        }
+
+        /**
+         * Neuložený je tu jen rozepsaný blok. Pixely se nepočítají - zůstávají
+         * ve hře i po zavření labu a "(unsaved)" v titulku o nich mluví dál.
+         */
+        @Override
+        public boolean unsaved()
+        {
+            return which == Mode.BLOCKS && draft != null;
+        }
+
+        @Override
+        public String help(TextureLabLayout layout, double mouseX, double mouseY)
+        {
+            return pixelHelp(layout, mouseX, mouseY);
+        }
+
+        @Override
+        public boolean fileDropped(Path file)
+        {
+            importImage();
+            return true;
         }
 
         @Override public void update(float dt) { updatePixel(dt); }
@@ -378,8 +411,12 @@ public class TextureLab {
     // ==================================================================
 
     /**
-     * Zmáčknutí myši. Boční panel má přednost před módem: klik na ikonu
-     * přepíná, i když má mód rozepsané cokoliv (jeho `onLeave()` to uklidí).
+     * Zmáčknutí myši. Vrací true, když se má lab zavřít.
+     *
+     * Boční panel má přednost před módem: klik na ikonu přepíná, i když má
+     * mód rozepsané cokoliv - návrh přežije, jen rozepsaný blok se napoprvé
+     * nepustí (viz `selectMode`). Tlačítko Close módu jde přes tutéž
+     * pojistku jako Esc (`mayClose`).
      */
     public boolean press(double mouseX, double mouseY, int screenWidth, int screenHeight, boolean left)
     {
@@ -397,7 +434,29 @@ public class TextureLab {
             }
         }
 
-        return current().press(layout, mouseX, mouseY, screenWidth, screenHeight, left);
+        return current().press(layout, mouseX, mouseY, screenWidth, screenHeight, left)
+                && mayClose();
+    }
+
+    /**
+     * Smí se lab zavřít? Když má některý mód neuloženou práci, napoprvé ne:
+     * řekne se, kde co je, a zavře až další pokus do pár sekund (LabGuard).
+     *
+     * ⚠️ Zavřením se návrhy Recipes, Keys a Biomes ztratí - lab vzniká při
+     * každém otevření znovu. Pixely se neztratí (drží je Main), proto se na
+     * ně pojistka neptá.
+     */
+    private boolean mayClose()
+    {
+        String unsaved = LabGuard.unsavedModes(modes);
+
+        if(guard.allow("close", unsaved))
+        {
+            return true;
+        }
+
+        say("Unsaved work in " + unsaved + " - close again to discard it");
+        return false;
     }
 
     public void drag(double mouseX, double mouseY, int screenWidth, int screenHeight)
@@ -436,10 +495,35 @@ public class TextureLab {
      * Třetí výsledek UNUSED je kvůli celé obrazovce: F11 má přepínat
      * odkudkoliv, ale v Keybind Labu při čekání na klávesu si ji mód musí
      * vzít (jinak by nešla přiřadit) - proto to Main pozná až odsud.
+     *
+     * Nad `route()` jsou ještě dvě věci hubu: klávesa ladicího výpisu
+     * (měření labu) a pojistka zavření. Obě jen na skutečné zmáčknutí -
+     * držená F3 by měření blikala a opakovaný Esc by "potvrdil" varování,
+     * které uživatel ještě nestihl přečíst.
+     *
+     * @param repeat GLFW_REPEAT (držená klávesa), ne první zmáčknutí
      */
-    public KeyResult key(int key, int mods)
+    public KeyResult key(int key, int mods, boolean repeat)
     {
-        return route(current(), key, mods);
+        KeyResult result = route(current(), key, mods);
+
+        if(result == KeyResult.UNUSED
+                && Keybinds.active().actionFor(key) == Keybinds.Action.DEBUG)
+        {
+            if(!repeat)
+            {
+                profiler.toggle();
+                say(profiler.enabled() ? "Frame timing on" : "Frame timing off");
+            }
+            return KeyResult.CONSUMED;
+        }
+
+        if(result == KeyResult.CLOSE && (repeat || !mayClose()))
+        {
+            return KeyResult.CONSUMED;
+        }
+
+        return result;
     }
 
     /**
@@ -481,14 +565,7 @@ public class TextureLab {
      */
     public void scroll(double yoffset)
     {
-        if(current() == recipeLab)
-        {
-            recipeLab.scroll(yoffset);
-        }
-        else if(current() == biomeLab)
-        {
-            biomeLab.scroll(yoffset);
-        }
+        current().scroll(yoffset);
     }
 
     public void update(float dt)
@@ -498,6 +575,7 @@ public class TextureLab {
             statusLeft = Math.max(0f, statusLeft - dt);
         }
 
+        guard.update(dt);
         current().update(dt);
     }
 
@@ -532,7 +610,13 @@ public class TextureLab {
         shapes.end();
         profiler.stop(LabProfiler.SHAPES);
 
+        // Obsah módu se měří jako "shapes" celý. Mód, který si měří jemněji
+        // (Blocks a Skin: upload, paleta, obrázky, náhled), vnořené fáze
+        // odečte od téhle - LabProfiler fáze vnořovat umí. Dřív Recipes,
+        // Keys a Biomes neležely v žádné fázi a měření o nich mlčelo.
+        profiler.start(LabProfiler.SHAPES);
         current().drawShapes(layout, screenWidth, screenHeight, mouseX, mouseY);
+        profiler.stop(LabProfiler.SHAPES);
 
         profiler.start(LabProfiler.TEXT);
         current().drawText(layout, screenWidth, screenHeight, mouseX, mouseY);
@@ -598,24 +682,26 @@ public class TextureLab {
 
         // Zapnuté měření mluví na týchž dvou řádcích jako stav a nápověda -
         // je to dočasný ladicí režim, ne trvalá část rozhraní.
-        if(profiler.enabled())
-        {
-            String[] lines = profiler.lines();
-            label(layout, 8, TextureLabLayout.STATUS_Y,
-                    fit(lines[0], TextureLabLayout.CONTENT_WIDTH - 16, scale));
-            text.draw(fit(lines[1], TextureLabLayout.CONTENT_WIDTH - 16, scale),
-                    layout.textLeft(8), layout.textTop(TextureLabLayout.HELP_Y), Palette.TEXT_MUTED);
-            text.end();
-            return;
-        }
+        //
+        // ⚠️ HLÁŠKA MÁ PŘEDNOST před prvním řádkem měření. Dřív měření
+        // přebilo oba řádky vždycky, takže se zapnutým F3 nebylo vidět
+        // "Could not write …" ani "Press a key for …" v Keys. Nápovědu
+        // zakrývá dál: ta se dá přečíst po vypnutí, hláška by zmizela.
+        String[] measured = profiler.enabled() ? profiler.lines() : null;
 
         if(statusLeft > 0f)
         {
             label(layout, 8, TextureLabLayout.STATUS_Y,
                     fit(status, TextureLabLayout.CONTENT_WIDTH - 16, scale));
         }
+        else if(measured != null)
+        {
+            label(layout, 8, TextureLabLayout.STATUS_Y,
+                    fit(measured[0], TextureLabLayout.CONTENT_WIDTH - 16, scale));
+        }
 
-        text.draw(fit(hubHelp(layout, mouseX, mouseY), TextureLabLayout.CONTENT_WIDTH - 16, scale),
+        String bottom = measured != null ? measured[1] : hubHelp(layout, mouseX, mouseY);
+        text.draw(fit(bottom, TextureLabLayout.CONTENT_WIDTH - 16, scale),
                 layout.textLeft(8), layout.textTop(TextureLabLayout.HELP_Y), Palette.TEXT_MUTED);
 
         text.end();
@@ -636,22 +722,7 @@ public class TextureLab {
             return modes.get(hovered).title() + " - " + modes.get(hovered).hint();
         }
 
-        if(current() instanceof PixelMode)
-        {
-            return help(layout, mouseX, mouseY);
-        }
-
-        if(current() == recipeLab)
-        {
-            return recipeLab.help(layout, mouseX, mouseY);
-        }
-
-        if(current() == keybindLab)
-        {
-            return keybindLab.help(layout, mouseX, mouseY);
-        }
-
-        return biomeLab.help(layout, mouseX, mouseY);
+        return current().help(layout, mouseX, mouseY);
     }
 
     /** Měřič fází vykreslení - pro sondy, které lab kreslí mimo hru. */
@@ -714,11 +785,23 @@ public class TextureLab {
      * Odcházející mód dostane `onLeave()` (zruší rozepsaný blok, ukončí tah),
      * příchozí `onEnter()`. Bez toho by v jiném módu visel dočasný registr
      * s návrhem bloku, o kterém není nic vidět.
+     *
+     * Rozepsané návrhy (recept, klávesy, tuning) přepnutí přežijí. Když by
+     * odchod přece něco zahodil (rozepsaný blok), napoprvé se nepřepne
+     * a řekne se proč - stejně jako Esc v rozepsaném bloku.
      */
     void selectMode(int index)
     {
         if(index < 0 || index >= modes.size() || index == currentMode)
         {
+            return;
+        }
+
+        String loses = current().leaveWarning();
+
+        if(!guard.allow("mode " + index, loses))
+        {
+            say(loses + " - click " + modes.get(index).title() + " again to discard it");
             return;
         }
 
@@ -833,11 +916,11 @@ public class TextureLab {
         {
             editor.markSaved();
             fromFile = true;
-            say("Saved " + Textures.ATLAS_FILE.toString().replace('\\', '/'));
+            say("Saved " + SafeFiles.shown(Textures.ATLAS_FILE));
         }
         else
         {
-            say("Save failed - see console");
+            say(SafeFiles.writeFailed(Textures.ATLAS_FILE));
         }
     }
 
@@ -852,11 +935,11 @@ public class TextureLab {
         {
             skin.markSaved();
             skinFromFile = true;
-            say("Saved " + Textures.SKIN_FILE.toString().replace('\\', '/'));
+            say("Saved " + SafeFiles.shown(Textures.SKIN_FILE));
         }
         else
         {
-            say("Save failed - see console");
+            say(SafeFiles.writeFailed(Textures.SKIN_FILE));
         }
     }
 
@@ -915,13 +998,11 @@ public class TextureLab {
         // není, změněný obdélník se na grafiku nenahrával a příští Save by
         // zapsal obrázek, který uživatel nikdy neviděl (a do atlasu, nebo do
         // kůže podle toho, který pixelový mód byl otevřený naposledy).
-        if(!(current() instanceof PixelMode))
+        // Rozhoduje o tom mód sám (LabMode.fileDropped), výchozí odpověď je ne.
+        if(!current().fileDropped(importFile))
         {
             say("Import works in Blocks and Skin - switch there and press Import PNG");
-            return;
         }
-
-        importImage();
     }
 
     private void updatePixel(float dt)
@@ -1025,7 +1106,7 @@ public class TextureLab {
 
         if(!AtlasImage.save(editor.pixels(), Textures.ATLAS_FILE))
         {
-            say("Atlas save failed - block not created, see console");
+            say(SafeFiles.writeFailed(Textures.ATLAS_FILE) + " - block not created");
             return;
         }
 
@@ -1034,7 +1115,7 @@ public class TextureLab {
 
         if(!created.save(BlockRegistry.FILE))
         {
-            say("Saving blocks.json failed - block not created, see console");
+            say(SafeFiles.writeFailed(BlockRegistry.FILE) + " - block not created");
             return;
         }
 
@@ -1313,10 +1394,6 @@ public class TextureLab {
     }
 
     /**
-     * Klávesa. Vrací true, když se má lab zavřít (Esc, F6).
-     * Při psaní hexu nebo jména patří klávesy poli, ne zkratkám.
-     */
-    /**
      * Klávesy módů Blocks a Skin. Vrací true = KLÁVESU JSEM SI VZAL, takže
      * ji hub už nemá brát jako "zavři lab" (viz TextureLab.key). Při psaní
      * do hexu nebo do jména bloku si mód bere všechno, jinak by Esc uprostřed
@@ -1367,13 +1444,8 @@ public class TextureLab {
             return true;
         }
 
-        // F3 jako ladicí výpis ve hře: čas fází vykreslení labu a draw cally.
-        if(key == GLFW_KEY_F3)
-        {
-            profiler.toggle();
-            say(profiler.enabled() ? "Frame timing on" : "Frame timing off");
-            return true;
-        }
+        // Měření labu (F3) tu není: zapíná ho hub ve všech módech, klávesou
+        // ladicího výpisu z Keybinds - viz key().
 
         if(ctrl && key == GLFW_KEY_Z)
         {
@@ -1927,8 +1999,8 @@ public class TextureLab {
         text.begin(screenWidth, screenHeight, scale);
 
         String source = skinMode()
-                ? (skinFromFile ? Textures.SKIN_FILE.toString().replace('\\', '/') : "built-in")
-                : (fromFile ? Textures.ATLAS_FILE.toString().replace('\\', '/') : "procedural");
+                ? (skinFromFile ? SafeFiles.shown(Textures.SKIN_FILE) : "built-in")
+                : (fromFile ? SafeFiles.shown(Textures.ATLAS_FILE) : "procedural");
         String unsaved = active().isUnsaved() ? "  (unsaved)" : "";
 
         if(skinMode())
@@ -2070,7 +2142,7 @@ public class TextureLab {
     }
 
     /** Nápověda dole podle toho, na čem je myš. */
-    private String help(TextureLabLayout l, double mouseX, double mouseY)
+    private String pixelHelp(TextureLabLayout l, double mouseX, double mouseY)
     {
         if(skinMode())
         {
@@ -2082,7 +2154,7 @@ public class TextureLab {
                 return "Loads textures/import.png, or drop a PNG on the window ("
                         + SkinEditor.SIZE + "x" + SkinEditor.SIZE + ")";
             if(l.hit(TextureLabLayout.SAVE, mouseX, mouseY))
-                return "Saves " + Textures.SKIN_FILE.toString().replace('\\', '/')
+                return "Saves " + SafeFiles.shown(Textures.SKIN_FILE)
                         + " - delete it to get the built-in skin back";
             return "LMB paint  RMB pick  Ctrl+Z undo  Ctrl+S save  click hex to type";
         }
@@ -2384,6 +2456,10 @@ public class TextureLab {
         blockIcons.delete();
         preview.delete();
         skinPreview.delete();
-        biomeLab.delete();
+
+        for(LabMode mode : modes)
+        {
+            mode.delete();
+        }
     }
 }

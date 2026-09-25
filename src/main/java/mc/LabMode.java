@@ -13,7 +13,11 @@ package mc;
  * jejich POČET.
  *
  * **Přidat mód = nová třída, která tohle implementuje, a jeden řádek
- * v seznamu v `TextureLab`.** Nic jiného.
+ * v seznamu v `TextureLab`.** Nic jiného. Proto se hub na nic neptá podle
+ * identity módu (`current() == recipeLab`): kolečko, nápověda, přetažený
+ * soubor, úklid i neuložená práce jdou přes metody tady, s výchozí
+ * odpovědí "nic". Dřív šestý mód přidaný jedním řádkem ukazoval nápovědu
+ * Biomes, ignoroval kolečko a neuvolnil své GL prostředky.
  *
  * ⚠️ KRESLÍ SE VE DVOU PRŮCHODECH: nejdřív tvary a obrázky, pak texty.
  * Je to totéž, co dělá seznam světů a dialog v něm - text jde na obrazovku
@@ -51,11 +55,74 @@ public interface LabMode {
      */
     void drawIcon(Renderer2D shapes, float left, float bottom, float size);
 
-    /** Mód se právě stal aktivním. */
+    /**
+     * Mód se právě stal aktivním.
+     *
+     * ⚠️ ROZEPSANOU PRÁCI NEZAHAZOVAT. Přepnout se na chvíli jinam (podívat
+     * se v Blocks, jak surovina receptu vypadá) je normální postup, takže
+     * návrh módu přežívá přepnutí, dokud je lab otevřený. Dřív to každý
+     * mód dělal jinak: Recipes návrh držel, Keys a Biomes ho tady tiše
+     * přepsaly aktivním nastavením.
+     */
     default void onEnter() {}
 
-    /** Odchází se z módu - uklidit rozepsané (tah štětcem, rozepsaný blok…). */
+    /**
+     * Odchází se z módu - ukončit, co běží (tah štětcem, čekání na klávesu).
+     * Rozepsaný návrh zůstává, viz `onEnter()`; výjimku hlásí `leaveWarning()`.
+     */
     default void onLeave() {}
+
+    /**
+     * Zahodí odchod z módu něco rozepsaného? Pak vrací, CO (anglicky, jde to
+     * do hlášky), jinak null.
+     *
+     * Hub pak přepnutí napoprvé neudělá, jen řekne "click again to discard".
+     * Týká se to jen návrhu bloku - ten drží aktivní dočasný registr, a ten
+     * nesmí viset v módu, kde o něm není nic vidět (Recipes by z něj nabízel
+     * blok, který neexistuje).
+     */
+    default String leaveWarning()
+    {
+        return null;
+    }
+
+    /**
+     * Je tu rozepsaná práce, která se zavřením labu ztratí?
+     *
+     * ⚠️ POROVNÁVÁ SE S TÍM, CO PLATÍ, ne s výchozími hodnotami. Dřív titulek
+     * Keys a Biomes říkal "built-in"/"custom" podle návrhu, takže po kliknutí
+     * na Defaults ukázal "built-in", i když ve hře a na disku byly vlastní
+     * klávesy. Pixely atlasu a kůže sem nepatří: žijí ve hře i po zavření
+     * labu a mají vlastní "(unsaved)".
+     */
+    default boolean unsaved()
+    {
+        return false;
+    }
+
+    /**
+     * Nápověda dole podle toho, na čem je myš. Hub ji ukazuje, když myš
+     * není nad bočním panelem; bez vlastní verze je to `hint()`.
+     */
+    default String help(TextureLabLayout layout, double mouseX, double mouseY)
+    {
+        return hint();
+    }
+
+    /** Kolečko myši. Mód, který ho nepotřebuje, ho nechá být. */
+    default void scroll(double yoffset) {}
+
+    /**
+     * Soubor přetažený do okna. Vrací false, když s ním mód neumí nic
+     * udělat - hub pak řekne, kde to jde.
+     */
+    default boolean fileDropped(java.nio.file.Path file)
+    {
+        return false;
+    }
+
+    /** Lab se zavírá - uvolnit GL prostředky módu (náhledy, textury). */
+    default void delete() {}
 
     /** Čas běží i v labu: animace náhledu, doběh stavové hlášky. */
     default void update(float dt) {}
