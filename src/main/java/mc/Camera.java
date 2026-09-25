@@ -205,8 +205,25 @@ public class Camera {
     public Matrix4f viewMatrix(Matrix4f dest)
     {
         float[] f = viewDirection();
-        return dest.setLookAt(0, 0, 0,
+
+        // Houpání při chůzi jen v první osobě - ve třetí by se houpala
+        // kamera za zády, ne hlava. Bez houpání (0) je to čistý lookAt.
+        dest.identity();
+
+        if(view == View.FIRST_PERSON)
+        {
+            ViewBobbing.apply(dest, bobPhase, bobAmount);
+        }
+
+        return dest.lookAt(0, 0, 0,
                 f[0], f[1], f[2],
                 0, 1, 0);
     }
+
+    /**
+     * Houpání pohledu pro tenhle frame (ViewBobbing): fáze kroku a síla 0 až 1.
+     * Každý frame je přepíše Main z PlayerAnimation; 0 = vypnuto v Options.
+     */
+    public float bobPhase = 0f;
+    public float bobAmount = 0f;
 }

@@ -509,7 +509,7 @@ public class MainStateTest {
                 "mouseScale", "glReady", "blockAtlas", "playerSkin", "atlasPixels", "atlasFromFile",
                 "skinPixels", "skinFromFile", "atlasEditor", "skinEditor", "widgets", "images", "optionsScreen", "selectScreen",
                 "createScreen", "optionsReturnState", "lab", "createdBlocks", "labReturnState",
-                "showDebug", "icons", "sky", "heldItem", "swing", "animation", "playerMesh",
+                "showDebug", "icons", "sky", "heldItem", "swing", "animation", "handSway", "playerMesh",
                 "frameCount", "fpsTimer", "currentFps", "scrollRemainder");
 
         // Player: stav pohybu patri svetu (resetForNewWorld + spawn/restore). Vstup se plni
@@ -522,7 +522,8 @@ public class MainStateTest {
                 "footsteps");
 
         java.util.Set<String> cameraWorld = java.util.Set.of("x", "y", "z", "yaw", "pitch");
-        java.util.Set<String> cameraSession = java.util.Set.of("view", "mouseSensitivity", "invertMouseY");
+        java.util.Set<String> cameraSession = java.util.Set.of("view", "mouseSensitivity", "invertMouseY",
+                "bobPhase", "bobAmount");
 
         classified(Main.class, mainWorld, mainSession);
         classified(Player.class, playerWorld, playerSession);

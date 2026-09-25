@@ -62,6 +62,7 @@ public class PlayerAnimation {
     private float phase = 0f;
     private float amount = 0f;
     private float time = 0f;
+    private float bob = 0f;
 
     // ------------------------------------------------------------------
     // stav
@@ -73,10 +74,23 @@ public class PlayerAnimation {
      */
     public void update(float dt, float distanceMoved)
     {
+        update(dt, distanceMoved, true);
+    }
+
+    /**
+     * Jako update(dt, distanceMoved), a navíc síla houpání pohledu
+     * (ViewBobbing). Ta se dotahuje stejně jako rozmach, ale jen na zemi -
+     * ve skoku, v letu a ve vodě pohled neklimbá. Nohy máchají dál.
+     */
+    public void update(float dt, float distanceMoved, boolean onGround)
+    {
         if(dt <= 0f)
         {
             return;
         }
+
+        float bobTarget = onGround ? swingAmountFor(distanceMoved / dt) : 0f;
+        bob += (bobTarget - bob) * (1f - (float) Math.pow(SWING_SMOOTHING, dt));
 
         // ⚠️ OBĚ ČÍSLA SE BALÍ, nerostou donekonečna. Float ztrácí přesnost:
         // od time = 16384 (asi 4,5 h v jednom běhu) při 1000 FPS šlo
@@ -101,6 +115,8 @@ public class PlayerAnimation {
     public float phase()  { return phase; }
     public float amount() { return amount; }
     public float time()   { return time; }
+    /** Síla houpání pohledu 0 až 1 - jako amount(), ale nulová mimo zem. */
+    public float bob()    { return bob; }
 
     /**
      * Póza pro tenhle okamžik.

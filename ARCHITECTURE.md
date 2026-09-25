@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2324 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2361 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -81,6 +81,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `AsyncTest` | Async generování: shoda se synchronním blok po bloku, nejhorší `update()` při chůzi, omezený počet sloupců, kritický okruh, `shutdown()` |
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
+| `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty |
 | `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků** (podle tvaru každého druhu), kmen stojí na zemi, řetěz kmen→prkna→stůl pro všechna tři dřeva, vlastní dlaždice každého druhu, a **změřená hustota a druh stromu v každém biomu** |
@@ -89,7 +90,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `CameraTest` | Pořadí pohledů F5, poloha zezadu i zepředu, směr pohledu a matice, **zkrácení o zeď i podlahu** s poloměrem kamery, přesná vzdálenost k rovině stěny, oči v bloku, **myš** (citlivost, obrácená osa, ořez pitch na ±89 i s konečnou maticí pohledu) |
 | `SoundTest` | Materiál zvuku = **stejné skupiny jako tvrdost**, obměna výšky, **cooldown proti „kulometu"**, interval kroků podle rychlosti, kroky skutečného hráče (stoj, chůze, let, hrana), syntéza (slyšitelná, bez lupnutí, deterministická), WAV (tam a zpět, 8 bit stereo, cizí bloky, useknutý soubor), **výměna placeholderu souborem** |
 | `TextureLabTest` | **Boční panel** (šířka proti měřítku na devíti rozlišeních, tlačítka pod sebou, ikona uvnitř tlačítka, klik do mezery i mimo pruh nic nepřepne, panel zná jen počet módů, převod souřadnic panel vs. obsah), rozvržení módu Recipes bez překryvů, index pixelu a hranice dlaždic (pokrytí celého atlasu), **shoda s `BlockAtlas.INSET`** (editovaných 16 texelů je přesně to, co hra vzorkuje), malování tahem, undo, kapátko, bloky podle dlaždice, hex a HSV, **PNG tam a zpět včetně alfy a orientace řádků**, přepínač procedurální/soubor, **globální paleta jako čistá funkce** (četnost, bez průhledné, řazení podle odstínu, kde se barva vyskytuje), **import PNG** (správný rozměr i s undo; 64×64, 128×64, 256×256, ne-obrázek a chybějící soubor → hláška a atlas beze změny), **návrh bloku** (přidělení buněk 63→27 a -1 při plném atlasu, jména, tvrdosti na škále vestavěných bloků, došlá id), hit-testy rozvržení **a žádné překryvy ovládacích prvků v obou režimech**, **náhled = bajt po bajtu tentýž mesh jako ve hře**, **sledování změněných pixelů** (`DirtyRect` sám o sobě; tah zůstane uvnitř jedné dlaždice a obsahuje všechny změněné pixely; undo hlásí svou dlaždici, import celý atlas), **mapování pixelu na stěnu dílu těla** (obdélníky sedí na UV, která vydává `PlayerModelMesh.unfold()`; round-trip pixel → index → stěna; 1632 pokrytých pixelů; plátno má řádek 0 dole), **editace kůže** (tah jen ve své stěně, kapátko, undo i s návratem výběru), **PNG kůže bez překlápění** a **přesné znění hlášky o rozměru** |
-| `MouseScaleTest` | Přepočet myši z bodů okna na pixely framebufferu: poměr pro 1,0 / 1,5 / 2,0 / 3,0, každá osa zvlášť, ochrana proti dělení nulou — a **simulovaná Retina přes všechny klikací obrazovky** (menu, deset položek Options i konec posuvníku, řádek seznamu světů, pole seedu, dlaždice a pixel plátna v labu, slot hotbaru): co je nakreslené na daném místě, to tam po přepočtu i reaguje. Jedna kontrola schválně hlídá, že bez přepočtu by klik trefil jiné tlačítko |
+| `MouseScaleTest` | Přepočet myši z bodů okna na pixely framebufferu: poměr pro 1,0 / 1,5 / 2,0 / 3,0, každá osa zvlášť, ochrana proti dělení nulou — a **simulovaná Retina přes všechny klikací obrazovky** (menu, všechny položky Options i konec posuvníku, řádek seznamu světů, pole seedu, dlaždice a pixel plátna v labu, slot hotbaru): co je nakreslené na daném místě, to tam po přepočtu i reaguje. Jedna kontrola schválně hlídá, že bez přepočtu by klik trefil jiné tlačítko |
 | `WorldSavesTest` | Světy na disku: **migrace starého `saves/world.dat`** (bajtová shoda, metadata, `world.dat.migrated`, druhý běh bez duplicity, pád uprostřed, obsazené jméno, poškozený zdroj), očištění jména na složku (zakázané znaky, `CON`/`com1`/`aux.txt`, tečky a mezery na konci), unikátní složka bez ohledu na velikost písmen, metadata tam a zpět (i `Long.MIN_VALUE`), **poškozený `world.json` svět neschová**, řazení podle posledního hraní, mazání jen vlastní složky |
 | `SeedTest` | Seed: prázdné pole → náhodný, číslo → to číslo, text → `hashCode` (a pokaždé stejně), stejný seed = stejné sloupce blok po bloku, jiný seed = jiný terén, **kontrolní součty výchozího terénu** (tři oblasti i záporné souřadnice, výšky přes 6000×6000, spawn) — přeměřené na generátoru s biomy, viz `GENERATOR_VERSION` |
 | `ThumbnailTest` | Náhled: orientace (horní řádek obrazovky = horní řádek obrázku), výřez středu podle poměru stran, zmenšení průměrováním, PNG tam a zpět, odmítnutí příliš velkého obrázku |
@@ -1450,6 +1451,17 @@ Ruka s blokem je předsunutá o π/10 a za chůze máchá jen napůl, jako v Min
 kroku. V první osobě se vlastní tělo nekreslí vůbec a zůstává `HeldItemRenderer` — s blokem,
 nebo s holou rukou z téhož kvádru a skinu jako model (viz „Blok v ruce").
 
+**Houpání pohledu při chůzi (`ViewBobbing`) a setrvačnost ruky (`HandSway`)**, obojí podle
+Minecraftu. Houpání je malá matice (posun do strany sin, pokles −|cos|, náklon o desetiny
+stupně) se **stejnou fází jako nohy** — sedí s krokem ve třetí osobě. Síla je
+`PlayerAnimation.bob()`: dotahuje se jako rozmach, ale **jen na zemi**, takže skok, let
+a plavání pohledem neklimbají. Dává se na svět (`Camera.viewMatrix`, jen v první osobě)
+**i na ruku** — vůči světu ruka stojí a houpe se s pohledem. Míří se dál z očí bez houpání.
+Setrvačnost: ruka má vlastní yaw/pitch, který se k pohledu dotahuje o polovinu za tick,
+a natočí se o 0,2 zpoždění (Minecraft 0,1; tady víc, ať je to vidět), nejvýš o 8°. Yaw se
+porovnává přes šev 0–360 nejkratší cestou; skok nad 90° (načtení světa) ruka přeskočí.
+Vypíná se v Options přepínačem **View Bobbing** (setrvačnost zůstává).
+
 **Známá zjednodušení:** trup se natáčí přesně s pohledem (Minecraft nechává tělo zaostávat až
 o 50° a za chůze ho stáčí do směru pohybu); chybí poloha při plížení a plavání; druhá vrstva
 skinu (klobouk, bunda) se nekreslí; starší skiny 64×32 bez levé ruky a nohy by se musely
@@ -1492,19 +1504,27 @@ jen kód, který zvuk spočítá (`SoundSynth`): šum z hashe (vyjde pokaždé s
 filtry a obálka s náběhem a doběhem do nuly (bez lupnutí). Zvuk je druh × materiál. Druh dává
 délku a doznívání — krok 0,09 s, položení 0,13 s, rozbití 0,24 s —, materiál barvu: hlína je
 tlumený zrnitý šum, kámen ostřejší šum s cvaknutím 140 Hz, dřevo tlumený tón 200 Hz
-s klepnutím, listí vysoký šum s pomalým náběhem. Kliknutí je pípnutí 1,4 kHz. Všech 13 zvuků
-má dohromady 81 KB a 1,9 s; syntéza se vejde do otevření enginu.
+s klepnutím, listí vysoký šum s pomalým náběhem. Kliknutí je pípnutí 1,4 kHz. Všech 50 bufferů
+(12 zvuků bloků × 4 varianty, kliknutí a sebrání) má dohromady ~330 KB a 7,5 s; syntéza se
+vejde do otevření enginu.
 
 **⚠️ Syntéza nevyrábí vzorky pro OpenAL, ale SOUBOR WAV v paměti.** Nahrávka z disku je jen jiný
 zdroj týchž bajtů a obojí jde stejným dekodérem (`Wav.decode`). Výměna za skutečné zvuky proto
 nevyžaduje změnu kódu: **stačí položit `sounds/<jméno>.wav` vedle hry** (třeba
 `sounds/break_stone.wav`; jména dává `Sound.fileName()`). Soubor přebije syntézu, ostatní zvuky
 zůstanou syntetizované, takže se dá nahrazovat po jednom. Nečitelný nebo nepodporovaný soubor
-se ohlásí na stderr a hraje placeholder. Rozhoduje se na jediném místě, v `SoundLibrary.load()`.
+se ohlásí na stderr a přeskočí. Rozhoduje se na jediném místě, v `SoundLibrary.variants()`.
+
+**Varianty:** vedle `<jméno>.wav` se čtou i `<jméno>_1.wav` až `<jméno>_8.wav` (klidně jen
+očíslované, s mezerami). Každé přehrání vybere náhodně jednu a k tomu obmění výšku — deset
+kroků za sebou nezní jako jedna nahrávka. Jakmile jde přečíst aspoň jeden soubor, syntéza
+se pro ten zvuk nepoužije vůbec. Bez souborů má každý zvuk bloku **4 syntetizované varianty**
+(jiné semínko šumu, doznívání ±12 %, stejná délka); kliknutí a sebrání jsou čisté tóny,
+semínko by je nezměnilo, takže mají jednu.
 
 **Čte se WAV PCM 8 i 16 bit, mono i stereo; .ogg zatím ne.** Dekodér Vorbisu je v LWJGL
 v modulu `lwjgl-stb` (STBVorbis), tedy další závislost. Až bude potřeba, je to jeden modul
-v `pom.xml` a jedna větev v `SoundLibrary.load()`.
+v `pom.xml` a jedna větev v `SoundLibrary.addIfReadable()`.
 
 **⚠️ Všechno se čte jako MONO.** OpenAL umisťuje do prostoru jen monofonní buffery — stereo by
 hrálo „do uší" bez ohledu na polohu zdroje. Stereo soubor se proto při čtení smíchá do jednoho
@@ -1564,9 +1584,9 @@ celá obrazovka ani fullscreen neexistovaly. **Natvrdo dál zůstává** délka 
 zadání), rozpočty na stavbu meshů, dosah zvuku, vzdálenost kreslení položek na zemi
 a měřítko texture labu.
 
-**Deset hodnot, a každá je tu proto, že engine umí, co mění:** Fullscreen, VSync,
+**Jedenáct hodnot, a každá je tu proto, že engine umí, co mění:** Fullscreen, VSync,
 Max Framerate, Render Distance, Simulation Distance, FOV, Brightness, GUI Scale,
-Sensitivity, Invert Mouse. Vynechané jsou věci, které by musel nejdřív umět engine
+Sensitivity, Invert Mouse, View Bobbing. Vynechané jsou věci, které by musel nejdřív umět engine
 (hlasitost je mimo zadání, plynulé osvětlení jde zapnout jen přestavbou všech meshů,
 mraky a částice nejsou). **Přebindování kláves nakonec vzniklo, ale v labu**
 (viz „Keybind Lab") — je to editor se seznamem a detekcí kolizí, ne řádek
@@ -1652,7 +1672,8 @@ společný kód je v `SafeFiles`. Ukládá se při zavření obrazovky a hned po
   "brightness": 0.00,
   "guiScale": 0,
   "sensitivity": 1.00,
-  "invertMouse": false
+  "invertMouse": false,
+  "viewBobbing": true
 }
 ```
 

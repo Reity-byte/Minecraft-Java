@@ -55,6 +55,7 @@ public class SoundTest {
         synthesis();
         wav();
         library();
+        variants();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -367,6 +368,60 @@ public class SoundTest {
     }
 
     // ==================================================================
+
+    static void variants() throws IOException {
+        // ---------- syntetizovane ----------
+        boolean distinct = true, audible = true, sameLength = true;
+        for (Sound s : Sound.values()) {
+            int n = SoundSynth.variants(s);
+            for (int v = 0; v < n; v++) {
+                short[] a = SoundSynth.synthesize(s, v).samples();
+                int peak = 0;
+                for (short x : a) peak = Math.max(peak, Math.abs(x));
+                audible &= peak > Short.MAX_VALUE / 3;
+                sameLength &= a.length == SoundSynth.synthesize(s).samples().length;
+                for (int w = 0; w < v; w++) distinct &= !Arrays.equals(a, SoundSynth.synthesize(s, w).samples());
+            }
+        }
+        check("zvuky bloku maji 4 varianty, kliknuti a sebrani jednu",
+                SoundSynth.variants(Sound.STEP_STONE) == 4 && SoundSynth.variants(Sound.CLICK) == 1
+                        && SoundSynth.variants(Sound.PICKUP) == 1, "");
+        check("varianty zni ruzne", distinct, "");
+        check("kazda varianta je slysitelna a stejne dlouha", audible && sameLength, "");
+        check("varianta 0 je puvodni zvuk",
+                Arrays.equals(SoundSynth.synthesize(Sound.BREAK_WOOD, 0).samples(),
+                        SoundSynth.synthesize(Sound.BREAK_WOOD).samples()), "");
+
+        // ---------- ze souboru ----------
+        Path dir = Files.createTempDirectory("mc-variants");
+        try {
+            check("bez souboru jsou varianty syntetizovane",
+                    SoundLibrary.variants(Sound.STEP_WOOD, dir).size() == 4, "");
+
+            Files.write(dir.resolve("step_wood_2.wav"), wavFile(1, 1, 8000, 16, new byte[20], false));
+            Files.write(dir.resolve("step_wood_5.wav"), wavFile(1, 1, 8000, 16, new byte[40], false));
+            Files.write(dir.resolve("step_wood_3.wav"), "poskozeny".getBytes());
+            List<Wav.Pcm> found = SoundLibrary.variants(Sound.STEP_WOOD, dir);
+            check("ocislovane soubory (i s mezerou, bez zakladniho) nahradi vsechny placeholdery",
+                    found.size() == 2 && found.get(0).samples().length == 10 && found.get(1).samples().length == 20,
+                    "" + found.size());
+
+            Files.write(dir.resolve("step_wood.wav"), wavFile(1, 1, 8000, 16, new byte[60], false));
+            found = SoundLibrary.variants(Sound.STEP_WOOD, dir);
+            check("zakladni soubor je prvni, vadny se preskoci",
+                    found.size() == 3 && found.get(0).samples().length == 30
+                            && SoundLibrary.load(Sound.STEP_WOOD, dir).samples().length == 30, "" + found.size());
+
+            Files.write(dir.resolve("step_wood_9.wav"), wavFile(1, 1, 8000, 16, new byte[20], false));
+            check("vic nez MAX_VARIANTS cisel se necte",
+                    SoundLibrary.variants(Sound.STEP_WOOD, dir).size() == 3, "");
+        } finally {
+            try (var files = Files.list(dir)) {
+                for (Path p : files.toList()) Files.deleteIfExists(p);
+            }
+            Files.deleteIfExists(dir);
+        }
+    }
 
     static void library() throws IOException {
         Path dir = Files.createTempDirectory("mc-sounds");

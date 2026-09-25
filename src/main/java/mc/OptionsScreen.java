@@ -22,7 +22,7 @@ import static org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE;
  */
 public final class OptionsScreen {
 
-    public static final int WIDTH = 320, HEIGHT = 196;
+    public static final int WIDTH = 320, HEIGHT = 221;
 
     /** Jedna položka: posuvník, nebo tlačítko (přepínač). */
     enum Item {
@@ -35,7 +35,8 @@ public final class OptionsScreen {
         BRIGHTNESS(0, 3, true, "Lifts dark places like the brightness option in Minecraft"),
         GUI_SCALE(1, 3, false, "Size of menus and HUD; Auto = largest that fits"),
         SENSITIVITY(0, 4, true, "Mouse look speed"),
-        INVERT_MOUSE(1, 4, false, "Moving the mouse up looks down");
+        INVERT_MOUSE(1, 4, false, "Moving the mouse up looks down"),
+        VIEW_BOBBING(0, 5, false, "Camera and hand bob while walking");
 
         final int column, row;
         final boolean slider;
@@ -79,8 +80,8 @@ public final class OptionsScreen {
     static final int TRACK_Y = 12, TRACK_H = 7;
 
     static final ScreenLayout.Rect TITLE = new ScreenLayout.Rect(0, 4, WIDTH, 18);
-    static final ScreenLayout.Rect HELP = new ScreenLayout.Rect(5, 152, 310, 10);
-    static final ScreenLayout.Rect DONE = new ScreenLayout.Rect(60, 168, 200, 20);
+    static final ScreenLayout.Rect HELP = new ScreenLayout.Rect(5, 177, 310, 10);
+    static final ScreenLayout.Rect DONE = new ScreenLayout.Rect(60, 193, 200, 20);
 
     private final Options options;
     private final Widgets widgets;
@@ -201,6 +202,7 @@ public final class OptionsScreen {
             case VSYNC        -> options.setVsync(!options.vsync());
             case GUI_SCALE    -> options.cycleGuiScale();
             case INVERT_MOUSE -> options.setInvertMouse(!options.invertMouse());
+            case VIEW_BOBBING -> options.setViewBobbing(!options.viewBobbing());
             default -> { return; }
         }
 
@@ -277,6 +279,7 @@ public final class OptionsScreen {
             case GUI_SCALE    -> "GUI Scale: " + options.guiScaleLabel();
             case SENSITIVITY  -> "Sensitivity: " + options.sensitivityLabel();
             case INVERT_MOUSE -> "Invert Mouse: " + onOff(options.invertMouse());
+            case VIEW_BOBBING -> "View Bobbing: " + onOff(options.viewBobbing());
         };
     }
 

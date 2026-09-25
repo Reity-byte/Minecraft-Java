@@ -107,7 +107,7 @@ public class HeldItemRenderer {
      * @param light 0 až 1 - ruka tmavne v jeskyni a v noci stejně jako svět
      */
     public void draw(int screenWidth, int screenHeight, float fovDegrees,
-                     byte block, float fastSwing, float slowSwing, float light)
+                     byte block, float fastSwing, float slowSwing, float light, Motion motion)
     {
         int floats = build(block, data);
 
@@ -121,7 +121,7 @@ public class HeldItemRenderer {
         // kostky přebily přední.
         glClear(GL_DEPTH_BUFFER_BIT);
 
-        matrix(mvp, block, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing);
+        matrix(mvp, block, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, motion);
 
         shader.bind();
         shader.setMatrix4("uMvp", mvp);
@@ -175,23 +175,47 @@ public class HeldItemRenderer {
         return isBareHand(block) ? buildArm(out) : buildBlock(block, out);
     }
 
+    /**
+     * Pohyb celé ruky kolem oka, společný pro blok i holou ruku:
+     *
+     *   bobPhase, bobAmount  houpání při chůzi - TOTÉŽ co pohled (ViewBobbing)
+     *   tiltYaw, tiltPitch   setrvačnost při otočení myší (HandSway), stupně
+     */
+    public record Motion(float bobPhase, float bobAmount, float tiltYaw, float tiltPitch) {
+        public static final Motion STILL = new Motion(0f, 0f, 0f, 0f);
+    }
+
     /** Matice pro to, co je v ruce - blok a holá ruka se drží každý jinak. */
     static Matrix4f matrix(Matrix4f dest, byte block, int screenWidth, int screenHeight,
                            float fovDegrees, float fastSwing, float slowSwing)
     {
+        return matrix(dest, block, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, Motion.STILL);
+    }
+
+    static Matrix4f matrix(Matrix4f dest, byte block, int screenWidth, int screenHeight,
+                           float fovDegrees, float fastSwing, float slowSwing, Motion motion)
+    {
         return isBareHand(block)
-                ? armMatrix(dest, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing)
-                : blockMatrix(dest, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing);
+                ? armMatrix(dest, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, motion)
+                : blockMatrix(dest, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, motion);
     }
 
     /**
      * Blízká ořezová rovina je stejná jako u světa, daleká stačí malá - ruka
      * je kousek od oka a nic za ní se v tomhle průchodu nekreslí.
+     *
+     * Hned za perspektivou je pohyb celé ruky (Motion) - otáčí se kolem OKA,
+     * takže ruka po obrazovce jede obloukem a nemění velikost, stejně jako
+     * při máchnutí.
      */
-    private static Matrix4f perspective(Matrix4f dest, int screenWidth, int screenHeight, float fovDegrees)
+    private static Matrix4f perspective(Matrix4f dest, int screenWidth, int screenHeight, float fovDegrees,
+                                        Motion motion)
     {
-        return dest.setPerspective((float) Math.toRadians(fovDegrees),
+        dest.setPerspective((float) Math.toRadians(fovDegrees),
                 (float) screenWidth / screenHeight, 0.05f, 10f);
+        ViewBobbing.apply(dest, motion.bobPhase(), motion.bobAmount());
+        return dest.rotateY((float) Math.toRadians(motion.tiltYaw()))
+                .rotateX((float) Math.toRadians(motion.tiltPitch()));
     }
 
     /**
@@ -212,7 +236,13 @@ public class HeldItemRenderer {
     static Matrix4f blockMatrix(Matrix4f dest, int screenWidth, int screenHeight, float fovDegrees,
                                 float fastSwing, float slowSwing)
     {
-        return perspective(dest, screenWidth, screenHeight, fovDegrees)
+        return blockMatrix(dest, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, Motion.STILL);
+    }
+
+    static Matrix4f blockMatrix(Matrix4f dest, int screenWidth, int screenHeight, float fovDegrees,
+                                float fastSwing, float slowSwing, Motion motion)
+    {
+        return perspective(dest, screenWidth, screenHeight, fovDegrees, motion)
                 .translate(0.56f, -0.52f, -0.72f)
                 .rotateY((float) Math.toRadians(45f - 20f * slowSwing))
                 .rotateZ((float) Math.toRadians(-20f * fastSwing))
@@ -259,7 +289,13 @@ public class HeldItemRenderer {
     static Matrix4f armMatrix(Matrix4f dest, int screenWidth, int screenHeight, float fovDegrees,
                               float fastSwing, float slowSwing)
     {
-        return perspective(dest, screenWidth, screenHeight, fovDegrees)
+        return armMatrix(dest, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, Motion.STILL);
+    }
+
+    static Matrix4f armMatrix(Matrix4f dest, int screenWidth, int screenHeight, float fovDegrees,
+                              float fastSwing, float slowSwing, Motion motion)
+    {
+        return perspective(dest, screenWidth, screenHeight, fovDegrees, motion)
                 .rotateY((float) Math.toRadians(SWING_ACROSS * fastSwing))
                 .rotateX((float) Math.toRadians(SWING_LIFT * fastSwing - SWING_DROP * slowSwing))
                 .translate(ARM_X, ARM_Y, ARM_Z)

@@ -3,6 +3,8 @@ package mc;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Odkud se berou zvuky.
@@ -13,6 +15,11 @@ import java.nio.file.Path;
  * třeba sounds/break_stone.wav, a ten přebije syntézu. Chybí-li, nebo nejde
  * přečíst, použije se syntetizovaný placeholder. Dá se tak nahrazovat po
  * jednom a hra zní vždycky celá.
+ *
+ * VARIANTY: vedle sounds/break_stone.wav se berou i break_stone_1.wav až
+ * break_stone_8.wav (klidně bez toho prvního). Přehrávač pak pokaždé vybere
+ * náhodně jednu - deset kroků za sebou nezní jako jedna nahrávka. Bez
+ * souborů jsou varianty syntetizované (SoundSynth.variants).
  *
  * Obě cesty končí týmiž bajty souboru WAV a týmž dekodérem (Wav.decode),
  * takže OpenAL nepozná, odkud zvuk přišel.
@@ -39,44 +46,79 @@ public final class SoundLibrary {
 
     private SoundLibrary() {}
 
-    /** Zvuk z adresáře, když tam je a jde přečíst; jinak syntetizovaný. */
+    /** Nejvíc očíslovaných variant jednoho zvuku: <jméno>_1.wav až _8.wav. */
+    static final int MAX_VARIANTS = 8;
+
+    /** První varianta zvuku - viz variants(). */
     public static Wav.Pcm load(Sound sound, Path directory)
     {
-        Path file = directory.resolve(sound.fileName() + ".wav");
+        return variants(sound, directory).get(0);
+    }
 
-        if(Files.isRegularFile(file))
+    /**
+     * Všechny varianty zvuku, nikdy prázdné: soubory <jméno>.wav a
+     * <jméno>_1.wav až _8.wav, které jdou přečíst, v tomhle pořadí.
+     * Když nejde ani jeden, syntetizované placeholdery.
+     *
+     * Vadný soubor se jen přeskočí (a ohlásí) - ostatní varianty hrají dál.
+     */
+    public static List<Wav.Pcm> variants(Sound sound, Path directory)
+    {
+        List<Wav.Pcm> found = new ArrayList<>();
+        addIfReadable(found, directory.resolve(sound.fileName() + ".wav"));
+
+        for(int i = 1; i <= MAX_VARIANTS; i++)
         {
-            try
+            addIfReadable(found, directory.resolve(sound.fileName() + "_" + i + ".wav"));
+        }
+
+        if(found.isEmpty())
+        {
+            // Přes WAV a zpět, ať obě cesty končí týmž dekodérem.
+            for(int v = 0; v < SoundSynth.variants(sound); v++)
             {
-                long size = Files.size(file);
-
-                if(size > MAX_FILE_BYTES)
-                {
-                    System.err.println("Zvuk " + file + " ma " + size / (1024 * 1024)
-                            + " MB, vic nez " + MAX_FILE_BYTES / (1024 * 1024) + " MB - hraje placeholder");
-                    return Wav.decode(SoundSynth.wav(sound));
-                }
-
-                Wav.Pcm recorded = Wav.decode(Files.readAllBytes(file));
-
-                if(recorded != null)
-                {
-                    return recorded;
-                }
-
-                System.err.println("Zvuk " + file + ": nepodporovany format WAV"
-                        + " (jen PCM 8/16 bit, mono/stereo) - hraje placeholder");
-            }
-            catch(IOException | RuntimeException e)
-            {
-                // RuntimeException taky: vadný soubor nesmí propadnout až do
-                // SoundEngine.open() a vypnout všech 13 zvuků (a hláška
-                // "Zvuk vypnuty: null" neřekla, který soubor za to může).
-                System.err.println("Zvuk " + file + " nejde precist: " + e
-                        + " - hraje placeholder");
+                found.add(Wav.decode(Wav.encode(SoundSynth.synthesize(sound, v))));
             }
         }
 
-        return Wav.decode(SoundSynth.wav(sound));
+        return found;
+    }
+
+    private static void addIfReadable(List<Wav.Pcm> into, Path file)
+    {
+        if(!Files.isRegularFile(file))
+        {
+            return;
+        }
+
+        try
+        {
+            long size = Files.size(file);
+
+            if(size > MAX_FILE_BYTES)
+            {
+                System.err.println("Zvuk " + file + " ma " + size / (1024 * 1024)
+                        + " MB, vic nez " + MAX_FILE_BYTES / (1024 * 1024) + " MB - preskocen");
+                return;
+            }
+
+            Wav.Pcm recorded = Wav.decode(Files.readAllBytes(file));
+
+            if(recorded != null)
+            {
+                into.add(recorded);
+                return;
+            }
+
+            System.err.println("Zvuk " + file + ": nepodporovany format WAV"
+                    + " (jen PCM 8/16 bit, mono/stereo) - preskocen");
+        }
+        catch(IOException | RuntimeException e)
+        {
+            // RuntimeException taky: vadný soubor nesmí propadnout až do
+            // SoundEngine.open() a vypnout všechny zvuky (a hláška
+            // "Zvuk vypnuty: null" neřekla, který soubor za to může).
+            System.err.println("Zvuk " + file + " nejde precist: " + e + " - preskocen");
+        }
     }
 }

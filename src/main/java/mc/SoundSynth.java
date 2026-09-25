@@ -39,18 +39,45 @@ public final class SoundSynth {
         return Wav.encode(synthesize(sound));
     }
 
+    /**
+     * Kolik variant placeholderu zvuk má. Zvuky bloků jsou ze šumu, takže
+     * jiné semínko dá opravdu jiný zvuk - 4 varianty, jako mívá Minecraft.
+     * Kliknutí a sebrání jsou čisté tóny: semínko by je nezměnilo, a v UI
+     * má kliknutí znít pořád stejně.
+     */
+    public static int variants(Sound sound)
+    {
+        return sound.material != null ? 4 : 1;
+    }
+
     public static Wav.Pcm synthesize(Sound sound)
     {
+        return synthesize(sound, 0);
+    }
+
+    /**
+     * Varianta placeholderu. Liší se semínkem šumu a trochu doznívá
+     * (±12 %); délka zůstává, ať druhy drží pořadí krok < položení < rozbití.
+     * Varianta 0 je přesně původní zvuk.
+     */
+    public static Wav.Pcm synthesize(Sound sound, int variant)
+    {
+        int seed = sound.ordinal() + variant * VARIANT_SEED;
+        float d = variant == 0 ? 1f : 1f + 0.12f * (float) Math.sin(variant * 2.3);
+
         // Délka, doznívání (časová konstanta exponenciály) a špička podle druhu.
         return switch(sound.kind)
         {
-            case STEP  -> render(0.09f, 0.022f, attackOf(sound), 0.55f, sound.ordinal(), timbreOf(sound));
-            case BREAK -> render(0.24f, 0.060f, attackOf(sound), 0.90f, sound.ordinal(), timbreOf(sound));
-            case PLACE -> render(0.13f, 0.030f, attackOf(sound), 0.80f, sound.ordinal(), timbreOf(sound));
-            case CLICK -> render(0.05f, 0.012f, ATTACK, 0.6f, sound.ordinal(), SoundSynth::click);
-            case PICKUP -> render(0.10f, 0.030f, ATTACK, 0.7f, sound.ordinal(), SoundSynth::pop);
+            case STEP  -> render(0.09f, 0.022f * d, attackOf(sound), 0.55f, seed, timbreOf(sound));
+            case BREAK -> render(0.24f, 0.060f * d, attackOf(sound), 0.90f, seed, timbreOf(sound));
+            case PLACE -> render(0.13f, 0.030f * d, attackOf(sound), 0.80f, seed, timbreOf(sound));
+            case CLICK -> render(0.05f, 0.012f, ATTACK, 0.6f, seed, SoundSynth::click);
+            case PICKUP -> render(0.10f, 0.030f, ATTACK, 0.7f, seed, SoundSynth::pop);
         };
     }
+
+    /** Odstup semínek variant - větší než počet zvuků, ať se nepotkají. */
+    private static final int VARIANT_SEED = 7919;
 
     /** Listí se rozšustí pomalu, ostatní začínají úderem. */
     private static float attackOf(Sound sound)

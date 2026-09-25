@@ -28,7 +28,8 @@ import static org.lwjgl.system.MemoryUtil.NULL;
  * a všechna play*() nic nedělají. Stejně jako u ukládání světa.
  *
  * Všechny zvuky se nahrají do bufferů hned při otevření - je jich pár desítek
- * kilobajtů, takže není co odkládat. Přehrává se z pevného fondu zdrojů;
+ * kilobajtů, takže není co odkládat. Zvuk má jednu až několik variant
+ * (SoundLibrary.variants); každé přehrání vybere náhodně jednu. Přehrává se z pevného fondu zdrojů;
  * když jsou všechny obsazené, nový zvuk se zahodí (proti "kulometu" chrání
  * hlavně cooldown, fond je jen pojistka).
  * ---------------------------------------------------------------------------
@@ -52,7 +53,8 @@ public final class SoundEngine implements SoundSink {
     private long device = NULL;
     private long context = NULL;
 
-    private final int[] buffers = new int[Sound.values().length];
+    /** Buffery variant: buffers[zvuk.ordinal()][varianta]. */
+    private final int[][] buffers = new int[Sound.values().length][];
     private final int[] sources = new int[SOURCES];
 
     private final SoundThrottle throttle = new SoundThrottle();
@@ -112,10 +114,16 @@ public final class SoundEngine implements SoundSink {
 
         for(Sound sound : Sound.values())
         {
-            Wav.Pcm pcm = SoundLibrary.load(sound, soundDirectory);
-            int buffer = alGenBuffers();
-            alBufferData(buffer, AL_FORMAT_MONO16, pcm.samples(), pcm.sampleRate());
-            buffers[sound.ordinal()] = buffer;
+            java.util.List<Wav.Pcm> variants = SoundLibrary.variants(sound, soundDirectory);
+            int[] ids = new int[variants.size()];
+            buffers[sound.ordinal()] = ids;
+
+            for(int v = 0; v < ids.length; v++)
+            {
+                Wav.Pcm pcm = variants.get(v);
+                ids[v] = alGenBuffers();
+                alBufferData(ids[v], AL_FORMAT_MONO16, pcm.samples(), pcm.sampleRate());
+            }
         }
 
         for(int i = 0; i < SOURCES; i++)
@@ -211,7 +219,8 @@ public final class SoundEngine implements SoundSink {
             return 0;
         }
 
-        alSourcei(source, AL_BUFFER, buffers[sound.ordinal()]);
+        int[] variants = buffers[sound.ordinal()];
+        alSourcei(source, AL_BUFFER, variants[random.nextInt(variants.length)]);
         alSourcef(source, AL_PITCH, sound.kind.pitch(random));
         alSourcef(source, AL_GAIN, sound.kind.gain);
         return source;
@@ -252,12 +261,20 @@ public final class SoundEngine implements SoundSink {
                 }
             }
 
+            // Zdroje jsou už smazané, takže žádný buffer nedrží.
             for(int i = 0; i < buffers.length; i++)
             {
-                if(buffers[i] != 0)
+                if(buffers[i] != null)
                 {
-                    alDeleteBuffers(buffers[i]);
-                    buffers[i] = 0;
+                    for(int id : buffers[i])
+                    {
+                        if(id != 0)
+                        {
+                            alDeleteBuffers(id);
+                        }
+                    }
+
+                    buffers[i] = null;
                 }
             }
 

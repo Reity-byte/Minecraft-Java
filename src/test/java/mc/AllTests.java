@@ -177,6 +177,10 @@ public class AllTests {
         BlockIconTest.main(args);
         failures += BlockIconTest.failures;
 
+        System.out.println(NEWLINE + "========== MotionTest ==========");
+        MotionTest.main(args);
+        failures += MotionTest.failures;
+
         System.out.println(failures == 0
                 ? "\n>>> ALL PASSED"
                 : "\n>>> FAILURES: " + failures);

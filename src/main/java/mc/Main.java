@@ -204,6 +204,9 @@ public class Main {
      * nenaskočila z klidu uprostřed kroku.
      */
     private final PlayerAnimation animation = new PlayerAnimation();
+
+    /** Setrvačnost ruky v první osobě při otočení myší. */
+    private final HandSway handSway = new HandSway();
     private final PlayerModelMesh playerMesh = new PlayerModelMesh();
 
     /** Otevřená obrazovka kontejneru, nebo null. */
@@ -1625,7 +1628,13 @@ public class Main {
         // by posun z ořezané fyziky dělený neořezaným časem vyšel jako skoro
         // stání a nohy by na frame cukly do klidu.
         animation.update(Math.min(dt, Player.MAX_TIME_STEP),
-                (float) Math.hypot(player.x - beforeX, player.z - beforeZ));
+                (float) Math.hypot(player.x - beforeX, player.z - beforeZ), player.onGround);
+
+        // Houpání pohledu při chůzi (ViewBobbing) - se stejnou fází jako nohy.
+        // Vypnuté v Options = síla 0, pohled i ruka stojí.
+        camera.bobPhase = animation.phase();
+        camera.bobAmount = options.viewBobbing() ? animation.bob() : 0f;
+        handSway.update(dt, camera.yaw, camera.pitch);
 
         // V první osobě kamera v očích, ve třetí za hráčem nebo před ním.
         camera.follow(world, player.x, player.eyeY(), player.z);
@@ -1715,8 +1724,14 @@ public class Main {
         // když se zbytek obrazu rozsvítí.
         light = Options.brighten(light, options.brightness());
 
+        // Ruka se houpe TOTÉŽ co pohled (jinak by vůči světu poskakovala)
+        // a při otočení myší se o kousek opozdí.
+        HeldItemRenderer.Motion motion = new HeldItemRenderer.Motion(
+                camera.bobPhase, camera.bobAmount,
+                handSway.tiltYaw(camera.yaw), handSway.tiltPitch(camera.pitch));
+
         heldItem.draw(width, height, options.fov(), held.block(),
-                swing.fast(), swing.slow(), light);
+                swing.fast(), swing.slow(), light, motion);
     }
 
     /**
