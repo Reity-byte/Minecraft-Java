@@ -247,8 +247,15 @@ public final class ItemRegistry {
         return new ItemRegistry(copy, nextId);
     }
 
-    /** Kontrola hodnot předmětu; null = v pořádku, jinak důvod anglicky (ukazuje lab). */
+    /** Kontrola hodnot předmětu bez výdrže - viz plné validate(). */
     public static String validate(String name, int tile, int maxStack, ItemDef.Tool tool, float toolSpeed)
+    {
+        return validate(name, tile, maxStack, tool, toolSpeed, 0);
+    }
+
+    /** Kontrola hodnot předmětu; null = v pořádku, jinak důvod anglicky (ukazuje lab). */
+    public static String validate(String name, int tile, int maxStack, ItemDef.Tool tool, float toolSpeed,
+                                  int durability)
     {
         String trimmed = name == null ? "" : name.trim();
 
@@ -285,6 +292,14 @@ public final class ItemRegistry {
         if(!(toolSpeed >= 1f && toolSpeed <= ItemDef.MAX_TOOL_SPEED))
         {
             return "Tool speed must be 1 to " + (int) ItemDef.MAX_TOOL_SPEED;
+        }
+        if(durability < 0 || durability > ItemDef.MAX_DURABILITY)
+        {
+            return "Durability must be 0 to " + ItemDef.MAX_DURABILITY;
+        }
+        if(durability > 0 && maxStack != 1)
+        {
+            return "Items that wear out stack only 1";
         }
 
         return null;
@@ -389,7 +404,8 @@ public final class ItemRegistry {
             out.append("      \"tile\": ").append(def.tile()).append(",\n");
             out.append("      \"stack\": ").append(def.maxStack()).append(",\n");
             out.append("      \"tool\": ").append(Json.quote(def.tool().key())).append(",\n");
-            out.append("      \"toolSpeed\": ").append(speed).append("\n");
+            out.append("      \"toolSpeed\": ").append(speed).append(",\n");
+            out.append("      \"durability\": ").append(def.durability()).append("\n");
             out.append(i < list.size() - 1 ? "    },\n" : "    }\n");
         }
 
@@ -426,8 +442,9 @@ public final class ItemRegistry {
      * výhrady k jednotlivým předmětům do problems. nextId se počítá i ze
      * PŘESKOČENÝCH předmětů - jejich id už mohou nést uložené světy.
      *
-     * stack, tool a toolSpeed smí chybět (obyčejný předmět: 64, žádný
-     * nástroj, 1) - ručně psaný soubor pak stačí s id, name a tile.
+     * stack, tool, toolSpeed a durability smí chybět (obyčejný předmět: 64,
+     * žádný nástroj, 1, nerozbitný) - ručně psaný soubor pak stačí s id,
+     * name a tile.
      */
     private static ItemRegistry parse(String json, List<String> problems)
     {
@@ -516,6 +533,7 @@ public final class ItemRegistry {
             Float speed = entry.containsKey("toolSpeed")
                     ? (entry.get("toolSpeed") instanceof Double d ? (float) (double) d : null)
                     : 1f;
+            Integer durability = entry.containsKey("durability") ? wholeNumber(entry.get("durability")) : 0;
 
             String reason;
 
@@ -535,9 +553,13 @@ public final class ItemRegistry {
             {
                 reason = "toolSpeed neni cislo";
             }
+            else if(durability == null)
+            {
+                reason = "durability neni cele cislo";
+            }
             else
             {
-                reason = validate(text, tile, stack, tool, speed);
+                reason = validate(text, tile, stack, tool, speed, durability);
             }
 
             if(reason != null)
@@ -554,7 +576,7 @@ public final class ItemRegistry {
                 continue;
             }
 
-            byId[id] = new ItemDef(id, trimmed, tile, stack, tool, speed);
+            byId[id] = new ItemDef(id, trimmed, tile, stack, tool, speed, durability);
         }
 
         return new ItemRegistry(byId, next);

@@ -19,9 +19,14 @@ import java.util.Locale;
  * @param tile      dlaždice v atlasu předmětů
  * @param maxStack  kolik se vejde do slotu, 1 až ItemStack.MAX_COUNT (nástroj 1)
  * @param tool      druh nástroje, NONE = obyčejný předmět
- * @param toolSpeed kolikrát rychleji nástroj těží materiál, na který je (1 = jako ruka)
+ * @param toolSpeed  kolikrát rychleji nástroj těží materiál, na který je (1 = jako ruka)
+ * @param durability kolik bloků předmět vykope, než praskne; 0 = nerozbitný.
+ *                   Předmět s výdrží se nestackuje (maxStack 1) - poškození
+ *                   nese hromádka (ItemStack.damage) a dvě různě opotřebené
+ *                   by nešly slít.
  */
-public record ItemDef(int id, String name, int tile, int maxStack, Tool tool, float toolSpeed) {
+public record ItemDef(int id, String name, int tile, int maxStack, Tool tool, float toolSpeed,
+                      int durability) {
 
     /**
      * Druh nástroje a materiál (Sound.Material), na který je. Stejné
@@ -66,10 +71,13 @@ public record ItemDef(int id, String name, int tile, int maxStack, Tool tool, fl
     /** Nejrychlejší nástroj. Minecraftí zlatý krumpáč je 12x, diamantový 8x. */
     public static final float MAX_TOOL_SPEED = 16f;
 
+    /** Nejvyšší výdrž. Minecraftí netheritový nástroj má 2031; short v uloženém světě unese víc. */
+    public static final int MAX_DURABILITY = 9999;
+
     /** Obyčejný předmět: stack 64, žádný nástroj. */
     public static ItemDef plain(int id, String name, int tile)
     {
-        return new ItemDef(id, name, tile, ItemStack.MAX_COUNT, Tool.NONE, 1f);
+        return new ItemDef(id, name, tile, ItemStack.MAX_COUNT, Tool.NONE, 1f, 0);
     }
 
     public boolean isTool()
@@ -77,23 +85,34 @@ public record ItemDef(int id, String name, int tile, int maxStack, Tool tool, fl
         return tool != Tool.NONE;
     }
 
+    /** Opotřebuje se (má výdrž)? */
+    public boolean wears()
+    {
+        return durability > 0;
+    }
+
     public ItemDef withName(String newName)
     {
-        return new ItemDef(id, newName, tile, maxStack, tool, toolSpeed);
+        return new ItemDef(id, newName, tile, maxStack, tool, toolSpeed, durability);
     }
 
     public ItemDef withTile(int newTile)
     {
-        return new ItemDef(id, name, newTile, maxStack, tool, toolSpeed);
+        return new ItemDef(id, name, newTile, maxStack, tool, toolSpeed, durability);
     }
 
     public ItemDef withStack(int newMaxStack)
     {
-        return new ItemDef(id, name, tile, newMaxStack, tool, toolSpeed);
+        return new ItemDef(id, name, tile, newMaxStack, tool, toolSpeed, durability);
     }
 
     public ItemDef withTool(Tool newTool, float newSpeed)
     {
-        return new ItemDef(id, name, tile, maxStack, newTool, newSpeed);
+        return new ItemDef(id, name, tile, maxStack, newTool, newSpeed, durability);
+    }
+
+    public ItemDef withDurability(int newDurability)
+    {
+        return new ItemDef(id, name, tile, maxStack, tool, toolSpeed, newDurability);
     }
 }

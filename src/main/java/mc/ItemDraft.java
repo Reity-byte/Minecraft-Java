@@ -12,7 +12,10 @@ import java.util.Locale;
  * a zlato 12x, takže "4x" je poznat jako kamenný nástroj.
  *
  * Nástroj se v Minecraftu nestackuje: přepnutí na nástroj nastaví hromádku
- * na 1, zpátky na obyčejný předmět na 64. Jde to pak změnit ručně.
+ * na 1 a výdrž kamene (131), zpátky na obyčejný předmět hromádku 64 a bez
+ * výdrže. Výdrž se krokuje po stupních Minecraftu: zlato 32, dřevo 59,
+ * kámen 131, železo 250, diamant 1561. Předmět s výdrží má vždycky
+ * hromádku 1 (opotřebení nese hromádka, různé by nešly slít).
  *
  * Na rozdíl od bloku nepotřebuje dočasný registr: náhled je obrázek dlaždice
  * a nic ve hře se na předmět z návrhu neptá.
@@ -24,6 +27,10 @@ final class ItemDraft {
 
     static final int[] STACK_STEPS = {1, 8, 16, 32, 64};
     static final float[] SPEED_STEPS = {2f, 4f, 6f, 8f, 12f, 16f};
+    static final int[] DURABILITY_STEPS = {0, 32, 59, 131, 250, 1561};
+
+    /** Výdrž, kterou dostane nový nástroj: kámen. */
+    private static final int TOOL_DURABILITY = 3;
 
     private static final int FULL_STACK = STACK_STEPS.length - 1;
     private static final int DEFAULT_SPEED = 1;   // 4x, kámen
@@ -36,6 +43,7 @@ final class ItemDraft {
     int stackStep = FULL_STACK;
     ItemDef.Tool tool = ItemDef.Tool.NONE;
     int speedStep = DEFAULT_SPEED;
+    int durabilityStep = 0;
 
     ItemDraft(int startTile)
     {
@@ -49,7 +57,35 @@ final class ItemDraft {
 
     void more()
     {
+        // S výdrží zůstává hromádka 1 - viz třída.
+        if(durability() > 0)
+        {
+            return;
+        }
+
         stackStep = Math.min(STACK_STEPS.length - 1, stackStep + 1);
+    }
+
+    int durability()
+    {
+        return DURABILITY_STEPS[durabilityStep];
+    }
+
+    /** Další stupeň výdrže dokola; výdrž nastaví hromádku na 1. */
+    void nextDurability()
+    {
+        durabilityStep = (durabilityStep + 1) % DURABILITY_STEPS.length;
+
+        if(durability() > 0)
+        {
+            stackStep = 0;
+        }
+    }
+
+    /** Popisek výdrže do labu: "Unbreakable", "Uses 131". */
+    String durabilityLabel()
+    {
+        return durability() == 0 ? "Unbreakable" : "Uses " + durability();
     }
 
     void fewer()
@@ -61,8 +97,25 @@ final class ItemDraft {
     void nextTool()
     {
         ItemDef.Tool[] tools = ItemDef.Tool.values();
+        boolean wasTool = tool != ItemDef.Tool.NONE;
         tool = tools[(tool.ordinal() + 1) % tools.length];
-        stackStep = tool == ItemDef.Tool.NONE ? FULL_STACK : 0;
+
+        if(tool == ItemDef.Tool.NONE)
+        {
+            stackStep = FULL_STACK;
+            durabilityStep = 0;
+        }
+        else
+        {
+            stackStep = 0;
+
+            // Jen při přechodu z obyčejného předmětu - krokování mezi
+            // krumpáčem a sekerou nastavenou výdrž nemění.
+            if(!wasTool && durabilityStep == 0)
+            {
+                durabilityStep = TOOL_DURABILITY;
+            }
+        }
     }
 
     void nextSpeed()
@@ -91,7 +144,8 @@ final class ItemDraft {
     /** Předmět podle návrhu s id, které by v registru dostal. Registr nemění. */
     ItemDef toDef(ItemRegistry registry)
     {
-        return registry.define(name, tile).withStack(stack()).withTool(tool, speed());
+        return registry.define(name, tile).withStack(stack()).withTool(tool, speed())
+                .withDurability(durability());
     }
 
     /** Proč předmět nejde založit (anglicky, pro stavový řádek), nebo null. */
@@ -103,7 +157,7 @@ final class ItemDraft {
                     + (ItemRegistry.LAST_ID - ItemRegistry.FIRST_ID + 1);
         }
 
-        String invalid = ItemRegistry.validate(name, tile, stack(), tool, speed());
+        String invalid = ItemRegistry.validate(name, tile, stack(), tool, speed(), durability());
 
         if(invalid != null)
         {

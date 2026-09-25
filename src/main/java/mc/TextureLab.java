@@ -1373,6 +1373,10 @@ public class TextureLab {
                 itemDraft.nextSpeed();
             }
         }
+        else if(layout.hit(TextureLabLayout.DURABILITY, mouseX, mouseY))
+        {
+            itemDraft.nextDurability();
+        }
         else if(layout.hit(TextureLabLayout.NEW_TILE, mouseX, mouseY))
         {
             newItemTile();
@@ -2301,6 +2305,7 @@ public class TextureLab {
         // Nástroj a rychlost jsou tlačítka, která se klikáním přepínají dokola.
         button(layout, screenHeight, TextureLabLayout.SOLID, mouseX, mouseY);
         button(layout, screenHeight, TextureLabLayout.OPAQUE, mouseX, mouseY);
+        button(layout, screenHeight, TextureLabLayout.DURABILITY, mouseX, mouseY);
 
         button(layout, screenHeight, TextureLabLayout.NEW_TILE, mouseX, mouseY);
         button(layout, screenHeight, TextureLabLayout.CREATE, mouseX, mouseY);
@@ -2431,7 +2436,8 @@ public class TextureLab {
             if(def.tile() == tile)
             {
                 users.add(def.name() + (def.isTool()
-                        ? "  " + def.tool().key() + " " + (int) def.toolSpeed() + "x" : "  stack " + def.maxStack()));
+                        ? "  " + def.tool().key() + " " + (int) def.toolSpeed() + "x" : "  stack " + def.maxStack())
+                        + (def.wears() ? "  " + def.durability() + " uses" : ""));
             }
         }
 
@@ -2480,7 +2486,8 @@ public class TextureLab {
         centered(layout, TextureLabLayout.OPAQUE, itemDraft.tool == ItemDef.Tool.NONE
                 ? "-" : "Speed " + (int) itemDraft.speed() + "x");
 
-        label(layout, 8, TextureLabLayout.OPAQUE.y() + 16, "Tile " + itemDraft.tile + " (click atlas)");
+        centered(layout, TextureLabLayout.DURABILITY, itemDraft.durabilityLabel());
+        label(layout, 8, TextureLabLayout.DURABILITY.y() + 16, "Tile " + itemDraft.tile + " (click atlas)");
 
         TextureLabLayout.Rect p = TextureLabLayout.PREVIEW;
         label(layout, p.x() + 3, p.y() + 3, itemDraft.name.isBlank() ? "New item" : itemDraft.name.trim());

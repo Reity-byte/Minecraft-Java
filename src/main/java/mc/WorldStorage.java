@@ -54,6 +54,8 @@ public final class WorldStorage {
     private static final int MAGIC_V3 = 0x4D435733;
     /** V4: hromádka v inventáři nese id jako short (bloky i předměty, viz Items), ne byte. */
     private static final int MAGIC_V4 = 0x4D435734;
+    /** V5: hromádka navíc nese opotřebení (short) - nástroje s výdrží. */
+    private static final int MAGIC_V5 = 0x4D435735;
 
     /**
      * Zvýšit při každé změně generátoru, která posune terén.
@@ -122,7 +124,7 @@ public final class WorldStorage {
         {
             try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(bytes)))
             {
-                out.writeInt(MAGIC_V4);
+                out.writeInt(MAGIC_V5);
                 out.writeInt(GENERATOR_VERSION);
 
                 out.writeFloat(save.x());
@@ -155,6 +157,7 @@ public final class WorldStorage {
                     ItemStack safe = stack == null ? ItemStack.EMPTY : stack;
                     out.writeShort(safe.id());
                     out.writeInt(safe.count());
+                    out.writeShort(safe.damage());
                 }
 
                 // Denní doba, až úplně na konci - viz poznámka u MAGIC.
@@ -194,13 +197,14 @@ public final class WorldStorage {
         {
             int magic = in.readInt();
 
-            if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3 && magic != MAGIC_V4)
+            if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3 && magic != MAGIC_V4
+                    && magic != MAGIC_V5)
             {
                 // "MCW" + jiná číslice je NAŠE značka, jen z novější verze hry -
                 // říct to, ať si hráč nemyslí, že je soubor poškozený.
                 report.accept((magic & 0xFFFFFF00) == (MAGIC_V1 & 0xFFFFFF00)
                         ? "Ulozeny svet je z novejsi verze hry (format " + (char) (magic & 0xFF)
-                                + "), tahle umi jen do 4: " + path
+                                + "), tahle umi jen do 5: " + path
                         : "Ulozeny svet ma cizi format: " + path);
                 return null;
             }
@@ -278,7 +282,7 @@ public final class WorldStorage {
             ItemStack[] inventory = new ItemStack[0];
 
             // Starší soubor inventář nemá - načte se prázdný a hráč začne s ničím.
-            if(magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4)
+            if(magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4 || magic == MAGIC_V5)
             {
                 int slots = in.readInt();
 
@@ -294,8 +298,9 @@ public final class WorldStorage {
                 for(int i = 0; i < slots; i++)
                 {
                     // Do V3 byte id bloku, od V4 short id bloku nebo předmětu.
-                    int id = magic == MAGIC_V4 ? in.readShort() : in.readByte();
+                    int id = magic >= MAGIC_V4 ? in.readShort() : in.readByte();
                     int count = in.readInt();
+                    int damage = magic >= MAGIC_V5 ? in.readShort() : 0;
 
                     // Hromádka přes MAX_COUNT by rozbila slévání (záporné
                     // místo ve slotu) - ořízne se a ohlásí, soubor se nezahodí.
@@ -305,7 +310,7 @@ public final class WorldStorage {
                         clamped++;
                     }
 
-                    inventory[i] = ItemStack.of(id, count);
+                    inventory[i] = ItemStack.of(id, count, damage);
                 }
 
                 if(clamped > 0)
@@ -320,7 +325,7 @@ public final class WorldStorage {
             // neukládal vůbec.
             float dayTime = DayCycle.START_TIME;
 
-            if(magic == MAGIC_V3 || magic == MAGIC_V4)
+            if(magic >= MAGIC_V3)
             {
                 dayTime = in.readFloat();
             }

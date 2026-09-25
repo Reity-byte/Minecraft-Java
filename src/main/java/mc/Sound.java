@@ -48,7 +48,10 @@ public enum Sound {
     AMBIENT_WATER(Kind.AMBIENT, null),
 
     /** Kápnutí vody v jeskyni - občas, poziční, někde kolem hráče. */
-    CAVE_DRIP(Kind.DRIP, null);
+    CAVE_DRIP(Kind.DRIP, null),
+
+    /** Prasknutí opotřebeného nástroje. */
+    ITEM_BREAK(Kind.ITEM_BREAK, null);
 
     /**
      * Druh zvuku a pravidla, podle kterých se přehrává.
@@ -73,7 +76,8 @@ public enum Sound {
         // Smyčka: hlasitost řídí Ambience každý frame, výška se nemění.
         AMBIENT(0f,         0f,           1.00f),
         // Kapka: výrazná obměna výšky, ať každá zní jinak.
-        DRIP (0.50f,        0.30f,        0.50f);
+        DRIP (0.50f,        0.30f,        0.50f),
+        ITEM_BREAK(0.10f,   0.10f,        0.90f);
 
         public final float cooldown;
         public final float pitchVariation;

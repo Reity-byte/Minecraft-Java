@@ -28,6 +28,7 @@ public class ItemTest {
             rendering();
             draft();
             gameplay();
+            durability();
         } finally {
             ItemRegistry.activate(ItemRegistry.empty());
             RecipeBook.activate(RecipeBook.empty());
@@ -435,6 +436,61 @@ public class ItemTest {
         check("recept nesmi dat dva nastroje naraz",
                 RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE}, pick.id(), 2)) != null
                         && RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE}, pick.id(), 1)) == null, "");
+
+        ItemRegistry.activate(ItemRegistry.empty());
+    }
+
+    static void durability() {
+        ItemRegistry r = ItemRegistry.empty();
+        ItemDef pick = r.define("Pick", 20).withStack(1).withTool(ItemDef.Tool.PICKAXE, 4f).withDurability(3);
+        r = r.with(pick);
+        ItemRegistry.activate(r);
+
+        ItemStack fresh = ItemStack.of(pick.id(), 1);
+        ItemStack once = fresh.worn(1);
+        check("pouziti ubere bod vydrze", once.damage() == 1 && once.id() == pick.id() && once.count() == 1, once.toString());
+        check("na posledni bod nastroj praskne (EMPTY)", once.worn(1).worn(1).isEmpty() && fresh.worn(3).isEmpty(), "");
+        check("predmet bez vydrze ani blok se neopotrebi (tataz hromadka)",
+                ItemStack.of(ItemRegistry.STICK, 5).worn(1).equals(ItemStack.of(ItemRegistry.STICK, 5))
+                        && ItemStack.of(World.STONE, 1).worn(1).damage() == 0, "");
+        check("ruzne opotrebene nejsou totez, pocet opotrebeni drzi",
+                !fresh.sameItem(once) && once.sameItem(once.withCount(1)) && once.plus(0).damage() == 1, "");
+
+        check("validace vydrze",
+                ItemRegistry.validate("X", 20, 64, ItemDef.Tool.PICKAXE, 4f, 10) != null
+                        && ItemRegistry.validate("X", 20, 1, ItemDef.Tool.PICKAXE, 4f, -1) != null
+                        && ItemRegistry.validate("X", 20, 1, ItemDef.Tool.PICKAXE, 4f, ItemDef.MAX_DURABILITY + 1) != null
+                        && ItemRegistry.validate("X", 20, 1, ItemDef.Tool.PICKAXE, 4f, 131) == null, "");
+        check("items.json nese vydrz, chybejici = nerozbitny",
+                ItemRegistry.fromJson(r.toJson()).get(pick.id()).durability() == 3
+                        && ItemRegistry.fromJson("{\"format\": 1, \"items\": [{\"id\": 700, \"name\": \"A\", \"tile\": 9}]}")
+                        .get(700).durability() == 0, "");
+
+        check("novy nastroj pruh nema, opotrebeny ano",
+                Durability.remaining(fresh) < 0 && Math.abs(Durability.remaining(ItemStack.of(pick.id(), 1, 1)) - 2f / 3f) < 1e-5f
+                        && Durability.remaining(ItemStack.of(ItemRegistry.STICK, 1)) < 0, "");
+        float[] green = Durability.color(1f), red = Durability.color(0f);
+        check("pruh: novy zeleny, skoro prasknuty cerveny",
+                green[1] > 0.9f && green[0] < 0.1f && red[0] > 0.9f && red[1] < 0.1f, "");
+
+        check("nastroje se opotrebi jen v survivalu",
+                GameMode.SURVIVAL.wearsTools() && !GameMode.CREATIVE.wearsTools(), "");
+
+        ItemDraft d = new ItemDraft(20);
+        check("obycejny predmet je nerozbitny", d.durability() == 0 && d.durabilityLabel().equals("Unbreakable"), "");
+        d.nextTool();
+        check("nastroj dostane vydrz kamene (131)", d.durability() == 131 && d.stack() == 1
+                && d.durabilityLabel().equals("Uses 131"), d.durabilityLabel());
+        d.nextTool();
+        check("krokovani nastroju vydrz nemeni", d.durability() == 131, "");
+        d.more();
+        check("s vydrzi zustava hromadka 1", d.stack() == 1, "" + d.stack());
+        d.nextDurability();
+        d.name = "Iron Axe";
+        ItemDef made = d.toDef(r);
+        check("toDef nese vydrz (zelezo 250)", made.durability() == 250 && d.problem(r) == null, "" + d.problem(r));
+        d.nextTool(); d.nextTool();
+        check("zpatky na obycejny predmet: bez vydrze a 64", d.tool == ItemDef.Tool.NONE && d.durability() == 0 && d.stack() == 64, "");
 
         ItemRegistry.activate(ItemRegistry.empty());
     }

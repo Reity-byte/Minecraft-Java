@@ -87,6 +87,13 @@ public final class Items {
         return def != null ? def.maxStack() : ItemStack.MAX_COUNT;
     }
 
+    /** Výdrž věci (ItemDef.durability): 0 = nerozbitná, bloky vždycky. */
+    public static int durability(int id)
+    {
+        ItemDef def = item(id);
+        return def != null ? def.durability() : 0;
+    }
+
     /**
      * Kolikrát rychleji se blok kope s touhle věcí v ruce. Nástroj zrychlí
      * jen materiál, na který je (krumpáč kámen, sekera dřevo, lopata hlínu

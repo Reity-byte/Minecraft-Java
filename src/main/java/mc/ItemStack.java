@@ -10,10 +10,17 @@ package mc;
  * Prázdný slot drží {@link #EMPTY}, ne null: odpadne tím kontrola na null
  * v každém kreslení i v každém přesunu.
  *
- * @param id    id věci: blok pod Items.FIRST_ITEM, předmět od něj výš
- * @param count kolik kusů
+ * @param id     id věci: blok pod Items.FIRST_ITEM, předmět od něj výš
+ * @param count  kolik kusů
+ * @param damage opotřebení předmětu s výdrží (ItemDef.durability), 0 = nový
  */
-public record ItemStack(int id, int count) {
+public record ItemStack(int id, int count, int damage) {
+
+    /** Hromádka bez opotřebení - všechno kromě nástrojů. */
+    public ItemStack(int id, int count)
+    {
+        this(id, count, 0);
+    }
 
     /** Kolik se vejde do jednoho slotu. Stejně jako v Minecraftu. */
     public static final int MAX_COUNT = 64;
@@ -23,7 +30,14 @@ public record ItemStack(int id, int count) {
     /** Hromádka; nula kusů, vzduch i id mimo rozsahy Items dají EMPTY. */
     public static ItemStack of(int id, int count)
     {
-        return count <= 0 || id == World.AIR || !Items.inRange(id) ? EMPTY : new ItemStack(id, count);
+        return of(id, count, 0);
+    }
+
+    /** Hromádka s opotřebením; záporné se bere jako 0. */
+    public static ItemStack of(int id, int count, int damage)
+    {
+        return count <= 0 || id == World.AIR || !Items.inRange(id) ? EMPTY
+                : new ItemStack(id, count, Math.max(0, damage));
     }
 
     public boolean isEmpty()
@@ -73,22 +87,42 @@ public record ItemStack(int id, int count) {
      */
     public boolean sameItem(ItemStack other)
     {
-        return !isEmpty() && !other.isEmpty() && id == other.id;
+        // Různě opotřebené nástroje nejsou "totéž" - slitím by se jedno
+        // opotřebení ztratilo.
+        return !isEmpty() && !other.isEmpty() && id == other.id && damage == other.damage;
     }
 
     public ItemStack withCount(int newCount)
     {
-        return of(id, newCount);
+        return of(id, newCount, damage);
     }
 
     public ItemStack plus(int amount)
     {
-        return of(id, count + amount);
+        return of(id, count + amount, damage);
+    }
+
+    /**
+     * Po jednom použití (vykopaný blok): opotřebení o amount víc. Předmět
+     * bez výdrže se nemění; když opotřebení dojde výdrže, předmět praskne
+     * a zbude EMPTY.
+     */
+    public ItemStack worn(int amount)
+    {
+        int durability = Items.durability(id);
+
+        if(isEmpty() || durability <= 0 || amount <= 0)
+        {
+            return this;
+        }
+
+        return damage + amount >= durability ? EMPTY : of(id, count, damage + amount);
     }
 
     @Override
     public String toString()
     {
-        return isEmpty() ? "prazdno" : count + "x " + (Items.isBlock(id) ? "blok " : "predmet ") + id;
+        return isEmpty() ? "prazdno" : count + "x " + (Items.isBlock(id) ? "blok " : "predmet ") + id
+                + (damage > 0 ? " (opotrebeni " + damage + ")" : "");
     }
 }

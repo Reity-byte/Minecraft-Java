@@ -37,10 +37,10 @@ public class SaveTest {
         Files.write(junk, new byte[]{1, 2, 3, 4, 5, 6, 7, 8});
         check("cizi soubor se odmitne misto padu", WorldStorage.load(junk) == null, "");
 
-        // PER-11: nasi znacku z novejsi verze hry (MCW5) hlasit jako novejsi,
+        // PER-11: nasi znacku z novejsi verze hry (MCW6) hlasit jako novejsi,
         // ne jako "cizi format" - to by hrac bral jako poskozeny soubor.
         Path newer = dir.resolve("newer.dat");
-        Files.write(newer, new byte[]{'M', 'C', 'W', '5', 0, 0, 0, 0});
+        Files.write(newer, new byte[]{'M', 'C', 'W', '6', 0, 0, 0, 0});
         java.util.List<String> said = new java.util.ArrayList<>();
         check("novejsi format se odmitne", WorldStorage.read(newer, said::add) == null, "");
         check("a hlaska rekne, ze je z novejsi verze", !said.isEmpty() && said.get(0).contains("novejsi"),
@@ -363,7 +363,7 @@ public class SaveTest {
         inventory[0] = ItemStack.of(Items.FIRST_ITEM + 44, 5);      // predmet
         inventory[1] = ItemStack.of(World.STONE, 3);                 // vestaveny blok
         inventory[2] = ItemStack.of(Items.LAST_ID, 1);               // nejvyssi id
-        inventory[3] = ItemStack.EMPTY;
+        inventory[3] = ItemStack.of(Items.FIRST_ITEM + 45, 1, 123);  // opotrebeny nastroj (MCW5)
 
         check("predmet se da zapsat do hromadky (neni EMPTY)",
                 !inventory[0].isEmpty() && !inventory[0].isBlock() && inventory[0].block() == World.AIR, "");
@@ -375,7 +375,7 @@ public class SaveTest {
                 new java.util.HashMap<>(), inventory, 100f));
 
         byte[] head = Files.readAllBytes(file);
-        check("uklada se jako MCW4", head[0] == 'M' && head[1] == 'C' && head[2] == 'W' && head[3] == '4',
+        check("uklada se jako MCW5", head[0] == 'M' && head[1] == 'C' && head[2] == 'W' && head[3] == '5',
                 "" + (char) head[3]);
 
         WorldStorage.Save loaded = WorldStorage.load(file);
@@ -383,10 +383,31 @@ public class SaveTest {
                 loaded != null && loaded.inventory()[0].equals(inventory[0])
                         && loaded.inventory()[1].equals(inventory[1])
                         && loaded.inventory()[2].equals(inventory[2])
-                        && loaded.inventory()[3].isEmpty(),
+                        && loaded.inventory()[3].equals(inventory[3]) && loaded.inventory()[3].damage() == 123,
                 loaded == null ? "null" : java.util.Arrays.toString(loaded.inventory()));
         check("predmet neni blok z labu (nehlasi se jako neznamy blok)",
                 loaded != null && WorldStorage.labBlockIds(loaded).isEmpty(), "");
+
+        // Starsi MCW4 (short id, bez opotrebeni) se nacte dal - opotrebeni 0.
+        Path v4 = dir.resolve("items-v4.dat");
+        try (java.io.DataOutputStream out = new java.io.DataOutputStream(Files.newOutputStream(v4))) {
+            out.writeInt(0x4D435734);                   // MCW4
+            out.writeInt(WorldStorage.GENERATOR_VERSION);
+            out.writeFloat(8); out.writeFloat(70); out.writeFloat(8);
+            out.writeFloat(0); out.writeFloat(0);
+            out.writeBoolean(false);
+            out.writeInt(0);
+            out.writeInt(0);                            // zadne zmeny
+            out.writeInt(1);                            // jeden slot
+            out.writeShort(Items.FIRST_ITEM + 44);
+            out.writeInt(7);
+            out.writeFloat(100f);
+        }
+        WorldStorage.Save old = WorldStorage.load(v4);
+        check("MCW4 se nacte: predmet se 7 kusy, bez opotrebeni",
+                old != null && old.inventory()[0].id() == Items.FIRST_ITEM + 44 && old.inventory()[0].count() == 7
+                        && old.inventory()[0].damage() == 0 && old.dayTime() == 100f,
+                old == null ? "null" : java.util.Arrays.toString(old.inventory()));
     }
 
     /** Zapise soubor MCW3 s danou polohou, pohledem a jednou hromadkou. */

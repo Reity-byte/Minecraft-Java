@@ -1728,9 +1728,14 @@ public class Main {
 
         // Věc v ruce rozhoduje o rychlosti: nástroj na svůj materiál kope rychleji.
         if (mining.update(world, dt, miningHeld, hit, mode, inventory.hotbar(selectedSlot).id())) {
+            // Co se kope, je potřeba vědět PŘED harvest() - potom je tam vzduch.
+            byte broken = world.getBlock(mining.x(), mining.y(), mining.z());
+
             // Survival: vytěžený kus vypadne na zem, do inventáře ho dá až sebrání.
             // Creative: blok zmizí a nic po něm nezbude.
-            mining.harvest(world, inventory, drops, sound, mode);
+            if (mining.harvest(world, inventory, drops, sound, mode) && mode.wearsTools()) {
+                wearHeldTool(broken);
+            }
 
             // Zaměření znovu: rozbitý blok už tam není. Jinak by se obrys
             // nakreslil na vzduch a PMB v nejbližších událostech položil blok
@@ -1746,6 +1751,30 @@ public class Main {
         drawHeldItem();
 
         hud.draw(width, height, inventory, selectedSlot, showDebug ? debugLines() : null);
+    }
+
+    /**
+     * Vykopaný blok opotřebuje nástroj v ruce o jeden bod (Minecraft: blok,
+     * který se rozbije okamžitě, jako pochodeň, nástroj nešetří). Když výdrž
+     * dojde, nástroj praskne - zmizí se zvukem.
+     */
+    private void wearHeldTool(byte broken) {
+        if (World.hardness(broken) <= 0f) {
+            return;
+        }
+
+        ItemStack held = inventory.hotbar(selectedSlot);
+        ItemStack worn = held.worn(1);
+
+        if (worn == held) {
+            return;   // bez výdrže
+        }
+
+        inventory.set(selectedSlot, worn);
+
+        if (worn.isEmpty()) {
+            sound.play(Sound.ITEM_BREAK);
+        }
     }
 
     /**

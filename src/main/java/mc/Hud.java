@@ -187,6 +187,17 @@ public class Hud {
         }
 
         icons.end();
+
+        // Pruhy výdrže opotřebených nástrojů - až po ikonách, ať leží nad nimi.
+        shapes.begin(screenWidth, screenHeight);
+
+        for(int i = 0; i < Inventory.HOTBAR_SIZE; i++)
+        {
+            float slotX = barX + HOTBAR_BORDER * scale + i * SLOT_SIZE * scale;
+            Durability.draw(shapes, slotX + inset, slotY + inset, ICON_SIZE * scale, inventory.hotbar(i));
+        }
+
+        shapes.end();
     }
 
     /** Počty kusů v hotbaru, vpravo dole ve slotu jako v Minecraftu. */

@@ -794,6 +794,7 @@ public class ContainerScreen {
         // kurzor kreslil v průchodu ikon a počty slotů až po něm, takže číslice
         // slotu pod myší ležela přes drženou kostku.
         drawSlotIcons(icons, screenWidth, screenHeight, scale);
+        drawSlotBars(shapes, screenWidth, screenHeight, scale);
 
         text.begin(screenWidth, screenHeight, scale);
         drawCounts(text, screenWidth, screenHeight, scale);
@@ -810,7 +811,7 @@ public class ContainerScreen {
 
         text.end();
 
-        drawCursor(icons, text, mouseX, mouseY, screenWidth, screenHeight, scale);
+        drawCursor(shapes, icons, text, mouseX, mouseY, screenWidth, screenHeight, scale);
     }
 
     /**
@@ -898,8 +899,29 @@ public class ContainerScreen {
         icons.end();
     }
 
+    /** Pruhy výdrže opotřebených nástrojů ve slotech - nad ikonami, pod počty. */
+    private void drawSlotBars(Renderer2D shapes, int screenWidth, int screenHeight, int scale)
+    {
+        shapes.begin(screenWidth, screenHeight);
+
+        for(SlotGrid grid : grids)
+        {
+            for(int row = 0; row < grid.rows(); row++)
+            {
+                for(int column = 0; column < grid.columns(); column++)
+                {
+                    Durability.draw(shapes, slotX(grid, column, screenWidth, scale) + scale,
+                            slotY(grid, row, screenHeight, scale) + scale, SLOT_INNER * scale,
+                            shownAt(grid, slotIndex(grid, row, column)));
+                }
+            }
+        }
+
+        shapes.end();
+    }
+
     /** Hromádka na kurzoru i s počtem - nad vším ostatním. */
-    private void drawCursor(BlockIcon icons, TextRenderer text, double mouseX, double mouseY,
+    private void drawCursor(Renderer2D shapes, BlockIcon icons, TextRenderer text, double mouseX, double mouseY,
                             int screenWidth, int screenHeight, int scale)
     {
         ItemStack cursor = shownHeld();
@@ -913,6 +935,11 @@ public class ContainerScreen {
         icons.draw(heldX(mouseX, scale), heldY(mouseY, screenHeight, scale),
                 SLOT_INNER * scale, cursor.id());
         icons.end();
+
+        shapes.begin(screenWidth, screenHeight);
+        Durability.draw(shapes, heldX(mouseX, scale), heldY(mouseY, screenHeight, scale),
+                SLOT_INNER * scale, cursor);
+        shapes.end();
 
         if(cursor.count() > 1)
         {

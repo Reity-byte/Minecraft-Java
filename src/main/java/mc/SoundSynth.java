@@ -74,6 +74,7 @@ public final class SoundSynth {
             case CLICK -> render(0.05f, 0.012f, ATTACK, 0.6f, seed, SoundSynth::click);
             case PICKUP -> render(0.10f, 0.030f, ATTACK, 0.7f, seed, SoundSynth::pop);
             case DRIP   -> render(0.12f, 0.035f, ATTACK, 0.6f, seed, SoundSynth::drip);
+            case ITEM_BREAK -> render(0.22f, 0.050f, ATTACK, 0.85f, seed, SoundSynth::snap);
             case AMBIENT -> switch(sound)
             {
                 case AMBIENT_WIND  -> renderLoop(0.5f, seed, SoundSynth::wind);
@@ -191,6 +192,18 @@ public final class SoundSynth {
         f.high = lowPass(f.high, f.low1, 400f);
         float ripple = 0.55f + 0.25f * cycle(t, 13, 0f) + 0.2f * cycle(t, 29, 0.7f);
         return (f.low1 - f.high) * ripple;
+    }
+
+    /**
+     * Prasknutí nástroje: ostré lupnutí šumu a pod ním tón, který rychle
+     * padá (900 -> 300 Hz) - "křup a cink", jako když se zlomí dřevo s kovem.
+     */
+    private static float snap(int i, float t, int seed, Filters f)
+    {
+        f.low1 = lowPass(f.low1, noise(i, seed), 4000f);
+        float crack = t < 0.03f ? f.low1 * 1.5f : f.low1 * 0.4f;
+        double phase = 2 * Math.PI * (900.0 * t - 1360.0 * t * t);
+        return crack + 0.5f * (float) Math.sin(phase);
     }
 
     /** Kapka: tón, jehož výška KLESÁ (1800 -> 1100 Hz) - obráceně než sebrání. */

@@ -66,6 +66,12 @@ public enum GameMode {
         return this == SURVIVAL;
     }
 
+    /** Opotřebovávají se nástroje? V creative ne, jako v Minecraftu. */
+    public boolean wearsTools()
+    {
+        return this == SURVIVAL;
+    }
+
     /** Může hráč přepnout volný let? Ladicí klávesa F na mód nekouká - viz Main. */
     public boolean canFly()
     {

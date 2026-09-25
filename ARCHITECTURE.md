@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2496 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2511 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -82,7 +82,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
 | `AmbienceTest` | Cíle hlasitosti: venku fouká a ve výšce víc, v budově ne, pod stromem o dost míň; jeskyně jen ve tmě **a** pod mořem (dům ani roklina nehučí); voda slábne se vzdáleností, pod vodou naplno a ostatní ztichnou. Nejbližší voda ve skutečném světě (5 bloků), **hlasitost se dotahuje, neskočí**, po 10 s sedí s cílem, v pauze dozní; v jeskyni za minutu 4–15 kapek, poziční a kolem hlavy. V `SoundTest` navíc **smyčky beze švu** (skok konec → začátek ne větší než uvnitř) |
-| `ItemTest` | Předměty: klacek a uhlí existují i bez `items.json`, jména, hromádka předmětu není blok, slévání a dělení po 64, **recept s předmětem projde validací, neznámý předmět ne**; registr (volná dlaždice za vestavěnými, `nextId` jen roste i po smazání, vestavěné smazat nejde, jméno proti vestavěným), `items.json` tam a zpět, ručně psaný soubor s výchozími hodnotami a přeskočenými záznamy; atlas (klacek je obrys na průhledném pozadí, doplnění prázdného souboru); ikona předmětu = jeden čtverec ze zdroje 1 s alfou, neznámý = šachovnice, blok přes `int` id kreslí tytéž vrcholy; creative má předměty za bloky; **vzduch se položit nedá**. 3D model: prázdná dlaždice nic, pixel = 6 stěn **otočených ven**, řádek = jeden čtyřúhelník vpředu a vzadu, poloprůsvitný pixel je průhledný, šachovnice se vejde do `MAX_FLOATS`, UV jen z vlastní dlaždice; klacek v ruce vpravo dole, na zemi se bloky a předměty staví každý ve své instanci a předmět je větší než kostka, postava drží klacek z atlasu předmětů (bez pixelů nic). `ItemDraft`: krokování hromádky, nástroj nastaví hromádku 1 a zpátky 64, rychlost jen s nástrojem, jméno předmětu i bloku a dlaždice vestavěných se odmítnou, volná dlaždice (prázdná za vestavěnými, ne ta kopírovaná, ne použitá). Hratelnost: krumpáč 4× na kámen a rudy, na hlínu 1×, sekera na dřevo, klacek ani blok v ruce nic; **kámen krumpáčem opravdu 4× méně framů**; uhelná ruda vypadne jako uhlí; nástroj: slot unese 1, tři krumpáče do tří slotů, `room` = volné sloty, recept se dvěma nástroji neprojde |
+| `ItemTest` | Předměty: klacek a uhlí existují i bez `items.json`, jména, hromádka předmětu není blok, slévání a dělení po 64, **recept s předmětem projde validací, neznámý předmět ne**; registr (volná dlaždice za vestavěnými, `nextId` jen roste i po smazání, vestavěné smazat nejde, jméno proti vestavěným), `items.json` tam a zpět, ručně psaný soubor s výchozími hodnotami a přeskočenými záznamy; atlas (klacek je obrys na průhledném pozadí, doplnění prázdného souboru); ikona předmětu = jeden čtverec ze zdroje 1 s alfou, neznámý = šachovnice, blok přes `int` id kreslí tytéž vrcholy; creative má předměty za bloky; **vzduch se položit nedá**. 3D model: prázdná dlaždice nic, pixel = 6 stěn **otočených ven**, řádek = jeden čtyřúhelník vpředu a vzadu, poloprůsvitný pixel je průhledný, šachovnice se vejde do `MAX_FLOATS`, UV jen z vlastní dlaždice; klacek v ruce vpravo dole, na zemi se bloky a předměty staví každý ve své instanci a předmět je větší než kostka, postava drží klacek z atlasu předmětů (bez pixelů nic). `ItemDraft`: krokování hromádky, nástroj nastaví hromádku 1 a zpátky 64, rychlost jen s nástrojem, jméno předmětu i bloku a dlaždice vestavěných se odmítnou, volná dlaždice (prázdná za vestavěnými, ne ta kopírovaná, ne použitá). Hratelnost: krumpáč 4× na kámen a rudy, na hlínu 1×, sekera na dřevo, klacek ani blok v ruce nic; **kámen krumpáčem opravdu 4× méně framů**; uhelná ruda vypadne jako uhlí; nástroj: slot unese 1, tři krumpáče do tří slotů, `room` = volné sloty, recept se dvěma nástroji neprojde. Trvanlivost: bod za použití, **na posledním bodě EMPTY**, předmět bez výdrže i blok beze změny, různě opotřebené se neslévají, validace (výdrž jen s hromádkou 1, meze), `items.json` tam a zpět, pruh jen u opotřebeného (zbývající 2/3, zelená/červená), jen v survivalu, `ItemDraft` (nástroj 131, krokování nástroje výdrž nemění, hromádka zůstává 1, zpět bez výdrže). V `SaveTest` opotřebení přežije MCW5 a MCW4 se načte s nulovým |
 | `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto. FOV efekt: sprint/let/obojí, **sprint do zdi nic**, plynulý náběh stejný při 30 i 60 FPS, vypnutí vrací na 1, reset nového světa |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty (plot z prken a klacků, klacky ze dvou prken pod sebou, pochodeň jen uhlí NAD klackem, uhelná ruda na uhlí). **Napojování plotů:** sloupek / dvě příčky / všech 9 kvádrů = `MAX_BOXES`, napojí se na plot a zeď, ne na listí, vodu, pochodeň; příčky míří ke správnému sousedovi; v meshi dva ploty 2 × 18 stěn, konec příčky u kamene se zahodí, **napojení přes hranici chunku z obou stran** |
@@ -2808,7 +2808,7 @@ průsvitné. V ruce, v inventáři a na zemi je plot dál sloupek (sousedy nemá
 celý blok vysoký 1, takže plot jde (na rozdíl od Minecraftu, kde má kolizi 1,5) přeskočit —
 to by chtělo kolizní kvádry místo buněk.
 
-**Předměty — hotovo (kroky 1 až 4); trvanlivost nástrojů zbývá jako další krok.** Plán byl: (1) hromádka nese obecné
+**Předměty — hotovo (kroky 1 až 4 a trvanlivost nástrojů).** Plán byl: (1) hromádka nese obecné
 id, (2) `ItemRegistry` + `textures/items.json`/`items.png`, vestavěný klacek a uhlí, kreslení
 v inventáři, v ruce (3D z pixelů), na zemi a ve třetí osobě, (3) lab „Items" a předměty
 v Recipe Labu, (4) nástroje zrychlují těžbu podle materiálu, uhelná ruda dává uhlí, pochodeň
@@ -2828,6 +2828,18 @@ prkno-klacek-prkno ve dvou řadách = 3 ploty; tři prkna v řadě už plot nejs
 blok (staré inventáře, creative) jde bezetvarým receptem rozbít na uhlí — přechod pro staré
 světy, v Minecraftu to nejde. Nástroje samotné jsou data z labu, recept si na ně hráč udělá
 v Recipe Labu. `items.json` a `items.png` jsou v `.gitignore` jako ostatní data labů.
+
+**Trvanlivost.** `ItemDef.durability` = kolik bloků předmět vykope, než praskne (0 = nerozbitný);
+opotřebení nese hromádka (`ItemStack.damage`), proto předmět s výdrží musí mít hromádku 1
+(`validate`) a různě opotřebené hromádky nejsou `sameItem`. V survivalu (`GameMode.wearsTools`)
+ubere každý vykopaný blok s tvrdostí nad nulou jeden bod (`ItemStack.worn`, Main zjistí blok PŘED
+`harvest`, potom je tam vzduch); na posledním bodě nástroj zmizí se zvukem `ITEM_BREAK`
+(syntetizované „křup a cink"). Pod ikonou opotřebeného předmětu je pruh (`Durability`, 13/16 šířky,
+zelená → žlutá → červená podle zbývající výdrže; nový nástroj pruh nemá) — v hotbaru, v inventáři
+i na kurzoru, samostatným průchodem `Renderer2D` po ikonách. V labu řádek výdrže po stupních
+Minecraftu (32 / 59 / 131 / 250 / 1561); nástroj dostane výchozí 131 (kámen). `items.json` pole
+`durability` (chybějící = 0), `world.dat` **MCW5** (opotřebení jako `short` za počtem; MCW1–4 se
+čtou dál, opotřebení 0).
 
 **Jedna řada id pro bloky i předměty (`Items`).** 0–127 bloky (id hromádky = id bloku ve
 světě, bez převodu), 128–255 rezerva, 256–1023 předměty. `ItemStack(int id, int count)`;

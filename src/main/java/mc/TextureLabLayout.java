@@ -105,6 +105,9 @@ public final class TextureLabLayout {
     public static final Rect SOLID = new Rect(8, 182, 62, 12);
     public static final Rect OPAQUE = new Rect(74, 182, 62, 12);
 
+    /** Jen ve formuláři nového předmětu: výdrž (klikáním dokola). */
+    public static final Rect DURABILITY = new Rect(8, 196, 128, 12);
+
     /** Políčko stěny: náhled dlaždice a pod ním jméno stěny. Vršek, bok, spodek. */
     public static final int FACE_SLOT_W = 40, FACE_SLOT_H = 30;
     public static final int FACE_SLOT_Y = 196;
