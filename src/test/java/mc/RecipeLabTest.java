@@ -49,7 +49,7 @@ public class RecipeLabTest {
 
     /** Recept 2x2 ze ctyr kamenu na jeden blok snehu - nic vestaveneho to neni. */
     static Recipes.Recipe snowFromStone() {
-        return new Recipes.Recipe(2, 2, new byte[]{
+        return new Recipes.Recipe(2, 2, new int[]{
                 World.STONE, World.SNOW,
                 World.SNOW, World.STONE
         }, World.SNOW, 3);
@@ -68,41 +68,41 @@ public class RecipeLabTest {
         check("null se odmitne", RecipeBook.validate(null) != null, "");
 
         check("prazdna mrizka se odmitne",
-                RecipeBook.validate(new Recipes.Recipe(2, 2, new byte[4], World.STONE, 1)) != null, "");
+                RecipeBook.validate(new Recipes.Recipe(2, 2, new int[4], World.STONE, 1)) != null, "");
 
         check("vzor, ktery nesedi s rozmerem, se odmitne",
-                RecipeBook.validate(new Recipes.Recipe(2, 2, new byte[]{World.STONE},
+                RecipeBook.validate(new Recipes.Recipe(2, 2, new int[]{World.STONE},
                         World.STONE, 1)) != null, "");
 
         check("mrizka vetsi nez crafting table se odmitne",
                 RecipeBook.validate(new Recipes.Recipe(4, 1,
-                        new byte[]{World.STONE, World.STONE, World.STONE, World.STONE},
+                        new int[]{World.STONE, World.STONE, World.STONE, World.STONE},
                         World.STONE, 1)) != null, "");
 
         check("nulovy ani zaporny pocet kusu neprojde",
-                RecipeBook.validate(new Recipes.Recipe(1, 1, new byte[]{World.STONE}, World.STONE, 0)) != null
-                        && RecipeBook.validate(new Recipes.Recipe(1, 1, new byte[]{World.STONE},
+                RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE}, World.STONE, 0)) != null
+                        && RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE},
                                 World.STONE, -3)) != null, "");
 
         check("vic kusu, nez se vejde do hromadky, neprojde",
-                RecipeBook.validate(new Recipes.Recipe(1, 1, new byte[]{World.STONE},
+                RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE},
                         World.STONE, ItemStack.MAX_COUNT + 1)) != null, "");
 
         check("cela hromadka na vystupu projde",
-                RecipeBook.validate(new Recipes.Recipe(1, 1, new byte[]{World.STONE},
+                RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE},
                         World.STONE, ItemStack.MAX_COUNT)) == null, "");
 
         // ⚠️ Blok z labu, ktery neexistuje, recept vyradi - jinak by se
         // v mrizce objevila surovina, kterou nejde nikde vzit.
         check("neznamy blok z labu jako surovina se odmitne",
-                RecipeBook.validate(new Recipes.Recipe(1, 1, new byte[]{(byte) 99},
+                RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{(byte) 99},
                         World.STONE, 1)) != null, "");
         check("neznamy blok z labu jako vysledek se odmitne",
-                RecipeBook.validate(new Recipes.Recipe(1, 1, new byte[]{World.STONE},
+                RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE},
                         (byte) 99, 1)) != null, "");
 
         check("vzduch jako vysledek se odmitne",
-                RecipeBook.validate(new Recipes.Recipe(1, 1, new byte[]{World.STONE},
+                RecipeBook.validate(new Recipes.Recipe(1, 1, new int[]{World.STONE},
                         World.AIR, 1)) != null, "");
     }
 
@@ -118,7 +118,7 @@ public class RecipeLabTest {
     static void normalization() {
         System.out.println("\n-- orez vzoru --");
 
-        byte[] big = new byte[9];
+        int[] big = new int[9];
         big[4] = World.STONE;                       // jen prostredni bunka
         Recipes.Recipe trimmed = RecipeBook.normalize(
                 new Recipes.Recipe(3, 3, big, World.SNOW, 2));
@@ -131,7 +131,7 @@ public class RecipeLabTest {
                 && trimmed.resultCount() == 2, "");
 
         // Vodorovny pruh dole vlevo -> 2x1, ne 3x3.
-        byte[] row = new byte[9];
+        int[] row = new int[9];
         row[6] = World.PLANKS;
         row[7] = World.PLANKS;
         Recipes.Recipe strip = RecipeBook.normalize(new Recipes.Recipe(3, 3, row, World.FENCE, 1));
@@ -176,7 +176,7 @@ public class RecipeLabTest {
 
             RecipeBook book = RecipeBook.empty()
                     .with(snowFromStone())
-                    .with(new Recipes.Recipe(1, 1, new byte[]{World.LOG}, World.TORCH, 8));
+                    .with(new Recipes.Recipe(1, 1, new int[]{World.LOG}, World.TORCH, 8));
 
             check("dva recepty jsou v seznamu", book.size() == 2, "" + book.size());
             check("ulozeni zalozi adresar a zapise soubor",
@@ -300,7 +300,7 @@ public class RecipeLabTest {
         RecipeBook previous = RecipeBook.active();
 
         // Recept z labu: ctverec 2x2 ze snehu -> osm kamennych cihel.
-        Recipes.Recipe lab = new Recipes.Recipe(2, 2, new byte[]{
+        Recipes.Recipe lab = new Recipes.Recipe(2, 2, new int[]{
                 World.SNOW, World.SNOW,
                 World.SNOW, World.SNOW
         }, World.STONE_BRICKS, 8);
@@ -363,7 +363,7 @@ public class RecipeLabTest {
             // (f) ⚠️ Vestaveny recept ma PREDNOST. Lab takovy vzor ani
             // neuklada (problem() ho odmitne), ale kdyby se do souboru dostal
             // rucne, nesmi prebit hru.
-            RecipeBook.activate(RecipeBook.empty().with(new Recipes.Recipe(2, 2, new byte[]{
+            RecipeBook.activate(RecipeBook.empty().with(new Recipes.Recipe(2, 2, new int[]{
                     World.PLANKS, World.PLANKS, World.PLANKS, World.PLANKS
             }, World.SNOW, 64)));
 
@@ -372,7 +372,7 @@ public class RecipeLabTest {
                     Recipes.match(planks, 2, 2).toString());
 
             check("builtInHasPattern takovy vzor pozna",
-                    Recipes.builtInHasPattern(new Recipes.Recipe(2, 2, new byte[]{
+                    Recipes.builtInHasPattern(new Recipes.Recipe(2, 2, new int[]{
                             World.PLANKS, World.PLANKS, World.PLANKS, World.PLANKS
                     }, World.SNOW, 1)), "");
             check("a u vzoru, ktery vestaveny neni, ne",
@@ -381,27 +381,27 @@ public class RecipeLabTest {
             // (f2) ⚠️ I BEZETVARE vestavene recepty (INV-3). Driv se porovnavaly
             // jen tvarovane, takze "jedna trava" prosla, lab ji ulozil s hlaskou
             // "works right now" a hlina z vestaveneho receptu ji vzdycky prebila.
-            byte[][] shapeless = {
+            int[][] shapeless = {
                     {World.GRASS}, {World.LOG}, {World.BIRCH_LOG}, {World.SPRUCE_LOG},
             };
-            for (byte[] one : shapeless) {
+            for (int[] one : shapeless) {
                 check("bezetvary vestaveny: 1x blok " + one[0] + " pozna",
                         Recipes.builtInHasPattern(new Recipes.Recipe(1, 1, one, World.SNOW, 1)), "");
             }
             check("bezetvary vestaveny: prkno a uhli vedle sebe pozna",
                     Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
-                            new byte[]{World.PLANKS, World.COAL_ORE}, World.SNOW, 1)), "");
+                            new int[]{World.PLANKS, World.COAL_ORE}, World.SNOW, 1)), "");
             check("... i pod sebou a v rohu 3x3 (bezetvary = kdekoliv)",
-                    Recipes.builtInHasPattern(new Recipes.Recipe(3, 3, new byte[]{
+                    Recipes.builtInHasPattern(new Recipes.Recipe(3, 3, new int[]{
                             World.COAL_ORE, 0, 0,
                             0, 0, 0,
                             0, 0, World.PLANKS}, World.SNOW, 1)), "");
             check("trava s kamenem uz vestaveny neni",
                     !Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
-                            new byte[]{World.GRASS, World.STONE}, World.SNOW, 1)), "");
+                            new int[]{World.GRASS, World.STONE}, World.SNOW, 1)), "");
             check("dve travy taky ne (bezetvary chce presne jednu)",
                     !Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
-                            new byte[]{World.GRASS, World.GRASS}, World.SNOW, 1)), "");
+                            new int[]{World.GRASS, World.GRASS}, World.SNOW, 1)), "");
 
             RecipeLab grassLab = new RecipeLab(null, null, null);
             grassLab.onEnter();
@@ -465,7 +465,7 @@ public class RecipeLabTest {
                     Recipes.match(grid, 2, 2).isEmpty(), "");
 
             RecipeBook updated = RecipeBook.active().with(new Recipes.Recipe(2, 1,
-                    new byte[]{World.SNOW, World.SNOW}, World.IRON_ORE, 2));
+                    new int[]{World.SNOW, World.SNOW}, World.IRON_ORE, 2));
 
             check("zapis projde", updated.save(file), "");
 
@@ -495,7 +495,7 @@ public class RecipeLabTest {
             check("containsPattern pozna uz ulozeny vzor",
                     grown.containsPattern(snowFromStone())
                             && !grown.containsPattern(new Recipes.Recipe(1, 1,
-                                    new byte[]{World.DIRT}, World.STONE, 1)), "");
+                                    new int[]{World.DIRT}, World.STONE, 1)), "");
 
             // Recept smi odkazovat na blok z labu - to je rozdil proti
             // generatoru terenu, kde plati "jen vestavene bloky".
@@ -506,7 +506,7 @@ public class RecipeLabTest {
 
             byte labBlock = (byte) BlockRegistry.FIRST_ID;
             String problem = RecipeBook.validate(new Recipes.Recipe(1, 1,
-                    new byte[]{World.STONE}, labBlock, 1));
+                    new int[]{World.STONE}, labBlock, 1));
 
             BlockRegistry.activate(beforeRegistry);
             check("blok z labu smi byt vysledkem receptu", problem == null, "" + problem);

@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2404 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2409 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -1079,7 +1079,7 @@ by pochodeň ve dne byla jasnější než okolí a dvě vedle sebe by přepálil
 den na přístřešek, a při desetiminutovém dni tu zbývají do soumraku ještě zhruba tři minuty.
 Svítání by znamenalo začínat v šeru, poledne by ubralo půlku prvního dne.
 
-Uložení je krok formátu `world.dat` z **MCW2 na MCW3**: čas jako `float` **na konci záznamu**
+Uložení je krok formátu `world.dat` z **MCW2 na MCW3** (dnes už MCW4, viz „Předměty"): čas jako `float` **na konci záznamu**
 a čte se jen u novějšího MAGIC. Formát je poziční binárka bez délek, takže vložit pole
 doprostřed by znamenalo, že starší soubor od toho místa čte úplně jiná čísla — a neprojevilo
 by se to výjimkou, ale nesmyslnou polohou hráče. Soubor z MCW1/MCW2 čas nemá a dostane
@@ -2789,9 +2789,19 @@ průsvitné. V ruce, v inventáři a na zemi je plot dál sloupek (sousedy nemá
 celý blok vysoký 1, takže plot jde (na rozdíl od Minecraftu, kde má kolizi 1,5) přeskočit —
 to by chtělo kolizní kvádry místo buněk.
 
-**⚠️ Chybí PŘEDMĚTY (ne bloky).** `ItemStack` drží id bloku, takže klacek — který není
-umístitelný — zatím nejde vyrobit. Proto je pochodeň z prkna a uhlí místo z klacku a uhlí.
-Až předměty přibudou, opraví se recept a klacek se stane surovinou pro ploty a nářadí.
+**Předměty — rozpracováno (krok 1 ze 4: datový model).** Plán: (1) hromádka nese obecné
+id, (2) `ItemRegistry` + `textures/items.json`/`items.png`, vestavěný klacek a uhlí, kreslení
+v inventáři, v ruce (3D z pixelů), na zemi a ve třetí osobě, (3) lab „Items" a předměty
+v Recipe Labu, (4) nástroje zrychlují těžbu podle materiálu, uhelná ruda dává uhlí, pochodeň
+z klacku a uhlí. Trvanlivost nástrojů až potom zvlášť. Rozhodnutí uživatele (2026-09-25):
+vestavěné jen klacek a uhlí, zbytek z labu; 3D vzhled; uhlí jako předmět.
+
+**Jedna řada id pro bloky i předměty (`Items`).** 0–127 bloky (id hromádky = id bloku ve
+světě, bez převodu), 128–255 rezerva, 256–1023 předměty. `ItemStack(int id, int count)`;
+`block()` zůstává, ale znamená jen „co se z hromádky položí" a u předmětu vrací vzduch —
+kdo porovnává, ukládá nebo skládá recept, bere `id()`. Recepty mají vzor `int[]` a výsledek
+`int`; `recipes.json` nese tatáž čísla, takže starý soubor platí beze změny. `world.dat`
+přešel na **MCW4**: id hromádky jako `short` místo `byte`; MCW1–MCW3 se čtou dál.
 
 **Osvětlení a cyklus dne a noci — hotovo.** Sluneční i blokové světlo, pochodně, desetiminutový
 den, obloha měnící barvu. Klávesa **T** posune čas o desetinu cyklu (na noc se jinak čeká minuty).

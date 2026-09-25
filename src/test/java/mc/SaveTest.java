@@ -37,10 +37,10 @@ public class SaveTest {
         Files.write(junk, new byte[]{1, 2, 3, 4, 5, 6, 7, 8});
         check("cizi soubor se odmitne misto padu", WorldStorage.load(junk) == null, "");
 
-        // PER-11: nasi znacku z novejsi verze hry (MCW4) hlasit jako novejsi,
+        // PER-11: nasi znacku z novejsi verze hry (MCW5) hlasit jako novejsi,
         // ne jako "cizi format" - to by hrac bral jako poskozeny soubor.
         Path newer = dir.resolve("newer.dat");
-        Files.write(newer, new byte[]{'M', 'C', 'W', '4', 0, 0, 0, 0});
+        Files.write(newer, new byte[]{'M', 'C', 'W', '5', 0, 0, 0, 0});
         java.util.List<String> said = new java.util.ArrayList<>();
         check("novejsi format se odmitne", WorldStorage.read(newer, said::add) == null, "");
         check("a hlaska rekne, ze je z novejsi verze", !said.isEmpty() && said.get(0).contains("novejsi"),
@@ -211,6 +211,7 @@ public class SaveTest {
 
         oldGeneratorVersion(dir);
         nonsenseValues(dir);
+        itemIds(dir);
 
         w.shutdown();
         restored.shutdown();
@@ -348,6 +349,45 @@ public class SaveTest {
     // ==================================================================
     // nesmyslne hodnoty v souboru se orezou, svet se nezahodi
     // ==================================================================
+
+    /**
+     * Format MCW4: hromadka nese id jako short, takze se vejde i predmet
+     * (Items.FIRST_ITEM a vys). Do MCW3 byl id jen byte - predmet by se
+     * ulozil jako nesmysl a po nacteni zmizel.
+     */
+    static void itemIds(Path dir) throws IOException {
+        System.out.println("\n-- predmety v inventari (MCW4) --");
+
+        Path file = dir.resolve("items.dat");
+        ItemStack[] inventory = new ItemStack[4];
+        inventory[0] = ItemStack.of(Items.FIRST_ITEM + 44, 5);      // predmet
+        inventory[1] = ItemStack.of(World.STONE, 3);                 // vestaveny blok
+        inventory[2] = ItemStack.of(Items.LAST_ID, 1);               // nejvyssi id
+        inventory[3] = ItemStack.EMPTY;
+
+        check("predmet se da zapsat do hromadky (neni EMPTY)",
+                !inventory[0].isEmpty() && !inventory[0].isBlock() && inventory[0].block() == World.AIR, "");
+        check("id mimo rozsahy da EMPTY",
+                ItemStack.of(Items.LAST_ID + 1, 1).isEmpty() && ItemStack.of(200, 1).isEmpty()
+                        && ItemStack.of(-5, 1).isEmpty(), "");
+
+        WorldStorage.save(file, new WorldStorage.Save(8, 70, 8, 0, 0, false, 0,
+                new java.util.HashMap<>(), inventory, 100f));
+
+        byte[] head = Files.readAllBytes(file);
+        check("uklada se jako MCW4", head[0] == 'M' && head[1] == 'C' && head[2] == 'W' && head[3] == '4',
+                "" + (char) head[3]);
+
+        WorldStorage.Save loaded = WorldStorage.load(file);
+        check("predmet, blok i nejvyssi id prezily ulozeni",
+                loaded != null && loaded.inventory()[0].equals(inventory[0])
+                        && loaded.inventory()[1].equals(inventory[1])
+                        && loaded.inventory()[2].equals(inventory[2])
+                        && loaded.inventory()[3].isEmpty(),
+                loaded == null ? "null" : java.util.Arrays.toString(loaded.inventory()));
+        check("predmet neni blok z labu (nehlasi se jako neznamy blok)",
+                loaded != null && WorldStorage.labBlockIds(loaded).isEmpty(), "");
+    }
 
     /** Zapise soubor MCW3 s danou polohou, pohledem a jednou hromadkou. */
     static void writeRaw(Path file, float x, float y, float z, float yaw, float pitch, int count)

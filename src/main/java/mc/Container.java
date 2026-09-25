@@ -114,11 +114,11 @@ public class Container {
             }
 
             int moved = Math.min(ItemStack.MAX_COUNT, remaining);
-            slots[i] = ItemStack.of(stack.block(), moved);
+            slots[i] = stack.withCount(moved);
             remaining -= moved;
         }
 
-        return ItemStack.of(stack.block(), remaining);
+        return stack.withCount(remaining);
     }
 
     /**
@@ -141,7 +141,7 @@ public class Container {
             {
                 room += ItemStack.MAX_COUNT;
             }
-            else if(slot.block() == stack.block())
+            else if(slot.sameItem(stack))
             {
                 room += Math.max(0, slot.space());
             }
@@ -182,14 +182,14 @@ public class Container {
         return slot.withCount(taken);
     }
 
-    /** Kolik kusů daného bloku je v kontejneru celkem. Pro testy. */
-    public int countOf(byte block)
+    /** Kolik kusů dané věci (blok i předmět, podle id) je v kontejneru celkem. Pro testy. */
+    public int countOf(int id)
     {
         int total = 0;
 
         for(ItemStack stack : slots)
         {
-            if(!stack.isEmpty() && stack.block() == block)
+            if(!stack.isEmpty() && stack.id() == id)
             {
                 total += stack.count();
             }

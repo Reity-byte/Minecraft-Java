@@ -183,13 +183,13 @@ public final class RecipeLab implements LabMode {
      */
     Recipes.Recipe draft()
     {
-        byte[] pattern = new byte[RecipeBook.MAX_SIZE * RecipeBook.MAX_SIZE];
+        int[] pattern = new int[RecipeBook.MAX_SIZE * RecipeBook.MAX_SIZE];
         boolean any = false;
 
         for(int i = 0; i < pattern.length; i++)
         {
             ItemStack stack = grid.get(i);
-            pattern[i] = stack.isEmpty() ? World.AIR : stack.block();
+            pattern[i] = stack.isEmpty() ? World.AIR : stack.id();
 
             if(pattern[i] != World.AIR)
             {

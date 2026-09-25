@@ -585,7 +585,7 @@ public class ContainerScreen {
             int moved = dragAmount(slot);
 
             hit.grid().container().set(hit.index(),
-                    ItemStack.of(held.block(), slot.count() + moved));
+                    held.withCount(slot.count() + moved));
             remaining -= moved;
         }
 
@@ -608,7 +608,7 @@ public class ContainerScreen {
             return slot;
         }
 
-        return ItemStack.of(held.block(), slot.count() + dragAmount(slot));
+        return held.withCount(slot.count() + dragAmount(slot));
     }
 
     /** Co se ukáže na kurzoru: během tažení jen to, co po rozdělení zbude. */

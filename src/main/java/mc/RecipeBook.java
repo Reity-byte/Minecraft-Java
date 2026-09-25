@@ -152,7 +152,7 @@ public final class RecipeBook {
             return recipe;
         }
 
-        byte[] pattern = new byte[width * height];
+        int[] pattern = new int[width * height];
 
         for(int y = 0; y < height; y++)
         {
@@ -189,18 +189,18 @@ public final class RecipeBook {
 
         boolean any = false;
 
-        for(byte block : recipe.pattern())
+        for(int id : recipe.pattern())
         {
-            if(block == World.AIR)
+            if(id == World.AIR)
             {
                 continue;
             }
 
             any = true;
 
-            if(!isKnownBlock(block))
+            if(!Items.exists(id))
             {
-                return "unknown ingredient block " + block;
+                return "unknown ingredient " + id;
             }
         }
 
@@ -209,9 +209,9 @@ public final class RecipeBook {
             return "recipe needs at least one ingredient";
         }
 
-        if(!isKnownBlock(recipe.result()))
+        if(!Items.exists(recipe.result()))
         {
-            return "unknown result block " + recipe.result();
+            return "unknown result " + recipe.result();
         }
 
         if(recipe.resultCount() < 1 || recipe.resultCount() > ItemStack.MAX_COUNT)
@@ -222,29 +222,12 @@ public final class RecipeBook {
         return null;
     }
 
-    /**
-     * Existuje takový blok?
-     *
-     * ⚠️ Recepty SMÍ odkazovat na bloky z labu (id 64+). Pravidlo "jen
-     * vestavěné bloky" platí pro generátor terénu, protože ten musí fungovat
-     * i bez blocks.json; recept je naopak data vedle dat a je v pořádku, aby
-     * jedna nepovinná věc odkazovala na druhou. Když blok z receptu zmizí,
-     * přeskočí se jen ten recept - stejně jako neplatný blok v blocks.json.
-     */
-    private static boolean isKnownBlock(byte block)
-    {
-        if(block == World.AIR)
-        {
-            return false;
-        }
-
-        if(block >= BlockRegistry.FIRST_ID)
-        {
-            return BlockRegistry.lookup(block) != null;
-        }
-
-        return block <= World.LAST_BUILT_IN;
-    }
+    // ⚠️ Recepty SMÍ odkazovat na bloky i předměty z labu (Items.exists).
+    // Pravidlo "jen vestavěné bloky" platí pro generátor terénu, protože ten
+    // musí fungovat i bez blocks.json; recept je naopak data vedle dat a je
+    // v pořádku, aby jedna nepovinná věc odkazovala na druhou. Když věc
+    // z receptu zmizí, přeskočí se jen ten recept - stejně jako neplatný
+    // blok v blocks.json.
 
     /** Vyrábí už některý recept Z LABU přesně tenhle vzor? Vestavěné řeší Recipes.builtInHasPattern. */
     public boolean containsPattern(Recipes.Recipe recipe)
@@ -490,29 +473,28 @@ public final class RecipeBook {
             return null;
         }
 
-        byte[] pattern = new byte[width * height];
+        int[] pattern = new int[width * height];
 
         for(int c = 0; c < cells.size(); c++)
         {
-            Integer block = wholeNumber(cells.get(c));
+            Integer id = wholeNumber(cells.get(c));
 
-            if(block == null || block < 0 || block > 127)
+            if(id == null || !(id == World.AIR || Items.inRange(id)))
             {
-                problems.add("recept " + index + ": bunka " + c + " neni id bloku - preskocen");
+                problems.add("recept " + index + ": bunka " + c + " neni id bloku ani predmetu - preskocen");
                 return null;
             }
 
-            pattern[c] = block.byteValue();
+            pattern[c] = id;
         }
 
-        if(result < 0 || result > 127)
+        if(!Items.inRange(result))
         {
-            problems.add("recept " + index + ": vysledek " + result + " neni id bloku - preskocen");
+            problems.add("recept " + index + ": vysledek " + result + " neni id bloku ani predmetu - preskocen");
             return null;
         }
 
-        Recipes.Recipe recipe = new Recipes.Recipe(width, height, pattern,
-                result.byteValue(), count);
+        Recipes.Recipe recipe = new Recipes.Recipe(width, height, pattern, result, count);
 
         String problem = validate(recipe);
 

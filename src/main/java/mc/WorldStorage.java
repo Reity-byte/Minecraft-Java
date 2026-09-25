@@ -52,6 +52,8 @@ public final class WorldStorage {
     private static final int MAGIC_V1 = 0x4D435731;
     private static final int MAGIC_V2 = 0x4D435732;
     private static final int MAGIC_V3 = 0x4D435733;
+    /** V4: hromádka v inventáři nese id jako short (bloky i předměty, viz Items), ne byte. */
+    private static final int MAGIC_V4 = 0x4D435734;
 
     /**
      * Zvýšit při každé změně generátoru, která posune terén.
@@ -120,7 +122,7 @@ public final class WorldStorage {
         {
             try(DataOutputStream out = new DataOutputStream(new BufferedOutputStream(bytes)))
             {
-                out.writeInt(MAGIC_V3);
+                out.writeInt(MAGIC_V4);
                 out.writeInt(GENERATOR_VERSION);
 
                 out.writeFloat(save.x());
@@ -151,7 +153,7 @@ public final class WorldStorage {
                 {
                     // null je platny "prazdny slot" - volajici nemusi pole predvyplnovat.
                     ItemStack safe = stack == null ? ItemStack.EMPTY : stack;
-                    out.writeByte(safe.block());
+                    out.writeShort(safe.id());
                     out.writeInt(safe.count());
                 }
 
@@ -192,13 +194,13 @@ public final class WorldStorage {
         {
             int magic = in.readInt();
 
-            if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3)
+            if(magic != MAGIC_V1 && magic != MAGIC_V2 && magic != MAGIC_V3 && magic != MAGIC_V4)
             {
                 // "MCW" + jiná číslice je NAŠE značka, jen z novější verze hry -
                 // říct to, ať si hráč nemyslí, že je soubor poškozený.
                 report.accept((magic & 0xFFFFFF00) == (MAGIC_V1 & 0xFFFFFF00)
                         ? "Ulozeny svet je z novejsi verze hry (format " + (char) (magic & 0xFF)
-                                + "), tahle umi jen do 3: " + path
+                                + "), tahle umi jen do 4: " + path
                         : "Ulozeny svet ma cizi format: " + path);
                 return null;
             }
@@ -276,7 +278,7 @@ public final class WorldStorage {
             ItemStack[] inventory = new ItemStack[0];
 
             // Starší soubor inventář nemá - načte se prázdný a hráč začne s ničím.
-            if(magic == MAGIC_V2 || magic == MAGIC_V3)
+            if(magic == MAGIC_V2 || magic == MAGIC_V3 || magic == MAGIC_V4)
             {
                 int slots = in.readInt();
 
@@ -291,7 +293,8 @@ public final class WorldStorage {
 
                 for(int i = 0; i < slots; i++)
                 {
-                    byte block = in.readByte();
+                    // Do V3 byte id bloku, od V4 short id bloku nebo předmětu.
+                    int id = magic == MAGIC_V4 ? in.readShort() : in.readByte();
                     int count = in.readInt();
 
                     // Hromádka přes MAX_COUNT by rozbila slévání (záporné
@@ -302,7 +305,7 @@ public final class WorldStorage {
                         clamped++;
                     }
 
-                    inventory[i] = ItemStack.of(block, count);
+                    inventory[i] = ItemStack.of(id, count);
                 }
 
                 if(clamped > 0)
@@ -317,7 +320,7 @@ public final class WorldStorage {
             // neukládal vůbec.
             float dayTime = DayCycle.START_TIME;
 
-            if(magic == MAGIC_V3)
+            if(magic == MAGIC_V3 || magic == MAGIC_V4)
             {
                 dayTime = in.readFloat();
             }
@@ -354,7 +357,7 @@ public final class WorldStorage {
      * Formát souboru se kvůli nim NEMĚNÍ: id bloku z labu je byte jako
      * u vestavěných bloků a je stabilní napříč sezeními (BlockRegistry ho
      * nikdy nepřečísluje ani nepoužije podruhé), takže se ukládá a načítá
-     * úplně stejně. Svět bez bloků z labu je bajt po bajtu tentýž jako dřív.
+     * úplně stejně. Předměty (Items.isItem) sem nepatří - nejsou bloky.
      */
     public static SortedSet<Integer> labBlockIds(Save save)
     {
@@ -373,9 +376,9 @@ public final class WorldStorage {
 
         for(ItemStack stack : save.inventory())
         {
-            if(stack != null && stack.block() >= BlockRegistry.FIRST_ID)
+            if(stack != null && stack.isBlock() && stack.id() >= BlockRegistry.FIRST_ID)
             {
-                ids.add((int) stack.block());
+                ids.add(stack.id());
             }
         }
 

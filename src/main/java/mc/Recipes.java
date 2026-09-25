@@ -19,7 +19,9 @@ public final class Recipes {
 
     /**
      * Tvarovaný recept. pattern se čte po řádcích SHORA DOLŮ, World.AIR
-     * znamená "tady musí být prázdno".
+     * znamená "tady musí být prázdno". Buňky i výsledek jsou id věcí
+     * (Items) - blok i předmět. Buňky i výsledek jsou id věcí
+     * (Items) - blok i předmět.
      *
      * ⚠️ POLE pattern SE NEKOPÍRUJE - ani tady, ani v RecipeBook. Neměnnost
      * receptů je dohoda: nikdo do vráceného pole nepíše. Kopírovat by se
@@ -27,7 +29,7 @@ public final class Recipes {
      * pattern() pro každou polohu receptu. `equals` záznamu porovnává pole
      * podle reference, proto se vzory porovnávají přes Arrays.equals.
      */
-    public record Recipe(int width, int height, byte[] pattern, byte result, int resultCount) {}
+    public record Recipe(int width, int height, int[] pattern, int result, int resultCount) {}
 
     private static final List<Recipe> SHAPED = new ArrayList<>();
 
@@ -38,13 +40,13 @@ public final class Recipes {
     {
         // Čtyři prkna do čtverce = crafting table. Klasika a zároveň jediný
         // recept, kvůli kterému se vyplatí mít v inventáři malou mřížku.
-        SHAPED.add(new Recipe(2, 2, new byte[]{
+        SHAPED.add(new Recipe(2, 2, new int[]{
                 World.PLANKS, World.PLANKS,
                 World.PLANKS, World.PLANKS
         }, World.CRAFTING_TABLE, 1));
 
         // Čtyři kameny do čtverce = čtyři cihly. Poměr 4:4 jako v Minecraftu.
-        SHAPED.add(new Recipe(2, 2, new byte[]{
+        SHAPED.add(new Recipe(2, 2, new int[]{
                 World.STONE, World.STONE,
                 World.STONE, World.STONE
         }, World.STONE_BRICKS, 4));
@@ -53,7 +55,7 @@ public final class Recipes {
         // v terénu negenerují (stromy zatím nejsou), takže by recept z prken
         // sám o sobě znamenal, že se první crafting table nedá vyrobit vůbec.
         // Přes kámen -> cihly -> stůl to jde od začátku hry.
-        SHAPED.add(new Recipe(2, 2, new byte[]{
+        SHAPED.add(new Recipe(2, 2, new int[]{
                 World.STONE_BRICKS, World.STONE_BRICKS,
                 World.STONE_BRICKS, World.STONE_BRICKS
         }, World.CRAFTING_TABLE, 1));
@@ -61,7 +63,7 @@ public final class Recipes {
         // Hromadná varianta: devět cihel dá dva stoly. Je to zároveň jediný
         // recept, který se do malé mřížky NEVEJDE - na něm je vidět, k čemu
         // je crafting table dobrá.
-        SHAPED.add(new Recipe(3, 3, new byte[]{
+        SHAPED.add(new Recipe(3, 3, new int[]{
                 World.STONE_BRICKS, World.STONE_BRICKS, World.STONE_BRICKS,
                 World.STONE_BRICKS, World.STONE_BRICKS, World.STONE_BRICKS,
                 World.STONE_BRICKS, World.STONE_BRICKS, World.STONE_BRICKS
@@ -69,30 +71,30 @@ public final class Recipes {
 
         // Plot: tři prkna v řadě. Je to druhý recept, který se do malé mřížky
         // NEVEJDE - potřebuje tři sloupce, tedy crafting table.
-        SHAPED.add(new Recipe(3, 1, new byte[]{
+        SHAPED.add(new Recipe(3, 1, new int[]{
                 World.PLANKS, World.PLANKS, World.PLANKS
         }, World.FENCE, 3));
 
         // Kmen na čtyři prkna. Tímhle je crafting kompletní: prkna konečně
         // mají v terénu zdroj, takže kanonická cesta "prkna -> crafting table"
         // je dosažitelná bez oklikou přes kámen.
-        SHAPELESS.add(new Recipe(0, 0, new byte[]{World.LOG}, World.PLANKS, 4));
+        SHAPELESS.add(new Recipe(0, 0, new int[]{World.LOG}, World.PLANKS, 4));
 
         // Bříza a smrk dávají tatáž prkna. Bez toho by hráč, který začne
         // v tajze nebo v březovém lese, neměl na prkna ŽÁDNÝ zdroj - pravidlo
         // "řetěz receptů musí být dosažitelný z terénu" platí i pro biomy.
         // Vlastní druhy prken by znamenaly další bloky, a ty biomy nepotřebují.
-        SHAPELESS.add(new Recipe(0, 0, new byte[]{World.BIRCH_LOG}, World.PLANKS, 4));
-        SHAPELESS.add(new Recipe(0, 0, new byte[]{World.SPRUCE_LOG}, World.PLANKS, 4));
+        SHAPELESS.add(new Recipe(0, 0, new int[]{World.BIRCH_LOG}, World.PLANKS, 4));
+        SHAPELESS.add(new Recipe(0, 0, new int[]{World.SPRUCE_LOG}, World.PLANKS, 4));
 
         // Pochodeň: prkno a uhlí. V Minecraftu je to klacek místo prkna -
         // klacek je ale PŘEDMĚT, ne blok, a předměty zatím neexistují
         // (ItemStack drží id bloku). Až přibudou, recept se opraví.
-        SHAPELESS.add(new Recipe(0, 0, new byte[]{World.PLANKS, World.COAL_ORE},
+        SHAPELESS.add(new Recipe(0, 0, new int[]{World.PLANKS, World.COAL_ORE},
                 World.TORCH, 4));
 
         // Tráva se dá oloupat na hlínu. Jeden kus kdekoliv v mřížce.
-        SHAPELESS.add(new Recipe(0, 0, new byte[]{World.GRASS}, World.DIRT, 1));
+        SHAPELESS.add(new Recipe(0, 0, new int[]{World.GRASS}, World.DIRT, 1));
     }
 
     private Recipes() {}
@@ -163,11 +165,11 @@ public final class Recipes {
         {
             for(int x = 0; x < normalized.width(); x++)
             {
-                byte block = normalized.pattern()[y * normalized.width() + x];
+                int id = normalized.pattern()[y * normalized.width() + x];
 
-                if(block != World.AIR)
+                if(id != World.AIR)
                 {
-                    grid.set(y * size + x, ItemStack.of(block, 1));
+                    grid.set(y * size + x, ItemStack.of(id, 1));
                 }
             }
         }
@@ -236,7 +238,7 @@ public final class Recipes {
         {
             for(int x = 0; x < columns; x++)
             {
-                byte wanted = World.AIR;
+                int wanted = World.AIR;
 
                 int inX = x - offsetX;
                 int inY = y - offsetY;
@@ -247,7 +249,7 @@ public final class Recipes {
                 }
 
                 ItemStack slot = grid.get(y * columns + x);
-                byte actual = slot.isEmpty() ? World.AIR : slot.block();
+                int actual = slot.isEmpty() ? World.AIR : slot.id();
 
                 if(actual != wanted)
                 {
@@ -262,7 +264,7 @@ public final class Recipes {
     /** Bezetvarový recept: musí sedět počet obsazených slotů i jejich obsah. */
     private static boolean matchesShapeless(Container grid, Recipe recipe)
     {
-        byte[] needed = recipe.pattern().clone();
+        int[] needed = recipe.pattern().clone();
         int remaining = needed.length;
 
         for(int i = 0; i < grid.size(); i++)
@@ -278,7 +280,7 @@ public final class Recipes {
 
             for(int n = 0; n < needed.length; n++)
             {
-                if(needed[n] == slot.block())
+                if(needed[n] == slot.id())
                 {
                     needed[n] = World.AIR;
                     remaining--;
