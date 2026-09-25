@@ -197,7 +197,10 @@ public final class AtlasImage {
      */
     public static String importInto(AtlasEditor editor, Path file)
     {
-        return importInto(editor, file, BlockAtlas.ATLAS_PIXELS, true, "atlas");
+        // Doplní se jako při startu (Textures.completeAtlas) - tentýž soubor
+        // má vypadat stejně, ať přišel načtením, nebo importem.
+        return importInto(editor, file, BlockAtlas.ATLAS_PIXELS, true, "atlas",
+                pixels -> Textures.completeAtlas(pixels, BlockRegistry.active()));
     }
 
     /**
@@ -208,6 +211,13 @@ public final class AtlasImage {
     public static String importInto(PixelEditor editor, Path file,
                                     int size, boolean flipRows, String what)
     {
+        return importInto(editor, file, size, flipRows, what, pixels -> {});
+    }
+
+    /** Totéž s úpravou přečtených pixelů před vložením do editoru. */
+    private static String importInto(PixelEditor editor, Path file, int size, boolean flipRows,
+                                     String what, java.util.function.Consumer<int[]> complete)
+    {
         Loaded loaded = read(file, size, flipRows);
 
         if(loaded.pixels() == null)
@@ -215,6 +225,7 @@ public final class AtlasImage {
             return "Not imported: " + loaded.error() + " - " + what + " unchanged";
         }
 
+        complete.accept(loaded.pixels());
         editor.importImage(loaded.pixels());
         String name = file.getFileName() == null ? file.toString() : file.getFileName().toString();
         return "Imported " + name + " - Ctrl+Z undoes, Save keeps it";

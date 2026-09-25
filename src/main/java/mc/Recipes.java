@@ -136,15 +136,47 @@ public final class Recipes {
         return ItemStack.EMPTY;
     }
 
-    /** Vyrábí už nějaký VESTAVĚNÝ recept přesně tenhle vzor? */
+    /**
+     * Vyhrál by na tenhle vzor nějaký VESTAVĚNÝ recept? Pak recept z labu
+     * s tímhle vzorem nikdy nic neudělá - `match()` zkouší vestavěné první.
+     *
+     * ⚠️ PTÁ SE TÉHOŽ POROVNÁNÍ JAKO HRA, ne rovnosti vzorů. Dřív se tu
+     * porovnávaly jen tvarované recepty, takže vzor "jedna tráva" nebo
+     * "prkno a uhlí" prošel, lab ho uložil s hláškou "works right now"
+     * a bezetvarý vestavěný recept ho pak vždycky přebil. Vzor se proto
+     * položí do mřížky 3x3 a zkusí se na něj oba seznamy vestavěných
+     * receptů, stejně jako v crafting table.
+     */
     public static boolean builtInHasPattern(Recipe wanted)
     {
         Recipe normalized = RecipeBook.normalize(wanted);
+        int size = RecipeBook.MAX_SIZE;
+        Container grid = new Container(size * size);
+
+        for(int y = 0; y < normalized.height(); y++)
+        {
+            for(int x = 0; x < normalized.width(); x++)
+            {
+                byte block = normalized.pattern()[y * normalized.width() + x];
+
+                if(block != World.AIR)
+                {
+                    grid.set(y * size + x, ItemStack.of(block, 1));
+                }
+            }
+        }
 
         for(Recipe recipe : SHAPED)
         {
-            if(recipe.width() == normalized.width() && recipe.height() == normalized.height()
-                    && java.util.Arrays.equals(recipe.pattern(), normalized.pattern()))
+            if(matchesShaped(grid, size, size, recipe))
+            {
+                return true;
+            }
+        }
+
+        for(Recipe recipe : SHAPELESS)
+        {
+            if(matchesShapeless(grid, recipe))
             {
                 return true;
             }

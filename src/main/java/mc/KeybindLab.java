@@ -407,7 +407,9 @@ public final class KeybindLab implements LabMode {
         }
         else
         {
-            text.drawShadowed("CLASH  " + conflicts.get(0) + "  - neither one fires",
+            // fit(): s nejdelšími názvy akcí vychází řádek těsně přes šířku.
+            text.drawShadowed(lab.fit("CLASH  " + conflicts.get(0) + "  - neither one fires",
+                            TextureLabLayout.CONTENT_WIDTH - 16, scale),
                     layout.textLeft(8), layout.textTop(TextureLabLayout.KEY_CONFLICT_Y),
                     Palette.TEXT_WARNING, Palette.TEXT_SHADOW);
 

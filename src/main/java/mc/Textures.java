@@ -134,13 +134,50 @@ public final class Textures {
 
         if(fromFile != null)
         {
-            fillMissingBuiltInTiles(fromFile);
+            completeAtlas(fromFile, BlockRegistry.active());
             return new AtlasPixels(fromFile, true);
         }
 
         int[] pixels = blockAtlasPixels();
         markMissingTiles(pixels, BlockRegistry.active());
         return new AtlasPixels(pixels, false);
+    }
+
+    /**
+     * Doplní atlas ze souboru o to, co v něm chybí: prázdné buňky
+     * vestavěných bloků procedurálně, prázdné buňky bloků z labu šachovnicí.
+     *
+     * ⚠️ OBOJÍ, A PRO NAČTENÍ I PRO IMPORT. Dřív soubor dostal jen vestavěné
+     * dlaždice: atlas.png starší než blocks.json (je v gitu, blocks.json ne,
+     * takže stačí `git checkout` nebo přepnutí větve) nechal bloky z labu
+     * průhledné, tedy černé kostky bez hlášky. A import PNG nedoplnil ani
+     * vestavěné - tentýž soubor dopadl jinak podle toho, jestli přišel
+     * při startu, nebo tlačítkem Import (LAB-14).
+     */
+    static void completeAtlas(int[] pixels, BlockRegistry registry)
+    {
+        fillMissingBuiltInTiles(pixels);
+        markMissingTiles(pixels, registry);
+    }
+
+    /** Není v buňce atlasu ani jeden pixel s nenulovou alfou? */
+    static boolean tileEmpty(int[] pixels, int tile)
+    {
+        int originX = BlockAtlas.column(tile) * BlockAtlas.TILE_PIXELS;
+        int originY = BlockAtlas.row(tile) * BlockAtlas.TILE_PIXELS;
+
+        for(int y = 0; y < BlockAtlas.TILE_PIXELS; y++)
+        {
+            for(int x = 0; x < BlockAtlas.TILE_PIXELS; x++)
+            {
+                if((pixels[(originY + y) * BlockAtlas.ATLAS_PIXELS + originX + x] >>> 24) != 0)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -172,21 +209,7 @@ public final class Textures {
             int originX = BlockAtlas.column(tile) * BlockAtlas.TILE_PIXELS;
             int originY = BlockAtlas.row(tile) * BlockAtlas.TILE_PIXELS;
 
-            boolean empty = true;
-
-            for(int y = 0; y < BlockAtlas.TILE_PIXELS && empty; y++)
-            {
-                for(int x = 0; x < BlockAtlas.TILE_PIXELS; x++)
-                {
-                    if((pixels[(originY + y) * BlockAtlas.ATLAS_PIXELS + originX + x] >>> 24) != 0)
-                    {
-                        empty = false;
-                        break;
-                    }
-                }
-            }
-
-            if(empty)
+            if(tileEmpty(pixels, tile))
             {
                 // Procedurální atlas se počítá až tady a nejvýš jednou -
                 // u souboru, kterému nic nechybí, se nevyrobí vůbec.
@@ -216,6 +239,9 @@ public final class Textures {
      * atlasu prázdné - průhledné, a v neprůhledném průchodu tedy černé.
      * Šachovnice ukáže, že chybí textura, ne že je blok černý. Bez bloků
      * z labu se nemění nic.
+     *
+     * Týká se jen PRÁZDNÝCH buněk (ani jeden pixel s alfou), takže na
+     * atlas ze souboru jde pustit taky - namalovanou dlaždici nepřepíše.
      */
     static void markMissingTiles(int[] pixels, BlockRegistry registry)
     {
@@ -223,7 +249,7 @@ public final class Textures {
 
         for(int tile = BlockAtlas.TILE_COUNT; tile < used.length; tile++)
         {
-            if(!used[tile])
+            if(!used[tile] || !tileEmpty(pixels, tile))
             {
                 continue;
             }

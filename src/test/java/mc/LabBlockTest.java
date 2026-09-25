@@ -164,6 +164,54 @@ public class LabBlockTest {
         }
         check("bez atlas.png maji dlazdice bloku z labu sachovnici neznameho bloku", filled && unknownTexel != 0, "");
         check("ostatni dlazdice zustanou, jak byly", untouched && marked.length == size * size, "");
+
+        // ⚠️ Totez pro atlas ZE SOUBORU (PER-4). atlas.png starsi nez blocks.json
+        // (git checkout, prepnuti vetve) nechaval bunky bloku z labu pruhledne,
+        // tedy cerne kostky. Namalovana dlazdice se ale prepsat nesmi.
+        int labTile = -1;
+        for (int tile = BlockAtlas.TILE_COUNT; tile < AtlasEditor.tileCount(); tile++)
+            if (REGISTRY.usedTiles()[tile]) { labTile = tile; break; }
+        int paintedTile = -1;
+        for (int tile = labTile + 1; tile < AtlasEditor.tileCount(); tile++)
+            if (REGISTRY.usedTiles()[tile]) { paintedTile = tile; break; }
+        check("registr testu ma aspon dve dlazdice z labu", labTile >= 0 && paintedTile >= 0,
+                labTile + ", " + paintedTile);
+
+        int[] oldFile = procedural.clone();   // soubor bez dlazdic z labu...
+        for (int y = 0; y < 16; y++)          // ...krome jedne namalovane
+            for (int x = 0; x < 16; x++)
+                oldFile[AtlasEditor.pixelIndex(paintedTile, x, y)] = 0xFF123456;
+        int[] completed = oldFile.clone();
+        Textures.completeAtlas(completed, REGISTRY);
+        check("atlas ze souboru: chybejici dlazdice bloku z labu = sachovnice",
+                completed[AtlasEditor.pixelIndex(labTile, 3, 5)]
+                        == procedural[AtlasEditor.pixelIndex(BlockAtlas.TILE_UNKNOWN, 3, 5)], "");
+        check("atlas ze souboru: namalovana dlazdice z labu zustane",
+                completed[AtlasEditor.pixelIndex(paintedTile, 3, 5)] == 0xFF123456, "");
+
+        // Import tehoz souboru musi dopadnout stejne jako nacteni (LAB-14).
+        try {
+            Path dir = Files.createTempDirectory("labtiles");
+            Path file = dir.resolve("old-atlas.png");
+            AtlasImage.save(oldFile, file);
+            BlockRegistry before = BlockRegistry.active();
+            try {
+                BlockRegistry.activate(REGISTRY);
+                int[] loaded = Textures.atlasPixels(file).pixels();
+                AtlasEditor editor = new AtlasEditor(Textures.blockAtlasPixels());
+                AtlasImage.importInto(editor, file);
+                check("nacteni doplni dlazdici z labu", loaded[AtlasEditor.pixelIndex(labTile, 3, 5)]
+                        == procedural[AtlasEditor.pixelIndex(BlockAtlas.TILE_UNKNOWN, 3, 5)], "");
+                check("import doplni presne totez co nacteni",
+                        Arrays.equals(editor.pixels(), loaded), "");
+            } finally {
+                BlockRegistry.activate(before);
+                Files.deleteIfExists(file);
+                Files.deleteIfExists(dir);
+            }
+        } catch (java.io.IOException e) {
+            check("docasny soubor", false, e.toString());
+        }
     }
 
     // ==================================================================

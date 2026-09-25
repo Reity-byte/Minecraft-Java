@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2238 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2252 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -593,7 +593,14 @@ jako černá kostka. `Textures.fillMissingBuiltInTiles()` proto po načtení sou
 dokreslí procedurálně každou **vestavěnou** buňku, ve které není ani jeden neprůhledný
 pixel. Sahá jen na úplně prázdné buňky, takže nic namalovaného nepřepíše (voda má
 alfu 0xC0, ne nulu) a buněk bloků z labu se netýká vůbec. Je to zrcadlový případ
-k `markMissingTiles()`, která naopak vyplňuje buňky bloků z labu v procedurálním atlasu.
+k `markMissingTiles()`, která vyplňuje buňky bloků z labu šachovnicí.
+
+**⚠️ Atlas ze souboru i z importu dostane obojí** (`Textures.completeAtlas()`). Dřív soubor
+dostal jen vestavěné dlaždice: `atlas.png` starší než `blocks.json` (atlas je v gitu,
+`blocks.json` ne — stačí `git checkout` nebo přepnutí větve) nechal bloky z labu průhledné,
+tedy černé kostky bez hlášky. A import PNG v labu nedoplnil ani vestavěné, takže tentýž
+soubor dopadl jinak při startu a jinak přes Import. Šachovnice jde jen do úplně prázdných
+buněk — namalovanou dlaždici z labu nepřepíše.
 
 **Zpětná kompatibilita: `GENERATOR_VERSION` 4 → 5.** Neukládá se svět, ale rozdíl proti
 generátoru, takže se terén při načtení dopočítá ZNOVU — a to novým generátorem.
@@ -2029,6 +2036,12 @@ nejdřív tvarované vestavěné recepty, pak bezetvarové, a teprve pak seznam
 z labu. Chybějící, prázdný i poškozený soubor tedy znamená hru přesně takovou,
 jaká byla — smyčka se ani jednou neprotočí. **Vestavěný recept má přednost**,
 a lab vzor, který už vestavěný recept má, ani neuloží (řekne proč).
+
+**⚠️ „Má už vestavěný recept“ se ptá TÉHOŽ POROVNÁNÍ jako hra.** `Recipes.builtInHasPattern()`
+položí vzor do mřížky 3×3 a zkusí na něj tvarované I bezetvaré vestavěné recepty. Dřív
+porovnávala jen tvarované, takže „jedna tráva“ nebo „prkno a uhlí“ prošly, lab je uložil
+s hláškou „works right now“ a bezetvarý vestavěný recept je pak vždycky přebil — do
+`recipes.json` se zapsal mrtvý recept.
 
 **⚠️ NOVÝ RECEPT PLATÍ HNED, BEZ RESTARTU.** Save zapíše soubor **a zároveň**
 aktivuje nový `RecipeBook`; `Recipes.match()` se ptá aktivního seznamu, ne

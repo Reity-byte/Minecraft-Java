@@ -525,9 +525,16 @@ public final class BiomeTunerLab implements LabMode {
         lab.centered(layout, TextureLabLayout.TUNE_REROLL, "Reroll tree");
         lab.centered(layout, TextureLabLayout.TUNE_CLOSE, "Close  (Esc)");
 
+        // ⚠️ VAROVÁNÍ MÁ PŘEDNOST, zkracuje se popis. Celý řádek vycházel
+        // na ~675 GUI px z 440 a uříznutý byl právě konec "applies to the
+        // NEXT world" - věta, kvůli které tu řádek je. Varování má teď pevné
+        // místo vpravo a popis stromu se vejde do zbytku (se třemi tečkami).
+        String warning = "Save = NEXT world, not this one";
+        int width = TextureLabLayout.CONTENT_WIDTH - 16;
+        int warningWidth = (int) Math.ceil(text.widthOf(warning) / scale);
         lab.label(layout, 8, TextureLabLayout.TUNE_INFO_Y,
-                name(selected) + ": " + describeShown()
-                        + "   -   saved tuning applies to the NEXT world, not this one");
+                lab.fit(name(selected) + ": " + describeShown(), width - warningWidth - 12, scale));
+        lab.label(layout, 8 + width - warningWidth, TextureLabLayout.TUNE_INFO_Y, warning);
 
         text.end();
     }

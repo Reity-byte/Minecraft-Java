@@ -2197,7 +2197,7 @@ public class TextureLab {
     }
 
     /** Zkrátí text tak, aby se vešel do šířky v GUI pixelech (se třemi tečkami). */
-    private String fit(String line, int guiWidth, int scale)
+    String fit(String line, int guiWidth, int scale)
     {
         float limit = guiWidth * scale;
 

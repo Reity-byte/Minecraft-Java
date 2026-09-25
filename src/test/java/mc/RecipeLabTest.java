@@ -378,6 +378,38 @@ public class RecipeLabTest {
             check("a u vzoru, ktery vestaveny neni, ne",
                     !Recipes.builtInHasPattern(lab), "");
 
+            // (f2) ⚠️ I BEZETVARE vestavene recepty (INV-3). Driv se porovnavaly
+            // jen tvarovane, takze "jedna trava" prosla, lab ji ulozil s hlaskou
+            // "works right now" a hlina z vestaveneho receptu ji vzdycky prebila.
+            byte[][] shapeless = {
+                    {World.GRASS}, {World.LOG}, {World.BIRCH_LOG}, {World.SPRUCE_LOG},
+            };
+            for (byte[] one : shapeless) {
+                check("bezetvary vestaveny: 1x blok " + one[0] + " pozna",
+                        Recipes.builtInHasPattern(new Recipes.Recipe(1, 1, one, World.SNOW, 1)), "");
+            }
+            check("bezetvary vestaveny: prkno a uhli vedle sebe pozna",
+                    Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
+                            new byte[]{World.PLANKS, World.COAL_ORE}, World.SNOW, 1)), "");
+            check("... i pod sebou a v rohu 3x3 (bezetvary = kdekoliv)",
+                    Recipes.builtInHasPattern(new Recipes.Recipe(3, 3, new byte[]{
+                            World.COAL_ORE, 0, 0,
+                            0, 0, 0,
+                            0, 0, World.PLANKS}, World.SNOW, 1)), "");
+            check("trava s kamenem uz vestaveny neni",
+                    !Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
+                            new byte[]{World.GRASS, World.STONE}, World.SNOW, 1)), "");
+            check("dve travy taky ne (bezetvary chce presne jednu)",
+                    !Recipes.builtInHasPattern(new Recipes.Recipe(2, 1,
+                            new byte[]{World.GRASS, World.GRASS}, World.SNOW, 1)), "");
+
+            RecipeLab grassLab = new RecipeLab(null, null, null);
+            grassLab.onEnter();
+            grassLab.grid().set(4, ItemStack.of(World.GRASS, 1));
+            check("Recipe Lab trave uprostred ulozeni odmitne",
+                    grassLab.problem() != null && grassLab.problem().contains("built-in"),
+                    "" + grassLab.problem());
+
             // (g) prazdny seznam = hra presne jako driv
             RecipeBook.activate(RecipeBook.empty());
             check("bez receptu z labu vrati mrizka snehu prazdno",
