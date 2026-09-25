@@ -24,6 +24,8 @@ public class ItemTest {
             textures();
             icons();
             creativeAndPlacing();
+            model();
+            rendering();
         } finally {
             ItemRegistry.activate(ItemRegistry.empty());
             RecipeBook.activate(RecipeBook.empty());
@@ -193,6 +195,131 @@ public class ItemTest {
         boolean same = na == nb;
         for (int i = 0; i < na && same; i++) same = a[i] == b[i];
         check("blok pres id kresli presne tytez vrcholy", same, na + " / " + nb);
+    }
+
+    static int[] tileWith(int... xy) {
+        int[] t = new int[16 * 16];
+        for (int i = 0; i < xy.length; i += 2) t[xy[i + 1] * 16 + xy[i]] = 0xFF804020;
+        return t;
+    }
+
+    static int quads(int floats) {
+        return floats / ItemModel.FLOATS_PER_QUAD;
+    }
+
+    static void model() {
+        float[] out = new float[ItemModel.MAX_FLOATS];
+
+        check("prazdna dlazdice = zadny model", ItemModel.build(new int[256], 3, out, 0) == 0, "");
+
+        int one = ItemModel.build(tileWith(5, 7), 3, out, 0);
+        check("jeden pixel = kvadr: predni, zadni a 4 hrany", quads(one) == 6, "" + quads(one));
+
+        // Normaly ven: kazdy trojuhelnik jednoho pixelu miri od jeho stredu.
+        boolean outward = true;
+        float cx = 5.5f / 16, cy = 7.5f / 16, cz = 0.5f;
+        int F = ItemModel.FLOATS_PER_VERTEX;
+        for (int t = 0; t < one; t += 3 * F) {
+            float ax = out[t], ay = out[t + 1], az = out[t + 2];
+            float bx = out[t + F], by = out[t + F + 1], bz = out[t + F + 2];
+            float qx = out[t + 2 * F], qy = out[t + 2 * F + 1], qz = out[t + 2 * F + 2];
+            float nx = (by - ay) * (qz - az) - (bz - az) * (qy - ay);
+            float ny = (bz - az) * (qx - ax) - (bx - ax) * (qz - az);
+            float nz = (bx - ax) * (qy - ay) - (by - ay) * (qx - ax);
+            float mx = (ax + bx + qx) / 3 - cx, my = (ay + by + qy) / 3 - cy, mz = (az + bz + qz) / 3 - cz;
+            outward &= nx * mx + ny * my + nz * mz > 0;
+        }
+        check("vsechny steny otocene ven (culling je nezahodi)", outward, "");
+
+        int[] row = new int[256];
+        for (int x = 0; x < 16; x++) row[4 * 16 + x] = 0xFF000000;
+        int rowFloats = ItemModel.build(row, 3, out, 0);
+        check("souvisly radek = jeden ctyruhelnik vpredu a jeden vzadu (+ hrany)",
+                quads(rowFloats) == 2 + 16 * 2 + 2, "" + quads(rowFloats));
+
+        // Sachovnice, ve ktere jsou "prazdna" pole poloprusvitna - musi vyjit jako sachovnice.
+        int[] half = checker();
+        for (int i = 0; i < 256; i++) if (half[i] == 0) half[i] = 0x7F000000;
+        check("pixel pod pulkou alfy je pruhledny", quads(ItemModel.build(half, 3, out, 0))
+                == quads(ItemModel.build(checker(), 3, out, 0)), "");
+
+        int worst = ItemModel.build(checker(), 3, out, 0);
+        check("sachovnice (nejhorsi pripad) se vejde do MAX_FLOATS", worst <= ItemModel.MAX_FLOATS && worst > 0,
+                worst + " / " + ItemModel.MAX_FLOATS);
+
+        // UV v dlazdici 3, souradnice v bloku, tloustka jeden pixel kolem stredu.
+        boolean uvInside = true, inBlock = true;
+        float u0 = BlockAtlas.column(3) * 16f / 128, v0 = BlockAtlas.row(3) * 16f / 128;
+        int stick = ItemModel.build(ItemTextures.tilePixels(ItemTextures.procedural(), ItemRegistry.TILE_STICK),
+                3, out, 0);
+        for (int i = 0; i < stick; i += F) {
+            uvInside &= out[i + 3] > u0 && out[i + 3] < u0 + 16f / 128 && out[i + 4] > v0 && out[i + 4] < v0 + 16f / 128;
+            inBlock &= out[i] >= 0 && out[i] <= 1 && out[i + 1] >= 0 && out[i + 1] <= 1
+                    && out[i + 2] >= ItemModel.Z_BACK && out[i + 2] <= ItemModel.Z_FRONT;
+        }
+        check("klacek: UV jen z vlastni dlazdice", uvInside, "");
+        check("klacek: v souradnicich bloku, jeden pixel tlusty kolem stredu", inBlock, "");
+    }
+
+    static int[] checker() {
+        int[] t = new int[256];
+        for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++) if (((x + y) & 1) == 0) t[y * 16 + x] = 0xFF000000;
+        return t;
+    }
+
+    static void rendering() {
+        ItemRegistry.activate(ItemRegistry.empty());
+        int[] atlas = ItemTextures.procedural();
+        float[] out = new float[HeldItemRenderer.MAX_FLOATS];
+
+        int held = HeldItemRenderer.buildItem(ItemRegistry.STICK, atlas, out);
+        check("klacek v ruce ma model", held > 0 && held <= HeldItemRenderer.MAX_FLOATS, "" + held);
+        check("bez pixelu nebo neznamy predmet nic", HeldItemRenderer.buildItem(ItemRegistry.STICK, null, out) == 0
+                && HeldItemRenderer.buildItem(ItemRegistry.FIRST_ID, atlas, out) == 0, "");
+
+        org.joml.Vector3f center = HeldItemRenderer.itemMatrix(new org.joml.Matrix4f(), 1280, 720, 70f, 0f, 0f,
+                HeldItemRenderer.Motion.STILL).transformProject(new org.joml.Vector3f(0.5f, 0.5f, 0.5f));
+        check("predmet v ruce je vpravo dole na obrazovce",
+                center.x > 0.2f && center.x < 1f && center.y < 0.2f && center.y > -1f, center.toString());
+
+        // Polozky na zemi: bloky a predmety kazdy ve sve instanci.
+        World w = CreativeTest.arena(100);
+        List<DroppedItem> items = new java.util.ArrayList<>();
+        DroppedItems drops = new DroppedItems();
+        drops.dropFromBlock(8, 102, 8, ItemStack.of(World.STONE, 1));
+        drops.dropFromBlock(9, 102, 8, ItemStack.of(ItemRegistry.STICK, 1));
+        items.addAll(drops.items());
+
+        DroppedItemMesh blocks = new DroppedItemMesh();
+        DroppedItemMesh sprites = new DroppedItemMesh(atlas);
+        blocks.build(items, w, 8, 102, 8, 64);
+        sprites.build(items, w, 8, 102, 8, 64);
+        check("instance pro bloky stavi jen kostku (36 vrcholu)", blocks.vertexCount() == 36, "" + blocks.vertexCount());
+        check("instance pro predmety stavi jen klacek (jeho model)",
+                sprites.vertexCount() == held / ItemModel.FLOATS_PER_VERTEX, "" + sprites.vertexCount());
+
+        float maxY = -99, minY = 99;
+        float[] v = sprites.vertices();
+        for (int i = 0; i < sprites.vertexCount(); i++) {
+            maxY = Math.max(maxY, v[i * DroppedItemMesh.FLOATS_PER_VERTEX + 1]);
+            minY = Math.min(minY, v[i * DroppedItemMesh.FLOATS_PER_VERTEX + 1]);
+        }
+        check("predmet na zemi je vetsi nez kostka (az pul bloku)",
+                maxY - minY > DroppedItem.SIZE && maxY - minY <= DroppedItemMesh.ITEM_SIZE + 1e-4f, (maxY - minY) + "");
+        w.shutdown();
+        CreativeTest.opened.remove(w);
+
+        // Postava ve treti osobe.
+        PlayerModelMesh body = new PlayerModelMesh();
+        PlayerPose pose = PlayerAnimation.pose(0f, 0f, 0f, 0f, 0f, 0f, true);
+        body.build(pose, 0, 0, 0, 0f, ItemRegistry.STICK, 1f, 0f, 0, 0, 0);
+        check("bez pixelu predmetu postava nic nedrzi", body.itemVertexCount() == 0 && !body.heldIsItem(), "");
+        body.setItemPixels(atlas);
+        body.build(pose, 0, 0, 0, 0f, ItemRegistry.STICK, 1f, 0f, 0, 0, 0);
+        check("postava drzi klacek (model z atlasu predmetu)",
+                body.heldIsItem() && body.itemVertexCount() == held / ItemModel.FLOATS_PER_VERTEX, "" + body.itemVertexCount());
+        body.build(pose, 0, 0, 0, 0f, World.STONE, 1f, 0f, 0, 0, 0);
+        check("s blokem je to zase blok z atlasu bloku", !body.heldIsItem() && body.itemVertexCount() == 36, "");
     }
 
     static void creativeAndPlacing() {

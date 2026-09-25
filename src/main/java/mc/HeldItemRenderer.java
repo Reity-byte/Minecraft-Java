@@ -8,7 +8,8 @@ import java.nio.FloatBuffer;
 import static org.lwjgl.opengl.GL33.*;
 
 /**
- * Co hráč drží v ruce v první osobě: blok, a když nedrží nic, holou pravou ruku.
+ * Co hráč drží v ruce v první osobě: blok, předmět (3D z pixelů, ItemModel),
+ * a když nedrží nic, holou pravou ruku.
  *
  * ---------------------------------------------------------------------------
  * Kreslí se ve VLASTNÍ perspektivě, ne ve světové. Je to kus geometrie kousek
@@ -41,7 +42,8 @@ public class HeldItemRenderer {
 
     /** Nejvíc kvádrů, které model může mít (z BlockModels, ne odhadem), s rezervou na ruku. */
     static final int MAX_BOXES = Math.max(4, BlockModels.MAX_BOXES);
-    static final int MAX_FLOATS = MAX_BOXES * VERTICES_PER_BOX * FLOATS_PER_VERTEX;
+    static final int MAX_FLOATS = Math.max(MAX_BOXES * VERTICES_PER_BOX * FLOATS_PER_VERTEX,
+            ItemModel.MAX_FLOATS);
 
     /** Holá ruka je pravá ruka modelu postavy - kvádr 4x12x4 px i jeho UV. */
     static final PlayerModelMesh.Part ARM = PlayerModelMesh.PARTS[PlayerModelMesh.PART_RIGHT_ARM];
@@ -66,6 +68,10 @@ public class HeldItemRenderer {
     private final Texture atlas;
     private final Texture skin;
 
+    /** Atlas předmětů a jeho pixely (z nich ItemModel pozná plné pixely); null = bez předmětů. */
+    private final Texture items;
+    private final int[] itemPixels;
+
     private final int vao;
     private final int vbo;
 
@@ -79,8 +85,20 @@ public class HeldItemRenderer {
      */
     public HeldItemRenderer(Texture atlas, Texture skin)
     {
+        this(atlas, skin, null, null);
+    }
+
+    /**
+     * @param items      atlas předmětů
+     * @param itemPixels jeho pixely - SDÍLENÉ pole, ne kopie: lab je upravuje
+     *                   na místě a model v ruce se staví každý frame znovu
+     */
+    public HeldItemRenderer(Texture atlas, Texture skin, Texture items, int[] itemPixels)
+    {
         this.atlas = atlas;
         this.skin = skin;
+        this.items = items;
+        this.itemPixels = itemPixels;
 
         vao = glGenVertexArrays();
         vbo = glGenBuffers();
@@ -101,15 +119,19 @@ public class HeldItemRenderer {
     }
 
     /**
-     * @param block     co je ve vybraném slotu; World.AIR = holá ruka
+     * @param id        co je ve vybraném slotu (Items); World.AIR = holá ruka
      * @param fastSwing rychlá křivka máchnutí - zdvih a překlopení zápěstí
      * @param slowSwing pomalá křivka máchnutí - odklon do strany
      * @param light 0 až 1 - ruka tmavne v jeskyni a v noci stejně jako svět
      */
     public void draw(int screenWidth, int screenHeight, float fovDegrees,
-                     byte block, float fastSwing, float slowSwing, float light, Motion motion)
+                     int id, float fastSwing, float slowSwing, float light, Motion motion)
     {
-        int floats = build(block, data);
+        // Předmět bez atlasu předmětů (nebo neznámý) nejde postavit - ruka je pak holá.
+        boolean item = isDrawableItem(id);
+        byte block = item ? World.AIR : (Items.isBlock(id) ? (byte) id : World.AIR);
+
+        int floats = item ? buildItem(id, itemPixels, data) : build(block, data);
 
         if(floats == 0)
         {
@@ -121,7 +143,14 @@ public class HeldItemRenderer {
         // kostky přebily přední.
         glClear(GL_DEPTH_BUFFER_BIT);
 
-        matrix(mvp, block, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, motion);
+        if(item)
+        {
+            itemMatrix(mvp, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, motion);
+        }
+        else
+        {
+            matrix(mvp, block, screenWidth, screenHeight, fovDegrees, fastSwing, slowSwing, motion);
+        }
 
         shader.bind();
         shader.setMatrix4("uMvp", mvp);
@@ -130,13 +159,14 @@ public class HeldItemRenderer {
         // Sampler je prostě jednotka 0 - "uAtlas" se jmenuje podle bloku,
         // pro holou ruku na ní leží skin. UV ruky míří do skinu.
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, isBareHand(block) ? skin.id() : atlas.id());
+        glBindTexture(GL_TEXTURE_2D, item ? items.id() : isBareHand(block) ? skin.id() : atlas.id());
         shader.setInt("uAtlas", 0);
 
         // Alfa jen u vody, jako ve světě: blok z labu s vygumovaným pixelem
         // má v ruce černou skvrnu stejně jako položený, a holá ruka taky -
         // postava ve třetí osobě se kreslí bez míchání.
-        shader.setFloat("uKeepAlpha", !isBareHand(block) && World.isTranslucent(block) ? 1f : 0f);
+        // Předmět má jen plné pixely (ItemModel průhledné vynechá), alfa netřeba.
+        shader.setFloat("uKeepAlpha", !item && !isBareHand(block) && World.isTranslucent(block) ? 1f : 0f);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -165,6 +195,51 @@ public class HeldItemRenderer {
     {
         return block == World.AIR;
     }
+
+    /** Předmět, který jde nakreslit: známý a s atlasem předmětů. */
+    private boolean isDrawableItem(int id)
+    {
+        return items != null && itemPixels != null && Items.item(id) != null;
+    }
+
+    /** Vrcholy předmětu v ruce - 3D model z jeho dlaždice (ItemModel). */
+    static int buildItem(int id, int[] itemPixels, float[] out)
+    {
+        ItemDef def = Items.item(id);
+
+        if(def == null || itemPixels == null)
+        {
+            return 0;
+        }
+
+        return ItemModel.build(ItemTextures.tilePixels(itemPixels, def.tile()), def.tile(), out, 0);
+    }
+
+    /**
+     * Držení předmětu. Minecraft drží klacek i nástroj jinak než kostku:
+     * obrázek stojí skoro kolmo k obrazovce, natočený tak, že je vidět
+     * jeho plocha i hrana, a špička míří nahoru doleva k zaměřovači.
+     *
+     * Máchnutí jsou tytéž dvě rotace jako u bloku (viz blockMatrix), jen
+     * s delším ramenem - předmět je delší než kostka.
+     */
+    static Matrix4f itemMatrix(Matrix4f dest, int screenWidth, int screenHeight, float fovDegrees,
+                               float fastSwing, float slowSwing, Motion motion)
+    {
+        return perspective(dest, screenWidth, screenHeight, fovDegrees, motion)
+                .translate(ITEM_X, ITEM_Y, ITEM_Z)
+                .rotateY((float) Math.toRadians(-20f * slowSwing))
+                .rotateZ((float) Math.toRadians(-20f * fastSwing))
+                .rotateX((float) Math.toRadians(-80f * fastSwing))
+                .rotateY((float) Math.toRadians(ITEM_TURN))
+                .rotateZ((float) Math.toRadians(ITEM_TILT))
+                .scale(ITEM_SCALE)
+                .translate(-0.5f, -0.5f, -0.5f);
+    }
+
+    /** Poloha, natočení a velikost drženého předmětu - viz itemMatrix(). */
+    static final float ITEM_X = 0.52f, ITEM_Y = -0.30f, ITEM_Z = -0.72f;
+    static final float ITEM_TURN = -70f, ITEM_TILT = 20f, ITEM_SCALE = 0.85f;
 
     /**
      * Vrcholy toho, co je v ruce, do out (aspoň MAX_FLOATS). Vrací počet

@@ -957,9 +957,10 @@ public class Main {
         atlasEditor = new AtlasEditor(atlasPixels);
         skinEditor = new SkinEditor(skinPixels);
 
-        worldRenderer = new WorldRenderer(blockAtlas, playerSkin);
+        worldRenderer = new WorldRenderer(blockAtlas, playerSkin, itemAtlas, itemPixels);
+        playerMesh.setItemPixels(itemPixels);
         sky = new SkyRenderer();
-        heldItem = new HeldItemRenderer(blockAtlas, playerSkin);
+        heldItem = new HeldItemRenderer(blockAtlas, playerSkin, itemAtlas, itemPixels);
         shapes = new Renderer2D();
         // Font se rasterizuje MALÝ a na obrazovku se kreslí zvětšený celým
         // číslem (Gui.scale). Při větší velikosti by zvětšení vyšlo obrovské
@@ -1781,7 +1782,7 @@ public class Main {
                 camera.bobPhase, camera.bobAmount,
                 handSway.tiltYaw(camera.yaw), handSway.tiltPitch(camera.pitch));
 
-        heldItem.draw(width, height, options.fov(), held.block(),
+        heldItem.draw(width, height, options.fov(), held.id(),
                 swing.fast(), swing.slow(), light, motion);
     }
 
@@ -1802,7 +1803,7 @@ public class Main {
         int cell = world.cellAt((int) Math.floor(player.x),
                 (int) Math.floor(player.eyeY()), (int) Math.floor(player.z));
 
-        playerMesh.build(pose, player.x, player.y, player.z, camera.yaw, held.block(),
+        playerMesh.build(pose, player.x, player.y, player.z, camera.yaw, held.id(),
                 World.cellSky(cell) / 15f, World.cellBlockLight(cell) / 15f,
                 camera.x, camera.y, camera.z);
 

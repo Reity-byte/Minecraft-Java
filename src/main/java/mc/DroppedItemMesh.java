@@ -24,6 +24,12 @@ import static org.lwjgl.opengl.GL33.*;
  *
  * Staví se znovu každý frame. Kostka je 36 vrcholů, takže i sto položek
  * je necelých 100 KB.
+ *
+ * ⚠️ BLOKY A PŘEDMĚTY JSOU DVĚ INSTANCE. Předmět se kreslí z atlasu
+ * předmětů (jiná textura), takže nemůže být v jednom draw callu s bloky.
+ * Instance bez pixelů předmětů staví jen bloky, instance s nimi jen
+ * předměty - každá jako 3D model z ItemModel, dvakrát větší než kostka
+ * (plochý obrázek by byl v měřítku kostky nečitelný).
  * ---------------------------------------------------------------------------
  *
  * build() nesahá na GL a jde otestovat headless; upload() a draw() ano.
@@ -55,7 +61,30 @@ public class DroppedItemMesh {
     private static final float BOB_AMPLITUDE = 0.1f;
     private static final float BOB_SPEED = 2f;
 
+    /** Předmět na zemi je obrázek o straně půl bloku - dvojnásobek kostky. */
+    static final float ITEM_SIZE = DroppedItem.SIZE * 2f;
+
     private float[] data = new float[FLOATS_PER_QUAD * 6 * 16];
+
+    /** null = instance pro bloky; jinak pro předměty (viz třída). */
+    private final int[] itemPixels;
+    private final float[] itemModel;
+
+    /** Velikost právě stavěné položky - DroppedItem.SIZE, u předmětu ITEM_SIZE. */
+    private float size = DroppedItem.SIZE;
+
+    /** Instance pro bloky. */
+    public DroppedItemMesh()
+    {
+        this(null);
+    }
+
+    /** Instance pro předměty z atlasu s těmito pixely (sdílené pole, ne kopie). */
+    public DroppedItemMesh(int[] itemPixels)
+    {
+        this.itemPixels = itemPixels;
+        this.itemModel = itemPixels == null ? null : new float[ItemModel.MAX_FLOATS];
+    }
     private int floats = 0;
 
     // Stav právě stavěné položky - nastaví se jednou na položku, viz emitItem().
@@ -94,6 +123,12 @@ public class DroppedItemMesh {
                 continue;
             }
 
+            // Každá instance jen svůj druh - bloky, nebo předměty.
+            if(Items.isItem(item.stack().id()) != (itemPixels != null))
+            {
+                continue;
+            }
+
             emitItem(item, world, dx, dy, dz);
         }
     }
@@ -118,6 +153,13 @@ public class DroppedItemMesh {
         sky = World.cellSky(cell) / (float) LightEngine.MAX_LIGHT;
         block = World.cellBlockLight(cell) / (float) LightEngine.MAX_LIGHT;
 
+        if(itemPixels != null)
+        {
+            emitItemModel(item.stack().id());
+            return;
+        }
+
+        size = DroppedItem.SIZE;
         byte id = item.stack().block();
 
         int top = BlockAtlas.tile(id, BlockAtlas.FACE_TOP);
@@ -127,6 +169,32 @@ public class DroppedItemMesh {
         for(BlockModels.BlockBox box : BlockModels.of(id))
         {
             emitBox(box, top, bottom, side);
+        }
+    }
+
+    /** Předmět jako 3D model z pixelů; neznámý předmět se nekreslí. */
+    private void emitItemModel(int id)
+    {
+        ItemDef def = Items.item(id);
+
+        if(def == null)
+        {
+            return;
+        }
+
+        size = ITEM_SIZE;
+        int end = ItemModel.build(ItemTextures.tilePixels(itemPixels, def.tile()), def.tile(), itemModel, 0);
+
+        if(floats + end / ItemModel.FLOATS_PER_VERTEX * FLOATS_PER_VERTEX > data.length)
+        {
+            data = Arrays.copyOf(data, Math.max(data.length * 2,
+                    floats + end / ItemModel.FLOATS_PER_VERTEX * FLOATS_PER_VERTEX));
+        }
+
+        for(int i = 0; i < end; i += ItemModel.FLOATS_PER_VERTEX)
+        {
+            vertex(itemModel[i], itemModel[i + 1], itemModel[i + 2],
+                    itemModel[i + 3], itemModel[i + 4], itemModel[i + 5]);
         }
     }
 
@@ -199,11 +267,11 @@ public class DroppedItemMesh {
      */
     private void vertex(float mx, float my, float mz, float u, float v, float shade)
     {
-        float lx = (mx - 0.5f) * DroppedItem.SIZE;
-        float lz = (mz - 0.5f) * DroppedItem.SIZE;
+        float lx = (mx - 0.5f) * size;
+        float lz = (mz - 0.5f) * size;
 
         data[floats++] = baseX + lx * cos - lz * sin;
-        data[floats++] = baseY + my * DroppedItem.SIZE;
+        data[floats++] = baseY + my * size;
         data[floats++] = baseZ + lx * sin + lz * cos;
         data[floats++] = u;
         data[floats++] = v;

@@ -83,6 +83,25 @@ public class PlayerModelMesh {
     private int skinVertices = 0;
     private int itemVertices = 0;
 
+    /** Drží ruka předmět (atlas předmětů), ne blok (atlas bloků)? Říká WorldRenderer, co navázat. */
+    private boolean heldIsItem = false;
+
+    /** Pixely atlasu předmětů - sdílené s Main (lab je mění na místě); null = předměty se nekreslí. */
+    private int[] itemPixels;
+
+    /** Model předmětu z ItemModel, přepoužívaný buffer. */
+    private final float[] itemModel = new float[ItemModel.MAX_FLOATS];
+
+    public void setItemPixels(int[] pixels)
+    {
+        itemPixels = pixels;
+    }
+
+    public boolean heldIsItem()
+    {
+        return heldIsItem;
+    }
+
     // Stav právě stavěného kvádru.
     private final Matrix4f model = new Matrix4f();
     private final Matrix4f part = new Matrix4f();
@@ -105,13 +124,13 @@ public class PlayerModelMesh {
      *
      * @param feetX/Y/Z  chodidla (Player.x, y, z)
      * @param yawDegrees kam se postava dívá - stejná úmluva jako Camera.yaw
-     * @param heldBlock  blok v pravé ruce, World.AIR když nic
+     * @param heldId     co je v pravé ruce (Items): blok, předmět, World.AIR když nic
      * @param sky, block světlo 0 až 1 - jedno pro celou postavu, jako u ruky
      *                   v první osobě
      * @param camX/Y/Z   kamera; vrcholy vyjdou relativně k ní
      */
     public void build(PlayerPose pose, float feetX, float feetY, float feetZ, float yawDegrees,
-                      byte heldBlock, float sky, float block, float camX, float camY, float camZ)
+                      int heldId, float sky, float block, float camX, float camY, float camZ)
     {
         floats = 0;
         this.sky = sky;
@@ -136,9 +155,15 @@ public class PlayerModelMesh {
 
         skinVertices = floats / FLOATS_PER_VERTEX;
 
-        if(heldBlock != World.AIR)
+        heldIsItem = false;
+
+        if(Items.isItem(heldId))
         {
-            emitHeldBlock(pose, heldBlock);
+            heldIsItem = emitHeldItem(pose, heldId);
+        }
+        else if(heldId != World.AIR)
+        {
+            emitHeldBlock(pose, (byte) heldId);
         }
 
         itemVertices = floats / FLOATS_PER_VERTEX - skinVertices;
@@ -327,6 +352,47 @@ public class PlayerModelMesh {
                     UV_A, x0, x1, y0, y1, 0, 0, -1);
         }
     }
+
+    /**
+     * Držený předmět: 3D model z pixelů (ItemModel), jako v první osobě.
+     * Obrázek stojí v rovině podél paže (bokem k divákovi po stranách),
+     * špičkou dopředu - klacek v pěsti míří před postavu jako v Minecraftu.
+     * Vrací false, když předmět nejde postavit (neznámý, bez pixelů).
+     */
+    private boolean emitHeldItem(PlayerPose pose, int id)
+    {
+        ItemDef def = Items.item(id);
+
+        if(def == null || itemPixels == null)
+        {
+            return false;
+        }
+
+        Part arm = PARTS[PART_RIGHT_ARM];
+        int end = ItemModel.build(ItemTextures.tilePixels(itemPixels, def.tile()), def.tile(), itemModel, 0);
+
+        partMatrix(arm, pose.rightArmX(), pose.rightArmY(), pose.rightArmZ())
+                .translate(arm.pivotX() + HELD_ITEM_X, arm.pivotY() + HELD_ITEM_Y, arm.pivotZ() + HELD_ITEM_Z)
+                // Rovina obrázku (x-y) se otočí do roviny y-z: obrázek míří
+                // svou pravou stranou dopředu (+Z), plochou do stran (±X).
+                .rotateY((float) Math.toRadians(-90))
+                .rotateZ((float) Math.toRadians(HELD_ITEM_TILT))
+                .scale(HELD_ITEM_SIZE)
+                .translate(-0.5f, -0.5f, -0.5f);
+
+        for(int i = 0; i < end; i += ItemModel.FLOATS_PER_VERTEX)
+        {
+            vertex(itemModel[i], itemModel[i + 1], itemModel[i + 2],
+                    itemModel[i + 3], itemModel[i + 4], itemModel[i + 5]);
+        }
+
+        return end > 0;
+    }
+
+    /** Předmět v ruce postavy: v pixelech modelu, jako ITEM_*; obrázek 10 px velký. */
+    static final float HELD_ITEM_SIZE = 10f;
+    static final float HELD_ITEM_X = -1f, HELD_ITEM_Y = -10f, HELD_ITEM_Z = 3f;
+    static final float HELD_ITEM_TILT = -45f;
 
     /** Stejné dva vzorce rohů dlaždice jako v ChunkMesh - viz jeho UV_A a UV_B. */
     private static final float[] UV_A = {0, 0,  0, 1,  1, 1,  1, 0};

@@ -66,6 +66,9 @@ public class WorldRenderer {
     /** Skin postavy ve třetí osobě. Vlastní ho Main, stejně jako atlas. */
     private final Texture skin;
 
+    /** Atlas předmětů - pro předměty na zemi a v ruce postavy; null = bez předmětů. */
+    private final Texture items;
+
     /** Meshe po sloupcích, stejný klíč jako používá World. Pole má jednu položku na sekci. */
     private final LongMap<ChunkMesh[]> columnMeshes = new LongMap<>(512);
 
@@ -93,6 +96,9 @@ public class WorldRenderer {
      * světlo i mlhu jako terén - viz DroppedItemMesh.
      */
     private final DroppedItemMesh itemMesh = new DroppedItemMesh();
+
+    /** Předměty (ne bloky) na zemi - jiná textura, proto vlastní mesh a draw call. */
+    private final DroppedItemMesh spriteMesh;
 
     /** Dál než tohle se položky nekreslí - čtvrtinová kostka je tam pixel nebo dva. */
     private static final float ITEM_DRAW_DISTANCE = 64f;
@@ -125,8 +131,15 @@ public class WorldRenderer {
 
     public WorldRenderer(Texture atlas, Texture skin)
     {
+        this(atlas, skin, null, null);
+    }
+
+    public WorldRenderer(Texture atlas, Texture skin, Texture items, int[] itemPixels)
+    {
         this.atlas = atlas;
         this.skin = skin;
+        this.items = items;
+        this.spriteMesh = items == null ? null : new DroppedItemMesh(itemPixels);
         createOutlineMesh();
     }
 
@@ -290,18 +303,32 @@ public class WorldRenderer {
             return;
         }
 
-        itemMesh.build(items, world, camera.x, camera.y, camera.z,
-                Math.min(ITEM_DRAW_DISTANCE, world.renderDistance));
+        float distance = Math.min(ITEM_DRAW_DISTANCE, world.renderDistance);
+        itemMesh.build(items, world, camera.x, camera.y, camera.z, distance);
 
-        if(itemMesh.isEmpty())
+        shader.setVector3("uChunkOffset", 0f, 0f, 0f);
+
+        if(!itemMesh.isEmpty())
+        {
+            itemMesh.upload();
+            itemMesh.draw();
+        }
+
+        if(spriteMesh == null)
         {
             return;
         }
 
-        shader.setVector3("uChunkOffset", 0f, 0f, 0f);
+        spriteMesh.build(items, world, camera.x, camera.y, camera.z, distance);
 
-        itemMesh.upload();
-        itemMesh.draw();
+        if(!spriteMesh.isEmpty())
+        {
+            // Předměty z jejich atlasu, pak zpátky atlas bloků - voda po nás ho čeká.
+            glBindTexture(GL_TEXTURE_2D, this.items.id());
+            spriteMesh.upload();
+            spriteMesh.draw();
+            glBindTexture(GL_TEXTURE_2D, atlas.id());
+        }
     }
 
     /**
@@ -323,8 +350,10 @@ public class WorldRenderer {
         glBindTexture(GL_TEXTURE_2D, skin.id());
         body.drawSkin();
 
-        glBindTexture(GL_TEXTURE_2D, atlas.id());
+        // Předmět v ruce z atlasu předmětů; atlas bloků se pak vrátí pro vodu.
+        glBindTexture(GL_TEXTURE_2D, body.heldIsItem() && items != null ? items.id() : atlas.id());
         body.drawItem();
+        glBindTexture(GL_TEXTURE_2D, atlas.id());
     }
 
     /**
@@ -807,6 +836,11 @@ public class WorldRenderer {
         }
 
         itemMesh.delete();
+
+        if(spriteMesh != null)
+        {
+            spriteMesh.delete();
+        }
         crackShader.delete();
         outlineShader.delete();
         shader.delete();

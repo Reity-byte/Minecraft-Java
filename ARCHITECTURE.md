@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2450 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2466 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -82,7 +82,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
 | `AmbienceTest` | Cíle hlasitosti: venku fouká a ve výšce víc, v budově ne, pod stromem o dost míň; jeskyně jen ve tmě **a** pod mořem (dům ani roklina nehučí); voda slábne se vzdáleností, pod vodou naplno a ostatní ztichnou. Nejbližší voda ve skutečném světě (5 bloků), **hlasitost se dotahuje, neskočí**, po 10 s sedí s cílem, v pauze dozní; v jeskyni za minutu 4–15 kapek, poziční a kolem hlavy. V `SoundTest` navíc **smyčky beze švu** (skok konec → začátek ne větší než uvnitř) |
-| `ItemTest` | Předměty: klacek a uhlí existují i bez `items.json`, jména, hromádka předmětu není blok, slévání a dělení po 64, **recept s předmětem projde validací, neznámý předmět ne**; registr (volná dlaždice za vestavěnými, `nextId` jen roste i po smazání, vestavěné smazat nejde, jméno proti vestavěným), `items.json` tam a zpět, ručně psaný soubor s výchozími hodnotami a přeskočenými záznamy; atlas (klacek je obrys na průhledném pozadí, doplnění prázdného souboru); ikona předmětu = jeden čtverec ze zdroje 1 s alfou, neznámý = šachovnice, blok přes `int` id kreslí tytéž vrcholy; creative má předměty za bloky; **vzduch se položit nedá** |
+| `ItemTest` | Předměty: klacek a uhlí existují i bez `items.json`, jména, hromádka předmětu není blok, slévání a dělení po 64, **recept s předmětem projde validací, neznámý předmět ne**; registr (volná dlaždice za vestavěnými, `nextId` jen roste i po smazání, vestavěné smazat nejde, jméno proti vestavěným), `items.json` tam a zpět, ručně psaný soubor s výchozími hodnotami a přeskočenými záznamy; atlas (klacek je obrys na průhledném pozadí, doplnění prázdného souboru); ikona předmětu = jeden čtverec ze zdroje 1 s alfou, neznámý = šachovnice, blok přes `int` id kreslí tytéž vrcholy; creative má předměty za bloky; **vzduch se položit nedá**. 3D model: prázdná dlaždice nic, pixel = 6 stěn **otočených ven**, řádek = jeden čtyřúhelník vpředu a vzadu, poloprůsvitný pixel je průhledný, šachovnice se vejde do `MAX_FLOATS`, UV jen z vlastní dlaždice; klacek v ruce vpravo dole, na zemi se bloky a předměty staví každý ve své instanci a předmět je větší než kostka, postava drží klacek z atlasu předmětů (bez pixelů nic) |
 | `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto. FOV efekt: sprint/let/obojí, **sprint do zdi nic**, plynulý náběh stejný při 30 i 60 FPS, vypnutí vrací na 1, reset nového světa |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty. **Napojování plotů:** sloupek / dvě příčky / všech 9 kvádrů = `MAX_BOXES`, napojí se na plot a zeď, ne na listí, vodu, pochodeň; příčky míří ke správnému sousedovi; v meshi dva ploty 2 × 18 stěn, konec příčky u kamene se zahodí, **napojení přes hranici chunku z obou stran** |
@@ -2790,7 +2790,7 @@ průsvitné. V ruce, v inventáři a na zemi je plot dál sloupek (sousedy nemá
 celý blok vysoký 1, takže plot jde (na rozdíl od Minecraftu, kde má kolizi 1,5) přeskočit —
 to by chtělo kolizní kvádry místo buněk.
 
-**Předměty — rozpracováno (hotové kroky 1 a 2a).** Plán: (1) hromádka nese obecné
+**Předměty — rozpracováno (hotové kroky 1 a 2).** Plán: (1) hromádka nese obecné
 id, (2) `ItemRegistry` + `textures/items.json`/`items.png`, vestavěný klacek a uhlí, kreslení
 v inventáři, v ruce (3D z pixelů), na zemi a ve třetí osobě, (3) lab „Items" a předměty
 v Recipe Labu, (4) nástroje zrychlují těžbu podle materiálu, uhelná ruda dává uhlí, pochodeň
@@ -2822,8 +2822,24 @@ float „zdroj" (0 = atlas bloků na jednotce 0, 1 = atlas předmětů na jednot
 něj vybere; alfa u předmětu platí vždycky. Jedna dávka proto, že kurzor nakreslený naposled musí
 zůstat nahoře — dvě dávky by pořadí rozbily. Neznámý předmět je šachovnice z atlasu bloků.
 Creative přehled má předměty za bloky. **Předmět se nepokládá:** Main pokládá jen `isBlock()`
-a `World.placeBlock` navíc odmítne vzduch. V ruce, na zemi a ve třetí osobě se předmět zatím
-kreslí jako holá ruka / neznámý blok — to je krok 2b (3D model z pixelů).
+a `World.placeBlock` navíc odmítne vzduch.
+
+**V ruce, na zemi a ve třetí osobě je předmět 3D model z pixelů (`ItemModel`).** Obrázek
+vytažený do tloušťky jednoho pixelu v souřadnicích bloku (x-y obrázek, z kolem 0,5), takže na něj
+platí tytéž matice jako na kostku. Přední a zadní stěna po **bězích** plných pixelů v řádku (ne
+čtverec na pixel), boky jen tam, kde vedle plného pixelu je průhledný — obrys. **Průhledné pixely
+se vůbec nekreslí:** svět i ruka kreslí neprůhledně a alfu ignorují, čtverec přes celou dlaždici
+by měl kolem klacku černé pozadí. Boky berou barvu středu svého pixelu. Pixel pod půlkou alfy je
+průhledný. Nejhorší případ (šachovnice) je `MAX_FLOATS`, podle něj má ruka buffer.
+Model se staví **každý frame znovu** z pixelů sdílených s Main (256 pixelů, mikrosekundy) —
+úprava obrázku v labu je tak vidět hned, bez cache k invalidaci.
+
+- **V ruce** vlastní matice `itemMatrix`: obrázek skoro kolmo k obrazovce, špičkou nahoru doleva,
+  máchnutí stejnými dvěma rotacemi jako blok. Hodnoty naladěné sondou podle vzhledu.
+- **Na zemi** druhá instance `DroppedItemMesh` (s pixely předmětů staví jen předměty, bez nich jen
+  bloky) a druhý draw call s atlasem předmětů; předmět je dvakrát větší než kostka (půl bloku).
+- **Ve třetí osobě** `PlayerModelMesh` postaví model podél paže, špičkou dopředu, a řekne
+  (`heldIsItem`), jaký atlas `WorldRenderer` naváže; atlas bloků se pak vrátí pro vodu.
 
 **Osvětlení a cyklus dne a noci — hotovo.** Sluneční i blokové světlo, pochodně, desetiminutový
 den, obloha měnící barvu. Klávesa **T** posune čas o desetinu cyklu (na noc se jinak čeká minuty).
