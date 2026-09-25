@@ -36,7 +36,8 @@ public final class OptionsScreen {
         GUI_SCALE(1, 3, false, "Size of menus and HUD; Auto = largest that fits"),
         SENSITIVITY(0, 4, true, "Mouse look speed"),
         INVERT_MOUSE(1, 4, false, "Moving the mouse up looks down"),
-        VIEW_BOBBING(0, 5, false, "Camera and hand bob while walking");
+        VIEW_BOBBING(0, 5, false, "Camera and hand bob while walking"),
+        FOV_EFFECTS(1, 5, false, "Wider view while sprinting and flying");
 
         final int column, row;
         final boolean slider;
@@ -203,6 +204,7 @@ public final class OptionsScreen {
             case GUI_SCALE    -> options.cycleGuiScale();
             case INVERT_MOUSE -> options.setInvertMouse(!options.invertMouse());
             case VIEW_BOBBING -> options.setViewBobbing(!options.viewBobbing());
+            case FOV_EFFECTS  -> options.setFovEffects(!options.fovEffects());
             default -> { return; }
         }
 
@@ -280,6 +282,7 @@ public final class OptionsScreen {
             case SENSITIVITY  -> "Sensitivity: " + options.sensitivityLabel();
             case INVERT_MOUSE -> "Invert Mouse: " + onOff(options.invertMouse());
             case VIEW_BOBBING -> "View Bobbing: " + onOff(options.viewBobbing());
+            case FOV_EFFECTS  -> "FOV Effects: " + onOff(options.fovEffects());
         };
     }
 

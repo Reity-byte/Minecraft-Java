@@ -208,6 +208,9 @@ public class Main {
     /** Setrvačnost ruky v první osobě při otočení myší. */
     private final HandSway handSway = new HandSway();
 
+    /** Rozšíření zorného pole při sprintu a letu. */
+    private final FovEffect fovEffect = new FovEffect();
+
     /** Zvuky prostředí: vítr, jeskyně, voda a kapky. */
     private final Ambience ambience = new Ambience(new java.util.Random());
     private final PlayerModelMesh playerMesh = new PlayerModelMesh();
@@ -1309,6 +1312,7 @@ public class Main {
 
         // Rozdělaný dvojstisk, kopání a zaměřený blok patří starému světu.
         flyTap.reset();
+        fovEffect.reset();
         mining.cancel();
         miningHeld = false;
         hit = null;
@@ -1638,8 +1642,13 @@ public class Main {
         // ⚠️ S TÝMŽ ořezaným dt jako fyzika: po zaseknutí (F11, GC, tah oknem)
         // by posun z ořezané fyziky dělený neořezaným časem vyšel jako skoro
         // stání a nohy by na frame cukly do klidu.
-        animation.update(Math.min(dt, Player.MAX_TIME_STEP),
-                (float) Math.hypot(player.x - beforeX, player.z - beforeZ), player.onGround);
+        float moved = (float) Math.hypot(player.x - beforeX, player.z - beforeZ);
+        float physicsDt = Math.min(dt, Player.MAX_TIME_STEP);
+        animation.update(physicsDt, moved, player.onGround);
+
+        // Sprint podle skutečné rychlosti (se stejným ořezaným dt jako animace).
+        fovEffect.update(dt, player.inputSprint, physicsDt > 0f ? moved / physicsDt : 0f,
+                player.flying, options.fovEffects());
 
         // Houpání pohledu při chůzi (ViewBobbing) - se stejnou fází jako nohy.
         // Vypnuté v Options = síla 0, pohled i ruka stojí.
@@ -1772,6 +1781,14 @@ public class Main {
         return playerMesh;
     }
 
+    /**
+     * FOV pro svět: z nastavení krát sprint/let (FovEffect). Ruka v první
+     * osobě bere čisté options.fov() - při sprintu by se jinak zmenšila.
+     */
+    private float worldFov() {
+        return options.fov() * fovEffect.multiplier();
+    }
+
     private void renderWorld() {
         // Rozhoduje blok, ve kterém jsou OČI, ne nohy: po pás ve vodě se pod
         // hladinu ještě nekouká, takže by filtr přes obrazovku byl matoucí.
@@ -1795,10 +1812,10 @@ public class Main {
         // Obloha před světem: je nekonečně daleko, takže ji terén má přebít.
         // Pod vodou se nekreslí - přes kalnou vodu není vidět ani slunce.
         if (!underwater) {
-            sky.draw(worldRenderer.viewProjection(camera, width, height, options.fov()), day);
+            sky.draw(worldRenderer.viewProjection(camera, width, height, worldFov()), day);
         }
 
-        worldRenderer.render(world, camera, width, height, options.fov(), underwater, day,
+        worldRenderer.render(world, camera, width, height, worldFov(), underwater, day,
                 drops.items(), playerBody());
 
         if (state == GameState.PLAYING && hit != null) {

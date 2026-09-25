@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2384 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2393 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -82,7 +82,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
 | `AmbienceTest` | Cíle hlasitosti: venku fouká a ve výšce víc, v budově ne, pod stromem o dost míň; jeskyně jen ve tmě **a** pod mořem (dům ani roklina nehučí); voda slábne se vzdáleností, pod vodou naplno a ostatní ztichnou. Nejbližší voda ve skutečném světě (5 bloků), **hlasitost se dotahuje, neskočí**, po 10 s sedí s cílem, v pauze dozní; v jeskyni za minutu 4–15 kapek, poziční a kolem hlavy. V `SoundTest` navíc **smyčky beze švu** (skok konec → začátek ne větší než uvnitř) |
-| `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto |
+| `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto. FOV efekt: sprint/let/obojí, **sprint do zdi nic**, plynulý náběh stejný při 30 i 60 FPS, vypnutí vrací na 1, reset nového světa |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty |
 | `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků** (podle tvaru každého druhu), kmen stojí na zemi, řetěz kmen→prkna→stůl pro všechna tři dřeva, vlastní dlaždice každého druhu, a **změřená hustota a druh stromu v každém biomu** |
@@ -1463,6 +1463,12 @@ a natočí se o 0,2 zpoždění (Minecraft 0,1; tady víc, ať je to vidět), ne
 porovnává přes šev 0–360 nejkratší cestou; skok nad 90° (načtení světa) ruka přeskočí.
 Vypíná se v Options přepínačem **View Bobbing** (setrvačnost zůstává).
 
+**Zorné pole při sprintu a letu (`FovEffect`):** sprint +15 %, let +10 %, obojí naráz se násobí;
+dotahuje se o polovinu za tick jako v Minecraftu. Sprint se bere ze **skutečné rychlosti**
+(aspoň 1 b/s), ne z klávesy — Ctrl do zdi pohled neroztáhne. Týká se jen světa a oblohy;
+ruka zůstává na FOV z nastavení, jinak by se při sprintu zmenšovala. Nový svět začíná na 1.
+Vypíná se přepínačem **FOV Effects**.
+
 **Známá zjednodušení:** trup se natáčí přesně s pohledem (Minecraft nechává tělo zaostávat až
 o 50° a za chůze ho stáčí do směru pohybu); chybí poloha při plížení a plavání; druhá vrstva
 skinu (klobouk, bunda) se nekreslí; starší skiny 64×32 bez levé ruky a nohy by se musely
@@ -1606,9 +1612,9 @@ celá obrazovka ani fullscreen neexistovaly. **Natvrdo dál zůstává** délka 
 zadání), rozpočty na stavbu meshů, dosah zvuku, vzdálenost kreslení položek na zemi
 a měřítko texture labu.
 
-**Jedenáct hodnot, a každá je tu proto, že engine umí, co mění:** Fullscreen, VSync,
+**Dvanáct hodnot, a každá je tu proto, že engine umí, co mění:** Fullscreen, VSync,
 Max Framerate, Render Distance, Simulation Distance, FOV, Brightness, GUI Scale,
-Sensitivity, Invert Mouse, View Bobbing. Vynechané jsou věci, které by musel nejdřív umět engine
+Sensitivity, Invert Mouse, View Bobbing, FOV Effects. Vynechané jsou věci, které by musel nejdřív umět engine
 (hlasitost je mimo zadání, plynulé osvětlení jde zapnout jen přestavbou všech meshů,
 mraky a částice nejsou). **Přebindování kláves nakonec vzniklo, ale v labu**
 (viz „Keybind Lab") — je to editor se seznamem a detekcí kolizí, ne řádek
@@ -1695,7 +1701,8 @@ společný kód je v `SafeFiles`. Ukládá se při zavření obrazovky a hned po
   "guiScale": 0,
   "sensitivity": 1.00,
   "invertMouse": false,
-  "viewBobbing": true
+  "viewBobbing": true,
+  "fovEffects": true
 }
 ```
 

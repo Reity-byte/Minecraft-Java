@@ -85,6 +85,7 @@ public final class Options {
     private float sensitivity = 1f;
     private boolean invertMouse = false;
     private boolean viewBobbing = true;
+    private boolean fovEffects = true;
 
     // ------------------------------------------------------------------
     // hodnoty
@@ -101,11 +102,13 @@ public final class Options {
     public float sensitivity()       { return sensitivity; }
     public boolean invertMouse()     { return invertMouse; }
     public boolean viewBobbing()     { return viewBobbing; }
+    public boolean fovEffects()      { return fovEffects; }
 
     public void setFullscreen(boolean on)  { fullscreen = on; }
     public void setVsync(boolean on)       { vsync = on; }
     public void setInvertMouse(boolean on) { invertMouse = on; }
     public void setViewBobbing(boolean on) { viewBobbing = on; }
+    public void setFovEffects(boolean on)  { fovEffects = on; }
 
     /** Strop FPS po desítkách; nad MAX_FPS (nebo 0) = bez stropu. */
     public void setMaxFps(int fps)
@@ -359,7 +362,8 @@ public final class Options {
                 + "  \"guiScale\": " + guiScale + ",\n"
                 + "  \"sensitivity\": " + String.format(Locale.ROOT, "%.2f", sensitivity) + ",\n"
                 + "  \"invertMouse\": " + invertMouse + ",\n"
-                + "  \"viewBobbing\": " + viewBobbing + "\n"
+                + "  \"viewBobbing\": " + viewBobbing + ",\n"
+                + "  \"fovEffects\": " + fovEffects + "\n"
                 + "}\n";
     }
 
@@ -394,6 +398,7 @@ public final class Options {
         if((b = bool(root, "vsync", problems)) != null)       o.vsync = b;
         if((b = bool(root, "invertMouse", problems)) != null) o.invertMouse = b;
         if((b = bool(root, "viewBobbing", problems)) != null) o.viewBobbing = b;
+        if((b = bool(root, "fovEffects", problems)) != null)  o.fovEffects = b;
 
         if((d = number(root, "maxFps", problems)) != null)
         {

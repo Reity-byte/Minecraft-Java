@@ -27,6 +27,7 @@ public class MotionTest {
         handSway();
         heldItem();
         options();
+        fov();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
     }
@@ -154,6 +155,41 @@ public class MotionTest {
             check(what + ": pri chuzi klesne", bobbed.y < rest.y - 0.005f, rest.y + " -> " + bobbed.y);
             check(what + ": setrvacnost doprava ji posune doleva", turned.x < rest.x - 0.005f, rest.x + " -> " + turned.x);
         }
+    }
+
+    static void fov() {
+        check("sprint roztahne o 15 %, let o 10 %, obojí naráz",
+                FovEffect.target(true, 5.6f, false) == FovEffect.SPRINT_BOOST
+                        && FovEffect.target(false, 11f, true) == FovEffect.FLYING_BOOST
+                        && FovEffect.target(true, 30f, true) == FovEffect.SPRINT_BOOST * FovEffect.FLYING_BOOST, "");
+        check("sprint do zdi (drzi klavesu, stoji) nic nedela", FovEffect.target(true, 0f, false) == 1f, "");
+        check("obycejna chuze nic nedela", FovEffect.target(false, 4.3f, false) == 1f, "");
+
+        FovEffect f = new FovEffect();
+        f.update(DT, true, 5.6f, false, true);
+        float first = f.multiplier();
+        for (int i = 0; i < 60; i++) f.update(DT, true, 5.6f, false, true);
+        check("rozjede se plynule a za sekundu je naplno",
+                first > 1f && first < 1.05f && Math.abs(f.multiplier() - FovEffect.SPRINT_BOOST) < 1e-3f,
+                first + " -> " + f.multiplier());
+
+        FovEffect slow = new FovEffect();
+        for (int i = 0; i < 30; i++) slow.update(1f / 30f, true, 5.6f, false, true);
+        check("stejne pri 30 i 60 FPS", Math.abs(slow.multiplier() - f.multiplier()) < 1e-3f, "");
+
+        for (int i = 0; i < 60; i++) f.update(DT, true, 5.6f, false, false);
+        check("vypnute v Options: zpet na 1", Math.abs(f.multiplier() - 1f) < 1e-3f, "" + f.multiplier());
+
+        f.update(DT, false, 11f, true, true);
+        f.reset();
+        check("reset (novy svet) je hned 1", f.multiplier() == 1f, "");
+
+        Options o = Options.defaults();
+        o.setFovEffects(false);
+        check("FOV efekty: vychozi zapnuto, vypnuti se ulozi",
+                Options.defaults().fovEffects() && !Options.fromJson(o.toJson(), new ArrayList<>()).fovEffects(), "");
+        check("popisek FOV Effects",
+                new OptionsScreen(o, null).caption(OptionsScreen.Item.FOV_EFFECTS).equals("FOV Effects: OFF"), "");
     }
 
     static void options() {
