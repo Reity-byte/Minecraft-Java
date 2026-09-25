@@ -386,6 +386,80 @@ public class CaveTest {
         }
         check("isCave je deterministicka", stable, "");
 
+        steepTuning();
+
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+
+    /**
+     * GEN-4: "jeskyne nemaji vchody a vodu vidi jen pres pudu" plati i do stran
+     * a i s natunenym prevysenim.
+     *
+     * Driv ochrana byla jen svisla (kope se jen v kameni pod pudou). Kopce
+     * a hory na 110 a vsechno ostatni na 8 dava krok mezi sousedy az 11 bloku,
+     * a jeskyne v kopci pak koukala do vody nebo do vzduchu nizsiho souseda.
+     */
+    static void steepTuning() {
+        System.out.println("\n-- jeskyne vedle strmeho svahu (natuneny prevys) --");
+
+        BiomeTuning steep = BiomeTuning.defaults();
+        for (Biome b : Biome.values()) {
+            BiomeTuning.Tune t = steep.tune(b);
+            boolean high = b == Biome.HILLS || b == Biome.MOUNTAINS;
+            steep = steep.with(b, new BiomeTuning.Tune(high ? BiomeTuning.MAX_BASE : BiomeTuning.MIN_BASE,
+                    BiomeTuning.MAX_AMPLITUDE, t.treeDensity(), t.trunkMin(), t.trunkMax(),
+                    t.crownMin(), t.crownMax(), t.ironDensity(), t.coalDensity()));
+        }
+        TerrainGenerator gen = new TerrainGenerator(World.DEFAULT_SEED, steep);
+
+        // 13x13 chunku kolem pocatku; kontroluje se vnitrek, okrajovy prstenec
+        // je jen soused, aby se dalo divat i pres hranici chunku.
+        final int R = 6, N = 2 * R + 1, S = Chunk.SIZE;
+        ChunkColumn[][] cols = new ChunkColumn[N][N];
+        for (int i = 0; i < N; i++)
+            for (int j = 0; j < N; j++)
+                cols[i][j] = gen.generateColumn(i - R, j - R);
+
+        int size = N * S;
+        int[][] h = new int[size][size];
+        for (int x = 0; x < size; x++)
+            for (int z = 0; z < size; z++)
+                h[x][z] = gen.terrainHeight(x - R * S, z - R * S);
+
+        int maxStep = 0, openings = 0, toWater = 0, prevented = 0;
+        int[][] dirs = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+
+        for (int x = S; x < size - S; x++) {
+            for (int z = S; z < size - S; z++) {
+                for (int[] d : dirs) maxStep = Math.max(maxStep, Math.abs(h[x][z] - h[x + d[0]][z + d[1]]));
+
+                for (int y = 1; y < h[x][z] - 1; y++) {
+                    if (block(cols, x, y, z) != World.AIR) continue;   // jen jeskynni vzduch (pod povrchem)
+
+                    for (int[] d : dirs) {
+                        int nx = x + d[0], nz = z + d[1];
+                        byte n = block(cols, nx, y, nz);
+                        if (n == World.WATER) toWater++;
+                        else if (n == World.AIR && y >= h[nx][nz]) openings++;
+                    }
+                }
+
+                // Kolik jeskynnich bunek nova mez skutecne zakazala - aby test
+                // nebyl prazdny (bez nich by prosel i na starem kodu).
+                int ceiling = TerrainGenerator.caveCeiling(h[x - 1][z], h[x + 1][z], h[x][z - 1], h[x][z + 1]);
+                for (int y = ceiling; y < h[x][z] - 4; y++)
+                    if (gen.isCave(x - R * S, y, z - R * S)) prevented++;
+            }
+        }
+
+        System.out.printf("Nejvetsi krok mezi sousedy %d, zakazanych jeskynnich bunek %d%n", maxStep, prevented);
+        check("natuneny terén ma strme svahy (krok >= 5)", maxStep >= 5, "" + maxStep);
+        check("a jeskyne by do nich bez meze vysly", prevented > 0, "" + prevented);
+        check("zadna jeskyne nesousedi s vodou", toWater == 0, toWater + " sten");
+        check("zadna jeskyne nema vchod do stran", openings == 0, openings + " sten");
+    }
+
+    static byte block(ChunkColumn[][] cols, int x, int y, int z) {
+        return cols[x >> 4][z >> 4].get(x & 15, y, z & 15);
     }
 }

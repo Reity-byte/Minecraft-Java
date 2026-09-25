@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2252 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2256 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -66,7 +66,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `MiningTest` | Doba kopání podle tvrdosti, **přepnutí cíle vynuluje postup**, puštění tlačítka, stádia prasklin, kam jde vytěžený blok (inventář, rozdělaná hromádka, **při plném inventáři na zem**), zvuk rozbití podle materiálu ze středu bloku |
 | `MenuTest` | Hit-testing tlačítek: pořadí, kraje, mezery, překlopení y z GLFW, změna velikosti okna |
 | `BiomeTest` | Biomy: prahy a data všech osmi, `smoothstep`, **součet vah = přesně 1** a shoda vytknutého `surfaceHeight()` s naivní sumou, `classify()` = biom s největší vahou uvnitř biomu, **determinismus** (opakovaně, po novém načtení, z cizího vlákna, jiný seed = jiné rozložení), podíly biomů a průměrná délka biomu podél přímky, **nekorelovanost tří vrstev šumu**, **plynulost přechodu výšky** (největší skok na hranici proti skoku uvnitř biomu + náběh plání do hor), rozsah výšek a strop, druh stromu podle biomu a hranice lesa, cena `terrainHeight()` a `biomeAt()` |
-| `CaveTest` | Jeskyně (podíl výkopu, **šířka chodeb**, propojenost, netknutý povrch, dno světa) a rudy (četnost, hloubky, shlukování, záporné souřadnice, **změřený poměr železa v horách proti zbytku světa**) |
+| `CaveTest` | Jeskyně (podíl výkopu, **šířka chodeb**, propojenost, netknutý povrch, dno světa, **na strmém tuningu žádná jeskyně nesousedí s vodou ani nemá vchod do stran**) a rudy (četnost, hloubky, shlukování, záporné souřadnice, **změřený poměr železa v horách proti zbytku světa**) |
 | `InventoryTest` | Hromádky, slévání při sběru, přetečení, recepty (i posunuté v mřížce), klikání myší, návrat obsahu při zavření, **shift-klik** (prázdný i plný cíl, přetečení, mřížka, výstup, crafting table), **tažení myší** (rovnoměrně i po jednom, zbytek v ruce, přeskočené sloty, zrušení druhým tlačítkem) |
 | `DroppedItemTest` | Předměty na zemi: dopad, stabilní ležení, tunelování, zeď, tření, voda, **vytlačení z položeného bloku**, vyhození z ruky, **zpoždění a dosah sběru**, slévání při sběru, plný a skoro plný inventář, zánik (`LIFETIME`, zahozený sloupec), mesh relativní ke kameře a jeho světlo |
 | `WaterTest` | Zaplavení po hladinu, suché jeskyně, pravidla viditelnosti stěn (ručně spočítané), suchý spawn, plavání |
@@ -426,6 +426,17 @@ do hloubky smysl. Změřeno: 4,6 bloku v y 35–49 proti 5,7 bloku v y 3–20.
 **⚠️ Kope se jen v kameni a jen nad `y = 3`.** Povrchové vrstvy zůstávají netknuté, takže
 nemůže vzniknout díra v trávníku ani tráva visící ve vzduchu, a dnem světa se nedá propadnout
 ven. Cena je, že jeskyně **nemají vchody** — musíš se k nim dokopat. `CaveTest` obojí hlídá.
+
+**⚠️ A jen pod nejnižším ze čtyř sousedů** (`TerrainGenerator.caveCeiling()`). Pravidlo
+„jen v kameni" chrání jen SVISLE. Vodorovně jeskynní vzduch sousedí s buňkou vedlejšího
+sloupce ve stejné výšce, a když je ten o 5 a víc bloků níž, je tam voda nebo otevřený
+vzduch. Výchozí čísla mají krok mezi sousedy nejvýš 3 (změřeno na 3000×3000 sloupcích),
+takže to nenastane, ale tuner dá až 11: stěny vody v chodbách a vchody na útesech.
+`generateColumn()` proto počítá výšky o sloupeček za okrajem chunku (68 výšek navíc
+k 256, žádný 3D šum; A/B generování sloupce v šumu) a kope jen tam, kde je sousední
+buňka pod povrchem souseda. Výchozí terén se nezměnil ani o blok (`SeedTest` beze změny,
+`GENERATOR_VERSION` zůstává). `CaveTest` to hlídá na strmém tuningu (kopce a hory 110,
+zbytek 8, amplituda 60): bez meze 57 stěn k vodě a 16 vchodů, s ní nula.
 
 **Rudné žíly se počítají z mřížky 4×4×4, ne šumem.** Hash rozhodne, které buňky žílu nesou;
 uvnitř se vyplní zhruba koule kolem středu a okraj se hashem roztřepí. Dva důvody proti šumu:
@@ -847,7 +858,8 @@ dlaždice pod plnou alfou — jinde by se alfa tiše zahodila v neprůhledném p
 
 **⚠️ Voda se lije až NAD terén, takže se jeskyně nezaplaví.** Drží to i díky pravidlu, že
 se kope jen v kameni: mezi dnem jezera a nejvyšším možným stropem jeskyně jsou vždycky
-vrstvy půdy. Změřeno: v podzemí není ani kapka.
+vrstvy půdy. A do stran jen pod nejnižším sousedem, takže vedle jeskyně nikdy není voda
+nižšího sloupce ani s natuněným převýšením. Změřeno: v podzemí není ani kapka.
 
 **`SEA_LEVEL` je o jedna níž než `SAND_LEVEL`.** Pás písku tak vyčnívá kousek nad hladinu
 a kolem jezer vznikne pláž místo trávy rovnou u vody.

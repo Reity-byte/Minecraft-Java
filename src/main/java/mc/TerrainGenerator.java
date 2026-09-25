@@ -275,9 +275,25 @@ public final class TerrainGenerator {
     {
         ChunkColumn column = new ChunkColumn(cx, cz);
 
-        for(int lx = 0; lx < Chunk.SIZE; lx++)
+        // --- 1. výšky a biomy, i o sloupeček za okrajem chunku ---
+        //
+        // ⚠️ JESKYNĚ POTŘEBUJÍ VÝŠKU SOUSEDŮ. Ochrana "jeskyně nemají vchody
+        // a vodu vidí jen přes půdu" byla dřív jen svislá: kope se jen
+        // v kameni, takže nad jeskyní jsou vždycky vrstvy půdy. Vodorovně ale
+        // jeskynní vzduch sloupce A sousedí s buňkou sloupce B ve stejné
+        // výšce - a když je B o 5 a víc bloků níž, je tam voda nebo otevřený
+        // vzduch. S výchozími čísly je největší krok mezi sousedy 3 (změřeno
+        // na 3000x3000 sloupcích), s tunerem až 11: stěny vody v chodbách
+        // a vchody na útesech. Kope se proto jen pod nejnižším ze čtyř
+        // sousedů (caveCeiling níž) - a k tomu je potřeba znát výšku i za
+        // hranou chunku. Je to 68 výšek navíc k 256, žádný další 3D šum.
+        int span = Chunk.SIZE + 2;
+        int[] heights = new int[span * span];
+        Biome[] biomes = new Biome[Chunk.SIZE * Chunk.SIZE];
+
+        for(int lx = -1; lx <= Chunk.SIZE; lx++)
         {
-            for(int lz = 0; lz < Chunk.SIZE; lz++)
+            for(int lz = -1; lz <= Chunk.SIZE; lz++)
             {
                 // Noise se krmí SVĚTOVÝMI souřadnicemi, ne lokálními.
                 // Díky tomu na sebe terén přes hranice chunků navazuje spojitě
@@ -293,8 +309,28 @@ public final class TerrainGenerator {
                 double humidity    = humidityAt(wx, wz);
                 double relief      = reliefAt(wx, wz);
 
-                Biome biome = Biome.classify(temperature, humidity, relief);
-                int height = heightFrom(wx, wz, temperature, humidity, relief);
+                heights[(lx + 1) * span + lz + 1] = heightFrom(wx, wz, temperature, humidity, relief);
+
+                if(lx >= 0 && lx < Chunk.SIZE && lz >= 0 && lz < Chunk.SIZE)
+                {
+                    biomes[lx * Chunk.SIZE + lz] = Biome.classify(temperature, humidity, relief);
+                }
+            }
+        }
+
+        // --- 2. bloky ---
+        for(int lx = 0; lx < Chunk.SIZE; lx++)
+        {
+            for(int lz = 0; lz < Chunk.SIZE; lz++)
+            {
+                int wx = (cx << Chunk.BITS) + lx;
+                int wz = (cz << Chunk.BITS) + lz;
+
+                Biome biome = biomes[lx * Chunk.SIZE + lz];
+                int at = (lx + 1) * span + lz + 1;
+                int height = heights[at];
+                int ceiling = caveCeiling(heights[at - span], heights[at + span],
+                        heights[at - 1], heights[at + 1]);
 
                 byte surface    = surfaceBlock(biome, height);
                 byte subsurface = subsurfaceBlock(biome, height);
@@ -318,10 +354,12 @@ public final class TerrainGenerator {
                     // Jeskyně a rudy se týkají JEN kamene. Povrchové vrstvy
                     // zůstávají netknuté, takže na povrchu nemůže vzniknout díra
                     // ani viset tráva ve vzduchu - za cenu toho, že jeskyně
-                    // nemají vchody a musí se k nim dokopat.
+                    // nemají vchody a musí se k nim dokopat. Totéž do stran:
+                    // nad `ceiling` by jeskyně vyšla vedle vody nebo vzduchu
+                    // nižšího souseda.
                     if(block == World.STONE)
                     {
-                        if(isCave(wx, y, wz))
+                        if(y < ceiling && isCave(wx, y, wz))
                         {
                             continue;   // nic se nenastaví, zůstane vzduch
                         }
@@ -333,8 +371,9 @@ public final class TerrainGenerator {
                 }
 
                 // Voda se nalévá AŽ NAD terén, takže se jeskyně nemůžou zaplavit.
-                // Drží to i díky tomu, že se kope jen v kameni: mezi dnem jezera
-                // a nejvyšším možným stropem jeskyně jsou vždycky vrstvy půdy.
+                // Drží to díky tomu, že se kope jen v kameni (nad jeskyní jsou
+                // vrstvy půdy) a jen pod nejnižším sousedem (vedle jeskyně je
+                // v sousedním sloupci pevný blok, ne voda).
                 for(int y = height; y < World.SEA_LEVEL; y++)
                 {
                     column.set(lx, y, lz, World.WATER);
@@ -345,6 +384,21 @@ public final class TerrainGenerator {
         stampTrees(column, cx, cz);
 
         return column;
+    }
+
+    /**
+     * Nejvyšší y (bez něj), kde smí být jeskyně vzhledem ke čtyřem sousedům:
+     * buňka sousedního sloupce ve stejné výšce musí být pevná, tedy pod jeho
+     * povrchem (sousední buňka v y je pevná, když y < výška souseda).
+     *
+     * Diagonály se neřeší: jeskyně je dírou pro hráče ani pro vodu jen přes
+     * stěnu, ne přes hranu. S výchozím tuningem je krok mezi sousedy nejvýš
+     * 3, takže tahle mez nikdy neklesne pod vlastní strop kamene (výška - 4)
+     * a výchozí terén se nezměnil ani o blok - SeedTest prochází beze změny.
+     */
+    static int caveCeiling(int west, int east, int north, int south)
+    {
+        return Math.min(Math.min(west, east), Math.min(north, south));
     }
 
     // ------------------------------------------------------------------
