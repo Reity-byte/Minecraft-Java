@@ -138,11 +138,17 @@ public final class BlockRegistry {
     /** Je už blok z labu s tímhle jménem? Bez ohledu na velikost písmen. */
     public boolean hasName(String name)
     {
+        return hasName(name, -1);
+    }
+
+    /** Totéž, ale blok exceptId se nepočítá - úprava si smí nechat své jméno. */
+    public boolean hasName(String name, int exceptId)
+    {
         String wanted = name.trim().toLowerCase(Locale.ROOT);
 
         for(BlockDef def : blocks())
         {
-            if(def.name().toLowerCase(Locale.ROOT).equals(wanted))
+            if(def.id() != exceptId && def.name().toLowerCase(Locale.ROOT).equals(wanted))
             {
                 return true;
             }
@@ -198,6 +204,23 @@ public final class BlockRegistry {
         BlockDef[] copy = byId.clone();
         copy[def.id()] = def;
         return new BlockRegistry(copy, Math.max(nextId, def.id() + 1));
+    }
+
+    /**
+     * Registr bez bloku z labu. nextId zůstává - id se znovu nepoužije, takže
+     * kostky smazaného bloku v uloženém světě zůstanou "neznámý blok" a nikdy
+     * se nepromění v jiný.
+     */
+    public BlockRegistry without(int id)
+    {
+        if(id < FIRST_ID || id > LAST_ID)
+        {
+            return this;
+        }
+
+        BlockDef[] copy = byId.clone();
+        copy[id] = null;
+        return new BlockRegistry(copy, nextId);
     }
 
     /**

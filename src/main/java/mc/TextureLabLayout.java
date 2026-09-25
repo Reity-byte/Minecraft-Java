@@ -118,6 +118,9 @@ public final class TextureLabLayout {
     public static final Rect CREATE = new Rect(284, 176, 156, 18);
     public static final Rect CANCEL = new Rect(284, 198, 156, 18);
 
+    /** Jen při úpravě bloku z labu: smazání (pod Cancel, ať se netrefí omylem). */
+    public static final Rect DELETE_BLOCK = new Rect(284, 220, 156, 18);
+
     // ------------------------------------------------------------------
     // mód Recipes
     //

@@ -161,6 +161,9 @@ public class Main {
      */
     private AtlasEditor atlasEditor;
 
+    /** Registr bloků při otevření labu - po zavření se pozná, jestli se bloky změnily. */
+    private BlockRegistry blocksBeforeLab;
+
     /** Editor atlasu předmětů pro mód Items - žije s Main, stejně jako atlasEditor. */
     private AtlasEditor itemEditor;
     private SkinEditor skinEditor;
@@ -1411,6 +1414,7 @@ public class Main {
      * se hra neukončí.
      */
     private void openTextureLab() {
+        blocksBeforeLab = BlockRegistry.active();
         lab = new TextureLab(atlasEditor, blockAtlas, atlasFromFile,
                 skinEditor, playerSkin, skinFromFile,
                 itemEditor, itemAtlas, itemsFromFile, shapes, text);
@@ -1431,6 +1435,16 @@ public class Main {
         lab.delete();
         lab = null;
         setState(labReturnState);
+
+        // Upravený nebo smazaný blok z labu: hotové meshe mají zapečené jeho
+        // staré dlaždice a průhlednost - postaví se znovu (postupně, jako při
+        // načtení světa). Nový blok nic nemění, ve světě ještě nestojí, ale
+        // porovnání instancí to nerozliší a přestavba je jen krátké dokreslení.
+        if (BlockRegistry.active() != blocksBeforeLab && worldRenderer != null) {
+            worldRenderer.reset();
+        }
+
+        blocksBeforeLab = null;
 
         if (state == GameState.PLAYING) {
             giveCreatedBlocks();

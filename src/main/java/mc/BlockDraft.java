@@ -47,10 +47,46 @@ final class BlockDraft {
     /** Stěna, které se přiřadí dlaždice vybraná v atlasu nebo nová dlaždice. */
     int activeFace = BlockAtlas.FACE_SIDE;
 
+    /** Id upravovaného bloku z labu, nebo -1 u nového. */
+    final int editing;
+
     /** Všechny stěny začínají na téže dlaždici - té, která je v labu zrovna vybraná. */
     BlockDraft(int startTile)
     {
         Arrays.fill(tiles, startTile);
+        editing = -1;
+    }
+
+    /**
+     * Úprava existujícího bloku z labu. Tvrdost se přichytí k nejbližšímu
+     * stupni (ručně psaný blocks.json může mít třeba 1.2 s).
+     */
+    BlockDraft(BlockDef def)
+    {
+        editing = def.id();
+        name = def.name();
+        solid = def.solid();
+        opaque = def.opaque();
+        tiles[BlockAtlas.FACE_TOP] = def.topTile();
+        tiles[BlockAtlas.FACE_SIDE] = def.sideTile();
+        tiles[BlockAtlas.FACE_BOTTOM] = def.bottomTile();
+
+        int best = 0;
+
+        for(int i = 1; i < HARDNESS_STEPS.length; i++)
+        {
+            if(Math.abs(HARDNESS_STEPS[i] - def.hardness()) < Math.abs(HARDNESS_STEPS[best] - def.hardness()))
+            {
+                best = i;
+            }
+        }
+
+        hardnessStep = best;
+    }
+
+    boolean isEdit()
+    {
+        return editing >= 0;
     }
 
     float hardness()
@@ -68,9 +104,18 @@ final class BlockDraft {
         hardnessStep = Math.max(0, hardnessStep - 1);
     }
 
-    /** Blok podle návrhu s id, které by teď v registru dostal. Registr nemění. */
+    /**
+     * Blok podle návrhu: nový s id, které by teď v registru dostal, úprava
+     * se svým id. Registr nemění.
+     */
     BlockDef toDef(BlockRegistry registry)
     {
+        if(isEdit())
+        {
+            return new BlockDef((byte) editing, name.trim(), hardness(), solid, opaque,
+                    tiles[BlockAtlas.FACE_TOP], tiles[BlockAtlas.FACE_SIDE], tiles[BlockAtlas.FACE_BOTTOM]);
+        }
+
         return registry.define(name, hardness(), solid, opaque,
                 tiles[BlockAtlas.FACE_TOP], tiles[BlockAtlas.FACE_SIDE], tiles[BlockAtlas.FACE_BOTTOM]);
     }
@@ -78,7 +123,7 @@ final class BlockDraft {
     /** Proč blok nejde založit (anglicky, pro stavový řádek), nebo null. */
     String problem(BlockRegistry registry)
     {
-        if(registry.isFull())
+        if(!isEdit() && registry.isFull())
         {
             return "No free block id - the lab has used all "
                     + (BlockRegistry.LAST_ID - BlockRegistry.FIRST_ID + 1);
@@ -92,7 +137,7 @@ final class BlockDraft {
             return invalid;
         }
 
-        if(registry.hasName(name) || isBuiltinName(name))
+        if(registry.hasName(name, editing) || isBuiltinName(name))
         {
             return "A block named " + name.trim() + " already exists";
         }

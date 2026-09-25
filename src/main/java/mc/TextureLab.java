@@ -352,7 +352,7 @@ public class TextureLab {
         @Override
         public String leaveWarning()
         {
-            return draft != null ? "The new block is not created yet"
+            return draft != null ? (draft.isEdit() ? "The block edit is not saved yet" : "The new block is not created yet")
                     : itemDraft != null ? (itemDraft.isEdit() ? "The item edit is not saved yet"
                     : "The new item is not created yet") : null;
         }
@@ -1157,6 +1157,66 @@ public class TextureLab {
         preview.show(def.id(), true);
     }
 
+    /**
+     * Blok z labu, který je v náhledu - ten jde upravit (Edit block); jinak
+     * null. Náhled volí mezi bloky na dlaždici (klik na náhled další), takže
+     * se upravuje ten, který je vidět.
+     */
+    private BlockDef editableBlock()
+    {
+        return mode == Mode.BLOCKS ? BlockRegistry.lookup(preview.block()) : null;
+    }
+
+    /** Otevře formulář s existujícím blokem z labu - s živým náhledem jako u nového. */
+    private void editBlock(BlockDef def)
+    {
+        baseRegistry = BlockRegistry.active();
+        draft = new BlockDraft(def);
+        editingName = false;
+        showDraft();
+        say("Editing " + def.name() + " - change it, then Save block (or Delete block)");
+    }
+
+    /**
+     * Smaže upravovaný blok - napoprvé jen varuje (LabGuard). Kostky
+     * v uložených světech zůstanou jako neznámý blok, id se znovu nepoužije;
+     * dlaždice v atlasu zůstávají. Recepty se znovu načtou, ať ten na
+     * smazaný blok zmizí.
+     */
+    private void deleteBlock()
+    {
+        BlockDef def = baseRegistry.get((byte) draft.editing);
+
+        if(def == null)
+        {
+            cancelBlock();
+            return;
+        }
+
+        if(!guard.allow("delete block " + def.id(), "delete"))
+        {
+            say("Click Delete block again to delete " + def.name() + " - worlds show it as an unknown block");
+            return;
+        }
+
+        BlockRegistry without = baseRegistry.without(def.id());
+
+        if(!without.save(BlockRegistry.FILE))
+        {
+            say(SafeFiles.writeFailed(BlockRegistry.FILE) + " - block not deleted");
+            return;
+        }
+
+        BlockRegistry.activate(without);
+        RecipeBook.activate(RecipeBook.load(RecipeBook.FILE));
+        draft = null;
+        baseRegistry = null;
+        editingName = false;
+        previewChoice = 0;
+        refreshPreview();
+        say("Deleted " + def.name() + " (id " + def.id() + " stays retired)");
+    }
+
     private void cancelBlock()
     {
         if(draft == null)
@@ -1231,10 +1291,23 @@ public class TextureLab {
             return;
         }
 
+        boolean edit = draft.isEdit();
+
         BlockRegistry.activate(created);
         draft = null;
         baseRegistry = null;
         editingName = false;
+
+        // Upravený blok hráč znovu nedostává; recepty se načtou znovu (jméno
+        // se v nich neukládá, ale ať se chová stejně jako smazání).
+        if(edit)
+        {
+            RecipeBook.activate(RecipeBook.load(RecipeBook.FILE));
+            preview.show(def.id(), true);
+            say("Saved " + def.name() + " (id " + def.id() + ")");
+            return;
+        }
+
         createdBlocks.add(def.id());
 
         preview.show(def.id(), true);
@@ -1648,7 +1721,16 @@ public class TextureLab {
             }
             else
             {
-                startBlock();
+                BlockDef existing = editableBlock();
+
+                if(existing != null)
+                {
+                    editBlock(existing);
+                }
+                else
+                {
+                    startBlock();
+                }
             }
         }
 
@@ -1696,9 +1778,14 @@ public class TextureLab {
         }
         else if(layout.hit(TextureLabLayout.CANCEL, mouseX, mouseY))
         {
+            boolean edit = draft.isEdit();
             cancelBlock();
             refreshPreview();
-            say("New block cancelled");
+            say(edit ? "Edit cancelled" : "New block cancelled");
+        }
+        else if(draft.isEdit() && layout.hit(TextureLabLayout.DELETE_BLOCK, mouseX, mouseY))
+        {
+            deleteBlock();
         }
 
         return false;
@@ -1844,9 +1931,10 @@ public class TextureLab {
         // omylem nezahodí i s labem.
         if(key == GLFW_KEY_ESCAPE && draft != null)
         {
+            boolean edit = draft.isEdit();
             cancelBlock();
             refreshPreview();
-            say("New block cancelled");
+            say(edit ? "Edit cancelled" : "New block cancelled");
             return true;
         }
 
@@ -2374,6 +2462,11 @@ public class TextureLab {
         button(layout, screenHeight, TextureLabLayout.NEW_TILE, mouseX, mouseY);
         button(layout, screenHeight, TextureLabLayout.CREATE, mouseX, mouseY);
         button(layout, screenHeight, TextureLabLayout.CANCEL, mouseX, mouseY);
+
+        if(draft.isEdit())
+        {
+            button(layout, screenHeight, TextureLabLayout.DELETE_BLOCK, mouseX, mouseY);
+        }
     }
 
     /** Formulář nového předmětu - tatáž místa jako formulář bloku, bez stěn. */
@@ -2452,8 +2545,10 @@ public class TextureLab {
         }
         else
         {
-            label(layout, 8, TextureLabLayout.TITLE_Y, fit("Lab   new block, id "
-                    + baseRegistry.nextId() + "   atlas: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
+            label(layout, 8, TextureLabLayout.TITLE_Y, fit((draft.isEdit()
+                    ? "Lab   edit block, id " + draft.editing
+                    : "Lab   new block, id " + baseRegistry.nextId())
+                    + "   atlas: " + source + unsaved, TextureLabLayout.CONTENT_WIDTH - 16, scale));
             drawFormTexts(layout);
         }
 
@@ -2505,7 +2600,7 @@ public class TextureLab {
         centered(layout, TextureLabLayout.SAVE, "Save");
         centered(layout, TextureLabLayout.REVERT, "Revert");
         centered(layout, TextureLabLayout.IMPORT, "Import PNG");
-        centered(layout, TextureLabLayout.NEW_BLOCK, "New block");
+        centered(layout, TextureLabLayout.NEW_BLOCK, editableBlock() != null ? "Edit block" : "New block");
         centered(layout, TextureLabLayout.CLOSE, "Close  (Esc / " + Keybinds.activeKeyName(Keybinds.Action.LAB) + ")");
     }
 
@@ -2648,8 +2743,13 @@ public class TextureLab {
         label(layout, p.x() + 3, p.y() + 3, draft.name.isBlank() ? "New block" : draft.name.trim());
 
         centered(layout, TextureLabLayout.NEW_TILE, "New tile for " + faceNames[draft.activeFace]);
-        centered(layout, TextureLabLayout.CREATE, "Create block");
+        centered(layout, TextureLabLayout.CREATE, draft.isEdit() ? "Save block" : "Create block");
         centered(layout, TextureLabLayout.CANCEL, "Cancel  (Esc)");
+
+        if(draft.isEdit())
+        {
+            centered(layout, TextureLabLayout.DELETE_BLOCK, "Delete block");
+        }
     }
 
     /** Nápověda dole podle toho, na čem je myš. */

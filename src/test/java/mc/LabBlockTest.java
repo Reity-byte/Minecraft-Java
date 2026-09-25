@@ -58,6 +58,7 @@ public class LabBlockTest {
             preview();
             sound();
             save();
+            edit();
         } finally {
             BlockRegistry.activate(BlockRegistry.empty());
         }
@@ -65,6 +66,44 @@ public class LabBlockTest {
         withoutRegistry();
 
         System.out.println(failures == 0 ? "\nVSECHNO PROSLO" : "\nSELHALO: " + failures);
+    }
+
+    /** Uprava a smazani bloku z labu (BlockDraft z BlockDef, without). */
+    static void edit() {
+        BlockDef marble = REGISTRY.get(MARBLE);
+        BlockDraft d = new BlockDraft(marble);
+        check("uprava: navrh z bloku (jmeno, vlastnosti, dlazdice po stenach)",
+                d.isEdit() && d.editing == MARBLE && d.name.equals("Marble") && d.solid && d.opaque
+                        && d.hardness() == 1.0f && d.tiles[BlockAtlas.FACE_TOP] == 63
+                        && d.tiles[BlockAtlas.FACE_SIDE] == 62 && d.tiles[BlockAtlas.FACE_BOTTOM] == 61, "");
+        check("uprava si smi nechat sve jmeno", d.problem(REGISTRY) == null, "" + d.problem(REGISTRY));
+        d.name = "glass";
+        check("ale ne vzit jmeno jineho bloku", d.problem(REGISTRY) != null, "");
+        d.name = "White Marble";
+        d.opaque = false;
+        d.harder();
+        BlockDef changed = d.toDef(REGISTRY);
+        check("toDef u upravy nese puvodni id, ne nextId",
+                changed.id() == MARBLE && changed.name().equals("White Marble") && !changed.opaque()
+                        && changed.hardness() == 1.5f, changed.toString());
+        BlockRegistry saved = REGISTRY.with(changed);
+        check("ulozena uprava nahradi blok a nextId se nehne",
+                saved.get(MARBLE).name().equals("White Marble") && saved.nextId() == REGISTRY.nextId()
+                        && saved.blocks().size() == REGISTRY.blocks().size(), "");
+
+        BlockDef odd = new BlockDef(MARBLE, "Odd", 1.2f, true, true, 63, 62, 61);
+        check("tvrdost z rucniho souboru se prichyti k nejblizsimu stupni",
+                new BlockDraft(odd).hardness() == 1.0f, "" + new BlockDraft(odd).hardness());
+
+        BlockRegistry without = REGISTRY.without(MARBLE);
+        check("smazani: blok zmizi, id zustava vyrazene",
+                without.get(MARBLE) == null && without.nextId() == REGISTRY.nextId()
+                        && without.get(GLASS) != null, "");
+        check("zpatky ze souboru to plati taky",
+                BlockRegistry.fromJson(without.toJson()).get(MARBLE) == null
+                        && BlockRegistry.fromJson(without.toJson()).nextId() == REGISTRY.nextId(), "");
+        check("vestaveny blok smazat nejde", REGISTRY.without(World.STONE) == REGISTRY, "");
+        check("hasName s vyjimkou", REGISTRY.hasName("marble") && !REGISTRY.hasName("marble", MARBLE), "");
     }
 
     static World arena() {

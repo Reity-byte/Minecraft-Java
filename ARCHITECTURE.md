@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2519 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2528 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -85,6 +85,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `ItemTest` | Předměty: klacek a uhlí existují i bez `items.json`, jména, hromádka předmětu není blok, slévání a dělení po 64, **recept s předmětem projde validací, neznámý předmět ne**; registr (volná dlaždice za vestavěnými, `nextId` jen roste i po smazání, vestavěné smazat nejde, jméno proti vestavěným), `items.json` tam a zpět, ručně psaný soubor s výchozími hodnotami a přeskočenými záznamy; atlas (klacek je obrys na průhledném pozadí, doplnění prázdného souboru); ikona předmětu = jeden čtverec ze zdroje 1 s alfou, neznámý = šachovnice, blok přes `int` id kreslí tytéž vrcholy; creative má předměty za bloky; **vzduch se položit nedá**. 3D model: prázdná dlaždice nic, pixel = 6 stěn **otočených ven**, řádek = jeden čtyřúhelník vpředu a vzadu, poloprůsvitný pixel je průhledný, šachovnice se vejde do `MAX_FLOATS`, UV jen z vlastní dlaždice; klacek v ruce vpravo dole, na zemi se bloky a předměty staví každý ve své instanci a předmět je větší než kostka, postava drží klacek z atlasu předmětů (bez pixelů nic). `ItemDraft`: krokování hromádky, nástroj nastaví hromádku 1 a zpátky 64, rychlost jen s nástrojem, jméno předmětu i bloku a dlaždice vestavěných se odmítnou, volná dlaždice (prázdná za vestavěnými, ne ta kopírovaná, ne použitá). Hratelnost: krumpáč 4× na kámen a rudy, na hlínu 1×, sekera na dřevo, klacek ani blok v ruce nic; **kámen krumpáčem opravdu 4× méně framů**; uhelná ruda vypadne jako uhlí; nástroj: slot unese 1, tři krumpáče do tří slotů, `room` = volné sloty, recept se dvěma nástroji neprojde. Trvanlivost: bod za použití, **na posledním bodě EMPTY**, předmět bez výdrže i blok beze změny, různě opotřebené se neslévají, validace (výdrž jen s hromádkou 1, meze), `items.json` tam a zpět, pruh jen u opotřebeného (zbývající 2/3, zelená/červená), jen v survivalu, `ItemDraft` (nástroj 131, krokování nástroje výdrž nemění, hromádka zůstává 1, zpět bez výdrže); úprava: návrh z předmětu s přichycením ke stupňům, výdrž srovná hromádku na 1, vlastní jméno smí, cizí ne, `toDef` s původním id. V `SaveTest` opotřebení přežije MCW5 a MCW4 se načte s nulovým |
 | `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto. FOV efekt: sprint/let/obojí, **sprint do zdi nic**, plynulý náběh stejný při 30 i 60 FPS, vypnutí vrací na 1, reset nového světa |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
+| `LabBlockTest` (úprava) | `BlockDraft` z bloku, vlastní jméno smí a cizí ne, `toDef` s původním id, uložená úprava nahradí blok bez posunu `nextId`, tvrdost z ručního souboru přichycená, smazání nechá id vyřazené (i po zápisu a načtení), vestavěný blok smazat nejde |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty (plot z prken a klacků, klacky ze dvou prken pod sebou, pochodeň jen uhlí NAD klackem, uhelná ruda na uhlí). **Napojování plotů:** sloupek / dvě příčky / všech 9 kvádrů = `MAX_BOXES`, napojí se na plot a zeď, ne na listí, vodu, pochodeň; příčky míří ke správnému sousedovi; v meshi dva ploty 2 × 18 stěn, konec příčky u kamene se zahodí, **napojení přes hranici chunku z obou stran** |
 | `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků** (podle tvaru každého druhu), kmen stojí na zemi, řetěz kmen→prkna→stůl pro všechna tři dřeva, vlastní dlaždice každého druhu, a **změřená hustota a druh stromu v každém biomu** |
 | `AtlasTest` | Mapování blok+stěna → dlaždice, UV uvnitř atlasu, půltexelové zúžení, obsah a determinismus textur |
@@ -2142,7 +2143,18 @@ přichytí k nejbližšímu stupni, výdrž srovná hromádku na 1), **Save item
 Na místě „New tile" je **Delete item**: první klik varuje (`LabGuard`), druhý smaže z `items.json`.
 Id zůstává vyřazené (`nextId` nejde zpátky), takže hromádky v uložených světech se nikdy nepromění
 v jiný předmět — ukážou se jako šachovnice. Po uložení i smazání se `RecipeBook` načte znovu,
-aby recept na smazaný předmět zmizel (soubor receptů se nemění). Bloky z labu zatím jen „New".
+aby recept na smazaný předmět zmizel (soubor receptů se nemění).
+
+**Úprava a smazání bloku z labu** jde stejně. V Blocks je tlačítko **Edit block**, když náhled
+ukazuje blok z labu (dlaždici může mít víc bloků — klik na náhled přepne, upravuje se ten
+vidět). Formulář se předvyplní (`BlockDraft(BlockDef)`, tvrdost přichycená k nejbližšímu stupni)
+a jede s živým náhledem přes dočasný registr jako nový blok; **Save block** uloží pod týmž id.
+**Delete block** je pod Cancel (ať se netrefí omylem) a potvrzuje se druhým klikem; kostky
+v uložených světech zůstanou „neznámý blok", id se znovu nepoužije, dlaždice v atlasu zůstanou.
+**Po zavření labu se meshe světa postaví znovu** (`WorldRenderer.reset()`), když se registr
+bloků změnil — hotové meshe mají zapečené dlaždice a průhlednost; přestavba doběhne postupně
+jako při načtení. Světlo se kvůli změně průhlednosti nepřepočítává (ukáže se až po úpravě
+okolí nebo znovunačtení sloupce).
 
 ### Recipe Lab a `textures/recipes.json`
 
