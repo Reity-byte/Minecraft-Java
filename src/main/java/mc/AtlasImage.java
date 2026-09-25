@@ -203,6 +203,13 @@ public final class AtlasImage {
                 pixels -> Textures.completeAtlas(pixels, BlockRegistry.active()));
     }
 
+    /** Import atlasu předmětů - doplní se jako při startu (ItemTextures.complete). */
+    public static String importItems(AtlasEditor editor, Path file)
+    {
+        return importInto(editor, file, BlockAtlas.ATLAS_PIXELS, true, "item atlas",
+                pixels -> ItemTextures.complete(pixels, ItemRegistry.active()));
+    }
+
     /**
      * Import do libovolného editoru pixelů - atlas bloků i kůže postavy.
      * what je slovo do hlášky ("atlas" / "skin"), ať uživatel pozná, co

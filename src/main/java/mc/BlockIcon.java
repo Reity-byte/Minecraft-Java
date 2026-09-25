@@ -173,6 +173,27 @@ public class BlockIcon {
     // funkce a testovaná - a chyba "culling potichu schová celou oblohu"
     // už jednou nastala (kvůli ní je SkyTest).
 
+    /**
+     * Plochý obrázek dlaždice atlasu předmětů - náhled v labu, kde dlaždice
+     * ještě žádnému předmětu nepatří. Bez atlasu předmětů nic.
+     */
+    public void drawItemTile(float x, float y, float size, int tile)
+    {
+        if(items == null)
+        {
+            return;
+        }
+
+        int needed = VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+
+        if(floats + needed > scratch.length)
+        {
+            scratch = Arrays.copyOf(scratch, Math.max(scratch.length * 2, floats + needed));
+        }
+
+        floats = flat(scratch, floats, x, y, size, tile, 1f);
+    }
+
     /** Kolik floatů zabere ikona tohohle bloku. */
     static int floatsFor(byte block)
     {

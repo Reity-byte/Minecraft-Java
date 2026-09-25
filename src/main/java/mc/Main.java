@@ -160,6 +160,9 @@ public class Main {
      * s nimi musí zůstat i příznak "(unsaved)" a undo. Zakládají se v init().
      */
     private AtlasEditor atlasEditor;
+
+    /** Editor atlasu předmětů pro mód Items - žije s Main, stejně jako atlasEditor. */
+    private AtlasEditor itemEditor;
     private SkinEditor skinEditor;
     private boolean skinFromFile;
 
@@ -192,8 +195,8 @@ public class Main {
     /** Otevřený texture lab, nebo null; a kam se z něj vrací. */
     private TextureLab lab;
 
-    /** Bloky založené v labu, které hráč ještě nedostal - viz giveCreatedBlocks(). */
-    private final List<Byte> createdBlocks = new ArrayList<>();
+    /** Bloky a předměty (id z Items) založené v labu, které hráč ještě nedostal - viz giveCreatedBlocks(). */
+    private final List<Integer> createdBlocks = new ArrayList<>();
     private GameState labReturnState = GameState.MAIN_MENU;
 
     /** Ladicí výpis vlevo nahoře. F3 ho schová a zase ukáže. */
@@ -955,6 +958,7 @@ public class Main {
         playerSkin = Textures.playerSkin(skinPixels);
 
         atlasEditor = new AtlasEditor(atlasPixels);
+        itemEditor = new AtlasEditor(itemPixels);
         skinEditor = new SkinEditor(skinPixels);
 
         worldRenderer = new WorldRenderer(blockAtlas, playerSkin, itemAtlas, itemPixels);
@@ -1408,7 +1412,8 @@ public class Main {
      */
     private void openTextureLab() {
         lab = new TextureLab(atlasEditor, blockAtlas, atlasFromFile,
-                skinEditor, playerSkin, skinFromFile, shapes, text);
+                skinEditor, playerSkin, skinFromFile,
+                itemEditor, itemAtlas, itemsFromFile, shapes, text);
         labReturnState = state;
         setState(GameState.TEXTURE_LAB);
     }
@@ -1416,7 +1421,13 @@ public class Main {
     private void closeTextureLab() {
         atlasFromFile = lab.fromFile();
         skinFromFile = lab.skinFromFile();
-        createdBlocks.addAll(lab.takeCreatedBlocks());
+        itemsFromFile = lab.itemsFromFile();
+
+        for (byte block : lab.takeCreatedBlocks()) {
+            createdBlocks.add((int) block);
+        }
+
+        createdBlocks.addAll(lab.takeCreatedItems());
         lab.delete();
         lab = null;
         setState(labReturnState);
@@ -1433,8 +1444,12 @@ public class Main {
      * Co se do plného inventáře nevejde, hráč vyhodí před sebe.
      */
     private void giveCreatedBlocks() {
-        for (byte block : createdBlocks) {
-            ItemStack rest = inventory.add(ItemStack.of(block, TextureLab.CREATED_STACK));
+        for (int id : createdBlocks) {
+            // Blok plnou hromádku, předmět tolik, kolik se mu vejde do slotu
+            // (nástroj jeden kus).
+            ItemDef item = Items.item(id);
+            int count = item != null ? item.maxStack() : TextureLab.CREATED_STACK;
+            ItemStack rest = inventory.add(ItemStack.of(id, count));
             drops.throwFrom(player, camera.getLookDirection(), rest);
         }
 

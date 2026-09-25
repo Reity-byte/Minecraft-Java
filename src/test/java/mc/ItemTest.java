@@ -26,6 +26,7 @@ public class ItemTest {
             creativeAndPlacing();
             model();
             rendering();
+            draft();
         } finally {
             ItemRegistry.activate(ItemRegistry.empty());
             RecipeBook.activate(RecipeBook.empty());
@@ -320,6 +321,57 @@ public class ItemTest {
                 body.heldIsItem() && body.itemVertexCount() == held / ItemModel.FLOATS_PER_VERTEX, "" + body.itemVertexCount());
         body.build(pose, 0, 0, 0, 0f, World.STONE, 1f, 0f, 0, 0, 0);
         check("s blokem je to zase blok z atlasu bloku", !body.heldIsItem() && body.itemVertexCount() == 36, "");
+    }
+
+    static void draft() {
+        ItemRegistry.activate(ItemRegistry.empty());
+        ItemRegistry r = ItemRegistry.empty();
+
+        ItemDraft d = new ItemDraft(10);
+        check("novy predmet: obycejny, stack 64", d.stack() == 64 && d.tool == ItemDef.Tool.NONE && d.speed() == 1f, "");
+        check("bez jmena nejde", d.problem(r) != null, "");
+
+        d.name = "Gem";
+        check("se jmenem a vlastni dlazdici jde", d.problem(r) == null, "" + d.problem(r));
+
+        d.fewer();
+        check("hromadka se krokuje dolu (32)", d.stack() == 32, "" + d.stack());
+        for (int i = 0; i < 10; i++) d.fewer();
+        check("a zastavi se na 1", d.stack() == 1, "");
+        for (int i = 0; i < 10; i++) d.more();
+        check("nahoru nejvys 64", d.stack() == 64, "");
+
+        d.nextTool();
+        check("nastroj (krumpac) = hromadka 1 a rychlost 4x",
+                d.tool == ItemDef.Tool.PICKAXE && d.stack() == 1 && d.speed() == 4f && d.toolLabel().equals("Pickaxe"), "");
+        d.nextSpeed();
+        check("rychlost se krokuje", d.speed() == 6f, "" + d.speed());
+        d.nextTool(); d.nextTool(); d.nextTool();
+        check("dokola zpatky na obycejny predmet se 64", d.tool == ItemDef.Tool.NONE && d.stack() == 64
+                && d.speed() == 1f && d.toolLabel().equals("No tool"), "");
+
+        d.nextTool();
+        ItemDef def = d.toDef(r);
+        check("toDef: id z registru, vlastnosti z navrhu", def.id() == ItemRegistry.FIRST_ID && def.tile() == 10
+                && def.tool() == ItemDef.Tool.PICKAXE && def.maxStack() == 1 && def.toolSpeed() == 6f, def.toString());
+
+        d.name = "coal";
+        check("jmeno vestaveneho predmetu nejde", d.problem(r) != null && d.problem(r).contains("item"), "" + d.problem(r));
+        d.name = "Stone";
+        check("jmeno bloku taky ne", d.problem(r) != null && d.problem(r).contains("block"), "" + d.problem(r));
+        d.name = "Rock";
+        d.tile = ItemRegistry.TILE_STICK;
+        check("dlazdice vestavenych predmetu nejde", d.problem(r) != null && d.problem(r).contains("built-in"), "");
+
+        int[] pixels = ItemTextures.procedural();
+        check("volna dlazdice: prvni prazdna za vestavenymi",
+                ItemDraft.freeTile(r, pixels, -1) == ItemRegistry.BUILT_IN_TILES, "");
+        check("krome te, ktera se kopiruje",
+                ItemDraft.freeTile(r, pixels, ItemRegistry.BUILT_IN_TILES) == ItemRegistry.BUILT_IN_TILES + 1, "");
+        ItemRegistry used = r.with(r.define("Gem", ItemRegistry.BUILT_IN_TILES));
+        pixels[AtlasEditor.pixelIndex(ItemRegistry.BUILT_IN_TILES + 1, 3, 3)] = 0xFF123456;
+        check("dlazdice predmetu i namalovana se preskoci, kdyz je prazdna jinde",
+                ItemDraft.freeTile(used, pixels, -1) == ItemRegistry.BUILT_IN_TILES + 2, "" + ItemDraft.freeTile(used, pixels, -1));
     }
 
     static void creativeAndPlacing() {

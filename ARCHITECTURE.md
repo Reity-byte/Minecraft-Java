@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2466 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2482 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -82,7 +82,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `LightTest` | Šíření slunečního i blokového světla, **odebrání světla** (zhasnutá pochodeň, ucpaná díra), prázdná sekce po položení bloku, cyklus dne a noci |
 | `SkyTest` | Geometrie oblohy: **orientace stěn** (jinak je culling zahodí), poloměr, slunce proti měsíci, rozptyl hvězd |
 | `AmbienceTest` | Cíle hlasitosti: venku fouká a ve výšce víc, v budově ne, pod stromem o dost míň; jeskyně jen ve tmě **a** pod mořem (dům ani roklina nehučí); voda slábne se vzdáleností, pod vodou naplno a ostatní ztichnou. Nejbližší voda ve skutečném světě (5 bloků), **hlasitost se dotahuje, neskočí**, po 10 s sedí s cílem, v pauze dozní; v jeskyni za minutu 4–15 kapek, poziční a kolem hlavy. V `SoundTest` navíc **smyčky beze švu** (skok konec → začátek ne větší než uvnitř) |
-| `ItemTest` | Předměty: klacek a uhlí existují i bez `items.json`, jména, hromádka předmětu není blok, slévání a dělení po 64, **recept s předmětem projde validací, neznámý předmět ne**; registr (volná dlaždice za vestavěnými, `nextId` jen roste i po smazání, vestavěné smazat nejde, jméno proti vestavěným), `items.json` tam a zpět, ručně psaný soubor s výchozími hodnotami a přeskočenými záznamy; atlas (klacek je obrys na průhledném pozadí, doplnění prázdného souboru); ikona předmětu = jeden čtverec ze zdroje 1 s alfou, neznámý = šachovnice, blok přes `int` id kreslí tytéž vrcholy; creative má předměty za bloky; **vzduch se položit nedá**. 3D model: prázdná dlaždice nic, pixel = 6 stěn **otočených ven**, řádek = jeden čtyřúhelník vpředu a vzadu, poloprůsvitný pixel je průhledný, šachovnice se vejde do `MAX_FLOATS`, UV jen z vlastní dlaždice; klacek v ruce vpravo dole, na zemi se bloky a předměty staví každý ve své instanci a předmět je větší než kostka, postava drží klacek z atlasu předmětů (bez pixelů nic) |
+| `ItemTest` | Předměty: klacek a uhlí existují i bez `items.json`, jména, hromádka předmětu není blok, slévání a dělení po 64, **recept s předmětem projde validací, neznámý předmět ne**; registr (volná dlaždice za vestavěnými, `nextId` jen roste i po smazání, vestavěné smazat nejde, jméno proti vestavěným), `items.json` tam a zpět, ručně psaný soubor s výchozími hodnotami a přeskočenými záznamy; atlas (klacek je obrys na průhledném pozadí, doplnění prázdného souboru); ikona předmětu = jeden čtverec ze zdroje 1 s alfou, neznámý = šachovnice, blok přes `int` id kreslí tytéž vrcholy; creative má předměty za bloky; **vzduch se položit nedá**. 3D model: prázdná dlaždice nic, pixel = 6 stěn **otočených ven**, řádek = jeden čtyřúhelník vpředu a vzadu, poloprůsvitný pixel je průhledný, šachovnice se vejde do `MAX_FLOATS`, UV jen z vlastní dlaždice; klacek v ruce vpravo dole, na zemi se bloky a předměty staví každý ve své instanci a předmět je větší než kostka, postava drží klacek z atlasu předmětů (bez pixelů nic). `ItemDraft`: krokování hromádky, nástroj nastaví hromádku 1 a zpátky 64, rychlost jen s nástrojem, jméno předmětu i bloku a dlaždice vestavěných se odmítnou, volná dlaždice (prázdná za vestavěnými, ne ta kopírovaná, ne použitá) |
 | `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto. FOV efekt: sprint/let/obojí, **sprint do zdi nic**, plynulý náběh stejný při 30 i 60 FPS, vypnutí vrací na 1, reset nového světa |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
 | `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty. **Napojování plotů:** sloupek / dvě příčky / všech 9 kvádrů = `MAX_BOXES`, napojí se na plot a zeď, ne na listí, vodu, pochodeň; příčky míří ke správnému sousedovi; v meshi dva ploty 2 × 18 stěn, konec příčky u kamene se zahodí, **napojení přes hranici chunku z obou stran** |
@@ -2113,9 +2113,27 @@ zavřením nepustí přepnutí módu a naopak) a úkon, u kterého není co ztra
 potvrzení zruší. Chyby zápisu hlásí všechny laby stejně přes
 `SafeFiles.writeFailed()`: „Could not write <soubor> - see console“.
 
-**Módů je teď pět** — Blocks, Skin, Recipes, Keys, Biomes — a do pruhu se jich
+**Módů je teď šest** — Blocks, Items, Skin, Recipes, Keys, Biomes — a do pruhu se jich
 vejde osm (`LabSidebar.capacity(300)`). `LabSidebar` ani jeho test se kvůli
-dvěma novým nezměnily ani o řádek, což je přesně to, co ten refaktor sliboval.
+novým módům nezměnily ani o řádek, což je přesně to, co ten refaktor sliboval.
+
+**Mód Items je Blocks nad atlasem předmětů.** `TextureLab` drží `blockEditor`/`blockTexture`
+a `itemEditor`/`itemTexture` a `PixelMode.onEnter` přepne pracovní `editor` a `atlas` — plátno,
+paleta, HSV, undo, import i „kde je ta barva" tak jedou jedním kódem (Items má atlas ve stejné
+mřížce). Barva štětce je společná pro všechny tři pixelové módy. Liší se jen: Save/Revert/Import
+míří na `textures/items.png` (import doplní dlaždice jako start, `AtlasImage.importItems`), náhled
+je plochý obrázek dlaždice jako v inventáři, info říká, který předmět dlaždici má (0–7 jsou
+rezervované pro vestavěné), a místo „New block" je **New item**.
+
+**Nový předmět (`ItemDraft`)** má tatáž místa jako formulář bloku: jméno, hromádka −/+ po 1, 8,
+16, 32, 64, tlačítko nástroje (No tool → Pickaxe → Axe → Shovel dokola; nástroj nastaví hromádku
+na 1, zpátky 64) a rychlosti 2–16× (stupně Minecraftu: dřevo 2, kámen 4, železo 6, diamant 8,
+zlato 12). Klik do atlasu vybere dlaždici předmětu; New tile dá čerstvou s kopií. Jméno nesmí
+kolidovat s předmětem ani s blokem. Dočasný registr není potřeba — nic ve hře se na návrh
+neptá. Create uloží nejdřív `items.png`, pak `items.json` (stejné pořadí a důvod jako u bloku)
+a Main dá hráči plnou hromádku (nástroj jeden kus). Recipe Lab nabízí bloky i předměty (týž
+seznam jako creative, `CreativeInventory.ids`). Ověřeno GL sondou (přehled, formulář, založení
+krumpáče se soubory na disku, předměty v Recipes).
 
 ### Recipe Lab a `textures/recipes.json`
 
@@ -2790,7 +2808,7 @@ průsvitné. V ruce, v inventáři a na zemi je plot dál sloupek (sousedy nemá
 celý blok vysoký 1, takže plot jde (na rozdíl od Minecraftu, kde má kolizi 1,5) přeskočit —
 to by chtělo kolizní kvádry místo buněk.
 
-**Předměty — rozpracováno (hotové kroky 1 a 2).** Plán: (1) hromádka nese obecné
+**Předměty — rozpracováno (hotové kroky 1 až 3).** Plán: (1) hromádka nese obecné
 id, (2) `ItemRegistry` + `textures/items.json`/`items.png`, vestavěný klacek a uhlí, kreslení
 v inventáři, v ruce (3D z pixelů), na zemi a ve třetí osobě, (3) lab „Items" a předměty
 v Recipe Labu, (4) nástroje zrychlují těžbu podle materiálu, uhelná ruda dává uhlí, pochodeň

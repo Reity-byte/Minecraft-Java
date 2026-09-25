@@ -50,17 +50,17 @@ public final class RecipeLab implements LabMode {
     private final Container grid = new Container(RecipeBook.MAX_SIZE * RecipeBook.MAX_SIZE);
 
     /** Blok, který se pokládá klikem do mřížky. Vybírá se v přehledu dole. */
-    private byte picked = World.STONE;
+    private int picked = World.STONE;
 
     /** Výsledek receptu a počet kusů. */
-    private byte result = World.STONE;
+    private int result = World.STONE;
     private int resultCount = 1;
 
     /** O kolik řádků je přehled bloků odrolovaný. */
     private int pickerScroll = 0;
 
     /** Bloky v přehledu. Přepočítá se při každém vstupu do módu. */
-    private List<Byte> available = new ArrayList<>();
+    private List<Integer> available = new ArrayList<>();
 
     // ------------------------------------------------------------------
     // hlášky
@@ -101,7 +101,7 @@ public final class RecipeLab implements LabMode {
     @Override
     public String hint()
     {
-        return "Pick a block below, click the grid, then set the result and Save";
+        return "Pick a block or item below, click the grid, then set the result and Save";
     }
 
     /**
@@ -154,13 +154,13 @@ public final class RecipeLab implements LabMode {
     }
 
     /**
-     * Co se dá do receptu dát: všechny umístitelné vestavěné bloky a všechny
-     * bloky z labu. Je to týž seznam, jaký nabízí creative přehled, takže se
-     * nový blok z labu objeví i tady sám od sebe.
+     * Co se dá do receptu dát: všechny umístitelné vestavěné bloky, bloky
+     * z labu a všechny předměty. Je to týž seznam, jaký nabízí creative přehled,
+     * takže se nový blok i předmět z labu objeví i tady sám od sebe.
      */
     private void refreshBlocks()
     {
-        available = CreativeInventory.blocks(BlockRegistry.active());
+        available = CreativeInventory.ids(BlockRegistry.active(), ItemRegistry.active());
 
         if(!available.contains(picked))
         {
@@ -225,7 +225,7 @@ public final class RecipeLab implements LabMode {
 
         if(draft == null)
         {
-            return "Put at least one block in the grid";
+            return "Put at least one block or item in the grid";
         }
 
         String invalid = RecipeBook.validate(draft);
@@ -294,7 +294,7 @@ public final class RecipeLab implements LabMode {
         if(slot >= 0)
         {
             picked = available.get(slot);
-            say("Picked " + TextureLab.blockName(picked) + " - click the grid to place it");
+            say("Picked " + Items.name(picked) + " - click the grid to place it");
             return false;
         }
 
@@ -303,7 +303,7 @@ public final class RecipeLab implements LabMode {
             // Klik na výsledek do něj dá právě vybraný blok - není potřeba
             // druhý přehled jen pro výstup.
             result = picked;
-            say("Result: " + TextureLab.blockName(result));
+            say("Result: " + Items.name(result));
             return false;
         }
 
@@ -366,7 +366,7 @@ public final class RecipeLab implements LabMode {
         }
 
         RecipeBook.activate(updated);
-        say("Saved - " + TextureLab.blockName(result) + " x" + resultCount
+        say("Saved - " + Items.name(result) + " x" + resultCount
                 + " works right now, no restart");
     }
 
@@ -487,7 +487,7 @@ public final class RecipeLab implements LabMode {
                 if(!stack.isEmpty())
                 {
                     TextureLabLayout.Rect cell = TextureLabLayout.recipeCell(column, row);
-                    lab.blockIcon(stack.block(), layout.screenX(cell) + scale,
+                    lab.blockIcon(stack.id(), layout.screenX(cell) + scale,
                             layout.screenBottom(cell, screenHeight) + scale, inner);
                 }
             }
@@ -537,22 +537,22 @@ public final class RecipeLab implements LabMode {
                 TextureLabLayout.RECIPE_GRID.y() - 12, "Recipe (same grid as a crafting table)");
 
         lab.label(layout, 8, TextureLabLayout.PICKER_LABEL_Y,
-                "Blocks: " + available.size() + " (LMB picks, mouse wheel scrolls)"
-                        + "   holding: " + TextureLab.blockName(picked));
+                "Blocks & items: " + available.size() + " (LMB picks, wheel scrolls)"
+                        + "   holding: " + Items.name(picked));
 
         // Co dnes z mřížky vyjde - přes tutéž Recipes.match(), jakou používá
         // crafting table. Když to něco vrátí, tenhle vzor už recept má.
         ItemStack existing = existingResult();
         String info = existing.isEmpty()
                 ? "This pattern makes nothing yet"
-                : "Already makes " + TextureLab.blockName(existing.block()) + " x" + existing.count();
+                : "Already makes " + Items.name(existing.id()) + " x" + existing.count();
 
         lab.label(layout, 8, TextureLabLayout.RECIPE_INFO_Y, info);
 
         String problem = problem();
         lab.label(layout, 8, TextureLabLayout.RECIPE_LIST_Y,
                 problem == null
-                        ? "Ready: " + TextureLab.blockName(result) + " x" + resultCount
+                        ? "Ready: " + Items.name(result) + " x" + resultCount
                         : problem);
 
         text.end();
@@ -583,6 +583,6 @@ public final class RecipeLab implements LabMode {
                     + " and the recipe works right away, no restart";
         }
 
-        return "Build a recipe: pick a block, fill the grid, set the result, Save";
+        return "Build a recipe: pick a block or item, fill the grid, set the result, Save";
     }
 }

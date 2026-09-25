@@ -506,7 +506,7 @@ public class MainStateTest {
                 "options", "windowMode", "limiter", "window", "width", "height", "camera", "player",
                 "sound", "worldRenderer", "shapes", "text", "font", "background", "dirtTile", "hud",
                 "state", "mainMenu", "pauseMenu", "lastX", "lastY", "firstMouse", "mouseX", "mouseY",
-                "mouseScale", "glReady", "blockAtlas", "playerSkin", "atlasPixels", "atlasFromFile", "itemAtlas", "itemPixels", "itemsFromFile",
+                "mouseScale", "glReady", "blockAtlas", "playerSkin", "atlasPixels", "atlasFromFile", "itemAtlas", "itemPixels", "itemsFromFile", "itemEditor",
                 "skinPixels", "skinFromFile", "atlasEditor", "skinEditor", "widgets", "images", "optionsScreen", "selectScreen",
                 "createScreen", "optionsReturnState", "lab", "createdBlocks", "labReturnState",
                 "showDebug", "icons", "sky", "heldItem", "swing", "animation", "handSway", "ambience", "fovEffect", "playerMesh",
