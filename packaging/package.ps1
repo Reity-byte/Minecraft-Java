@@ -48,7 +48,7 @@ Remove-Item -Recurse -Force "$dist\MinecraftClaudeLauncher" -ErrorAction Silentl
     --input $stage `
     --main-jar $jar.Name `
     --main-class mc.LauncherMain `
-    --add-modules java.base,java.desktop,java.logging,java.net.http,jdk.unsupported `
+    --add-modules java.base,java.desktop,java.logging,java.net.http,jdk.crypto.ec,jdk.unsupported `
     --dest $dist
 if ($LASTEXITCODE -ne 0) { throw "jpackage launcheru selhal" }
 

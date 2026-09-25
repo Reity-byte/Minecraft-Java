@@ -74,8 +74,10 @@ final class LauncherWindow {
         progress.setVisible(false);
         center.add(progress);
 
-        play.setBackground(ACCENT);
-        play.setForeground(Color.WHITE);
+        // Barvu pozadí systémový vzhled (Windows) ignoruje, text by pak byl
+        // bílý na bílém - proto jen tučné písmo a zelený rámeček.
+        play.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(ACCENT, 2), BorderFactory.createEmptyBorder(4, 18, 4, 18)));
         play.setFont(play.getFont().deriveFont(Font.BOLD, 18f));
         play.addActionListener(e -> startPlay());
         check.addActionListener(e -> checkForUpdates());

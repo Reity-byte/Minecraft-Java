@@ -67,13 +67,18 @@ jobs:
           # Launcher: totez jadro, vstup LauncherMain; hru si stahne odtud z Releases.
           jpackage --type app-image --name MinecraftClaudeLauncher --app-version "$VERSION" \
             --input target/jpackage-input --main-jar "$(basename "$JAR")" --main-class mc.LauncherMain \
-            --add-modules java.base,java.desktop,java.logging,java.net.http,jdk.unsupported \
+            --add-modules java.base,java.desktop,java.logging,java.net.http,jdk.crypto.ec,jdk.unsupported \
             --dest dist
           cd dist
           if [ "$RUNNER_OS" = "Windows" ]; then
             7z a -tzip "MinecraftClaude-${{ matrix.name }}.zip" MinecraftClaude > /dev/null
             7z a -tzip "MinecraftClaudeLauncher-${{ matrix.name }}.zip" MinecraftClaudeLauncher > /dev/null
           elif [ "$RUNNER_OS" = "macOS" ]; then
+            # Ad-hoc podpis: bez nej Mac s Apple Silicon hlasi "aplikace je poskozena".
+            # Neni to podpis od Applu (ten stoji ucet vyvojare) - napoprve je
+            # potreba pravy klik -> Otevrit, nebo xattr -dr com.apple.quarantine.
+            codesign --force --deep --sign - MinecraftClaude.app
+            codesign --force --deep --sign - MinecraftClaudeLauncher.app
             ditto -c -k --keepParent MinecraftClaude.app "MinecraftClaude-${{ matrix.name }}.zip"
             ditto -c -k --keepParent MinecraftClaudeLauncher.app "MinecraftClaudeLauncher-${{ matrix.name }}.zip"
           else
