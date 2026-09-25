@@ -136,6 +136,64 @@ public class ModelTest {
         check("plot zastavi", arena.isSolid(8, FLOOR + 1, 8), "");
         check("pochoden nezastavi", !World.blocksMovement(World.TORCH), "");
 
+        // ---------- napojovani plotu ----------
+        byte A = World.AIR;
+        check("osamoceny plot je jen sloupek",
+                BlockModels.of(World.FENCE, A, A, A, A).length == 1, "");
+        check("plot k plotu: sloupek a dve pricky",
+                BlockModels.of(World.FENCE, World.FENCE, A, A, A).length == 3, "");
+        check("plot ze vsech stran: 1 + 4x2 kvadru = MAX_BOXES",
+                BlockModels.of(World.FENCE, World.FENCE, World.FENCE, World.FENCE, World.FENCE).length == 9
+                        && BlockModels.MAX_BOXES == 9, "" + BlockModels.MAX_BOXES);
+        check("napoji se na zed (kamen, prkna), ne na listi, vodu, pochoden, vzduch",
+                BlockModels.fenceConnects(World.STONE) && BlockModels.fenceConnects(World.PLANKS)
+                        && !BlockModels.fenceConnects(World.LEAVES) && !BlockModels.fenceConnects(World.WATER)
+                        && !BlockModels.fenceConnects(World.TORCH) && !BlockModels.fenceConnects(A), "");
+        check("ostatni bloky na sousedech nezavisi",
+                BlockModels.of(World.STONE, World.FENCE, A, A, A) == BlockModels.of(World.STONE)
+                        && BlockModels.of(World.TORCH, World.STONE, A, A, A) == BlockModels.of(World.TORCH), "");
+        check("v ruce, v inventari a na zemi je plot sloupek", BlockModels.of(World.FENCE).length == 1, "");
+
+        // Pricka k +X vede od sloupku k hrane bloku, ve vysce 6-9 a 12-15 px.
+        boolean eastBars = true;
+        for (BlockModels.BlockBox b : BlockModels.of(World.FENCE, World.FENCE, A, A, A)) {
+            if (b.maxY() == 1f) continue;   // sloupek
+            eastBars &= b.maxX() == 1f && b.minX() == 10 / 16f && b.minZ() == 7 / 16f && b.maxZ() == 9 / 16f;
+        }
+        check("pricky miri ke spravnemu sousedovi a konci na hrane", eastBars, "");
+
+        World fences = new World();
+        fences.loadRadius = 1;
+        fences.unloadRadius = 3;
+        fences.updateBlocking(8f, 8f);
+        ChunkMesh fm = new ChunkMesh();
+
+        fences.placeBlock(8, BASE_Y + 8, 8, World.FENCE);
+        fm.build(fences, fences.column(0, 0).section(SECTION), 0, BASE_Y, 0);
+        check("osamoceny plot ve svete: sest sten", fm.faceCount() == 6, "" + fm.faceCount());
+
+        fences.placeBlock(9, BASE_Y + 8, 8, World.FENCE);
+        fm.build(fences, fences.column(0, 0).section(SECTION), 0, BASE_Y, 0);
+        check("dva ploty vedle sebe: kazdy sloupek + 2 pricky (2 x 18 sten)",
+                fm.faceCount() == 36, "" + fm.faceCount());
+
+        fences.placeBlock(4, BASE_Y + 8, 4, World.FENCE);
+        fences.placeBlock(3, BASE_Y + 8, 4, World.STONE);
+        fm.build(fences, fences.column(0, 0).section(SECTION), 0, BASE_Y, 0);
+        check("plot u zdi: konec pricky u kamene se zahodi (6 + 2x5), kamen cely (6)",
+                fm.faceCount() == 36 + 16 + 6, "" + fm.faceCount());
+
+        // Plot na hranici chunku se napoji i na souseda v jinem chunku.
+        fences.placeBlock(15, BASE_Y + 8, 8, World.FENCE);
+        fences.placeBlock(16, BASE_Y + 8, 8, World.FENCE);
+        ChunkMesh left = new ChunkMesh(), right = new ChunkMesh();
+        left.build(fences, fences.column(0, 0).section(SECTION), 0, BASE_Y, 0);
+        right.build(fences, fences.column(1, 0).section(SECTION), 16, BASE_Y, 0);
+        check("pres hranici chunku se ploty napoji z obou stran",
+                left.faceCount() == 36 + 16 + 6 + 18 && right.faceCount() == 18,
+                left.faceCount() + " / " + right.faceCount());
+        fences.shutdown();
+
         // ---------- recepty ----------
         Container row = new Container(9);
         for (int i = 0; i < 3; i++) row.set(i, ItemStack.of(World.PLANKS, 1));

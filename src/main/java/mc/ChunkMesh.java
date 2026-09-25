@@ -170,7 +170,8 @@ public class ChunkMesh {
                         back  = world.getBlock(wx, wy, wz - 1);
                     }
 
-                    for(BlockModels.BlockBox box : BlockModels.of(id))
+                    // Plot se napojuje na sousedy - model podle nich (+X, -X, +Z, -Z).
+                    for(BlockModels.BlockBox box : BlockModels.of(id, right, left, front, back))
                     {
                         emitBox(world, id, box, x, y, z, wx, wy, wz,
                                 up, down, right, left, front, back);

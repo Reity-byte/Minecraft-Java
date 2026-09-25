@@ -48,7 +48,7 @@ kde mají data být.
 
 ## Testy
 
-`src/test/java/mc/` — **2393 kontrol**, žádný JUnit, obyčejné `main()` třídy.
+`src/test/java/mc/` — **2404 kontrol**, žádný JUnit, obyčejné `main()` třídy.
 Spustit `mc.AllTests` (zelená šipka v IntelliJ) nebo:
 
 ```bash
@@ -84,7 +84,7 @@ java -cp "target/classes;target/test-classes;<lwjgl+joml jars>" mc.AllTests
 | `AmbienceTest` | Cíle hlasitosti: venku fouká a ve výšce víc, v budově ne, pod stromem o dost míň; jeskyně jen ve tmě **a** pod mořem (dům ani roklina nehučí); voda slábne se vzdáleností, pod vodou naplno a ostatní ztichnou. Nejbližší voda ve skutečném světě (5 bloků), **hlasitost se dotahuje, neskočí**, po 10 s sedí s cílem, v pauze dozní; v jeskyni za minutu 4–15 kapek, poziční a kolem hlavy. V `SoundTest` navíc **smyčky beze švu** (skok konec → začátek ne větší než uvnitř) |
 | `MotionTest` | Houpání pohledu: **rozmach 0 = přesně identita**, do strany na obě strany, pokles při nohách od sebe, jen pár centimetrů; síla houpání **jen na zemi** (ve vzduchu nohy máchají, pohled ne), po zastavení dozní; kamera se houpe **jen v první osobě** a bez houpání je to čistý lookAt jako dřív. Setrvačnost ruky: otočka doprava nechá ruku vlevo, dožene pohled, **šev 359 → 0 bez protočení**, pohled nahoru stáhne ruku dolů, strop natočení, skok při načtení světa. Ruka (blok i holá) při chůzi klesne a setrvačnost ji posune; `Motion.STILL` = matice beze změny. Přepínač View Bobbing: výchozí zapnuto, uloží se, starší soubor bez něj mlčky zapnuto. FOV efekt: sprint/let/obojí, **sprint do zdi nic**, plynulý náběh stejný při 30 i 60 FPS, vypnutí vrací na 1, reset nového světa |
 | `BlockIconTest` | Geometrie ikony bloku bez GL: **každý trojúhelník proti směru hodinových ručiček** (krychle, tráva, pochodeň, plot, voda), ikona nevyleze ze čtverce, **plocha krychle = 3/4 čtverce** (stěny bez mezer a překryvů), pochodeň kreslí model, dávka navazuje, UV každé stěny ze své dlaždice, odstíny, horní stěna nahoře, a **příznak alfy = `World.isTranslucent`** (jen voda) |
-| `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty |
+| `ModelTest` | Nekrychlové modely: tři různé „pevnosti", vnitřní stěny se nezahazují, blok za pochodní nezmizí, kolize, recepty. **Napojování plotů:** sloupek / dvě příčky / všech 9 kvádrů = `MAX_BOXES`, napojí se na plot a zeď, ne na listí, vodu, pochodeň; příčky míří ke správnému sousedovi; v meshi dva ploty 2 × 18 stěn, konec příčky u kamene se zahodí, **napojení přes hranici chunku z obou stran** |
 | `TreeTest` | Hustota, stromy jen na trávě, **úplnost korun přes hranice chunků** (podle tvaru každého druhu), kmen stojí na zemi, řetěz kmen→prkna→stůl pro všechna tři dřeva, vlastní dlaždice každého druhu, a **změřená hustota a druh stromu v každém biomu** |
 | `AtlasTest` | Mapování blok+stěna → dlaždice, UV uvnitř atlasu, půltexelové zúžení, obsah a determinismus textur |
 | `PlayerModelTest` | Animace: rozmach podle rychlosti, **opačná fáze nohou**, ruka proti noze, délka kroku, strop při letu, **nezávislost na FPS**, pohupování, máchnutí z `HandSwing`, držení. Model: rozměry jako hitbox, **pravá ruka vpravo, obličej vepředu**, končetiny v póze, držený blok u pěsti, odstín podle směru ve světě. Skin: každá stěna míří do vybarvené části. **Holá ruka v první osobě:** tytéž UV jako pravá ruka postavy, 4×12×4 px, v klidu vpravo dole před kamerou, při máchnutí u zaměřovače, **zpátky jde níž než tam (oblouk)**, po doběhnutí přesně klid; s blokem v ruce dál blok |
@@ -2781,6 +2781,14 @@ z víc než jednoho kmene.
 **Tvary bloků — hotovo.** `BlockModels` jako kvádrový systém, pochodeň a plot jako první
 dva nekrychlové bloky. Postavené tak, aby na tom stály schody, desky a další.
 
+**Plot se napojuje na sousedy.** `BlockModels.of(blok, +X, −X, +Z, −Z)` vrací pro plot sloupek
+a ke každému napojenému sousedovi dvě příčky (2 px, ve výšce 6–9 a 12–15 px, jako Minecraft);
+všech 16 kombinací je spočítaných dopředu, mesher jen vybere podle masky. Napojuje se na plot
+a na plný neprůhledný blok — **ne na listí**, které je tu plná krychle, ale v Minecraftu je
+průsvitné. V ruce, v inventáři a na zemi je plot dál sloupek (sousedy nemá). Kolize zůstává
+celý blok vysoký 1, takže plot jde (na rozdíl od Minecraftu, kde má kolizi 1,5) přeskočit —
+to by chtělo kolizní kvádry místo buněk.
+
 **⚠️ Chybí PŘEDMĚTY (ne bloky).** `ItemStack` drží id bloku, takže klacek — který není
 umístitelný — zatím nejde vyrobit. Proto je pochodeň z prkna a uhlí místo z klacku a uhlí.
 Až předměty přibudou, opraví se recept a klacek se stane surovinou pro ploty a nářadí.
@@ -2796,8 +2804,9 @@ s prázdným slotem holá ruka z modelu postavy.
 
 **Zvuk — hotovo.** OpenAL, kroky, rozbití a položení bloku v prostoru, kliknutí v menu,
 syntetizované placeholdery nahraditelné soubory `sounds/<jméno>.wav` bez změny kódu. Zbývá:
-skutečné nahrávky, víc variant na zvuk, ťukání při kopání, dopad, plavání, hudba, .ogg
-(modul `lwjgl-stb`) a nastavení hlasitosti v UI.
+skutečné nahrávky, ťukání při kopání, dopad, plavání, hudba, .ogg (modul `lwjgl-stb`)
+a nastavení hlasitosti v UI. **Hotové navíc:** varianty zvuků a zvuky prostředí (vítr,
+jeskyně, voda, kapky).
 
 **Model postavy a pohledy — hotovo.** Postava z kvádrů s placeholder skinem v šabloně Minecraftu,
 chůze, pohupování a máchnutí, F5 přes tři pohledy s kamerou, která neprojede terénem. Zbývá:

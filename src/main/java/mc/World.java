@@ -783,7 +783,8 @@ public class World {
      *   isTargetable   dá se zaměřit a rozbít (paprsek)
      *
      * Voda: nic z toho. Pochodeň: jde rozbít, ale projde se skrz a nezakrývá.
-     * Plot: zastaví hráče, ale nezakrývá - je to jen sloupek uprostřed bloku.
+     * Plot: zastaví hráče (celý blok), ale nezakrývá - je to sloupek
+     * s příčkami k sousedům (BlockModels.of s sousedy).
      */
     /**
      * Kreslí se blok průhledným průchodem, kde platí alfa textury? Jen voda.
